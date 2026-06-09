@@ -28,6 +28,8 @@ pipeline (HPA fetch + restriction logic) lands.
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 import pandas as pd
 
 from .load_dataset import get_data
@@ -54,14 +56,21 @@ _PASSES_FILTERS_COLUMN = "passes_filters"
 _LEGACY_FILTERED_COLUMN = "filtered"
 
 
-def cta_dataframe() -> pd.DataFrame:
-    """Full CTA evidence table (one row per candidate), with the non-CTA
-    excluded genes (histones, etc.) dropped."""
-    df = get_data("cancer-testis-antigens")
+@lru_cache(maxsize=1)
+def _cta_frame() -> pd.DataFrame:
+    """Cached CTA table with the non-CTA excluded genes dropped. Internal,
+    read-only — do not mutate; public callers get a copy via cta_dataframe()."""
+    df = get_data("cancer-testis-antigens", copy=False)
     if "Ensembl_Gene_ID" in df.columns and NON_CTA_EXCLUDED_GENE_IDS:
         unversioned = df["Ensembl_Gene_ID"].astype(str).str.split(".").str[0]
         df = df[~unversioned.isin(NON_CTA_EXCLUDED_GENE_IDS)].reset_index(drop=True)
     return df
+
+
+def cta_dataframe() -> pd.DataFrame:
+    """Full CTA evidence table (one row per candidate), with the non-CTA
+    excluded genes (histones, etc.) dropped. Returns a defensive copy."""
+    return _cta_frame().copy()
 
 
 #: Alias matching the target-selection layer's public name.
@@ -88,7 +97,7 @@ def _cta_by_column(
     filtered_only: bool = False,
     exclude_never_expressed: bool = False,
 ) -> set[str]:
-    df = cta_dataframe()
+    df = _cta_frame()
     mask = pd.Series(True, index=df.index)
     if filtered_only:
         mask = passes_filters_mask(df)
@@ -110,7 +119,7 @@ def _cta_by_column(
 
 
 def _all_by_column(column: str) -> set[str]:
-    df = cta_dataframe()
+    df = _cta_frame()
     result: set[str] = set()
     if column in df.columns:
         for x in df[column]:
@@ -162,7 +171,7 @@ def CTA_excluded_gene_names() -> set[str]:
 
 def CTA_gene_id_to_name() -> dict[str, str]:
     """``{Ensembl_Gene_ID (unversioned): Symbol}`` over the expressed CTA set."""
-    df = cta_dataframe()
+    df = _cta_frame()
     ids = CTA_gene_ids()
     out: dict[str, str] = {}
     for _, row in df.iterrows():
