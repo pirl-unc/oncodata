@@ -46,6 +46,19 @@ from .cancer_types import (
     tissue_of_origin,
     viral_status,
 )
+from .cta import (
+    CTA_evidence,
+    CTA_excluded_gene_names,
+    CTA_filtered_gene_ids,
+    CTA_filtered_gene_names,
+    CTA_gene_id_to_name,
+    CTA_gene_ids,
+    CTA_gene_names,
+    CTA_never_expressed_gene_names,
+    CTA_unfiltered_gene_ids,
+    CTA_unfiltered_gene_names,
+    cta_dataframe,
+)
 from .incidence import (
     burden_category,
     cancer_burden,
@@ -59,6 +72,17 @@ __all__ = [
     # ontology / registry
     "CANCER_TYPE_ALIASES",
     "CANCER_TYPE_NAMES",
+    # cancer-testis antigens
+    "CTA_evidence",
+    "CTA_excluded_gene_names",
+    "CTA_filtered_gene_ids",
+    "CTA_filtered_gene_names",
+    "CTA_gene_id_to_name",
+    "CTA_gene_ids",
+    "CTA_gene_names",
+    "CTA_never_expressed_gene_names",
+    "CTA_unfiltered_gene_ids",
+    "CTA_unfiltered_gene_names",
     "__version__",
     "burden_category",
     # anti-PD-1 response
@@ -86,6 +110,7 @@ __all__ = [
     "cohort_kind",
     "cohort_registry",
     "cohort_registry_df",
+    "cta_dataframe",
     "family_display_name",
     "format_cancer_code_label",
     "fusion_status",

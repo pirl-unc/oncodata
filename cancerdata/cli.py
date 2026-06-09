@@ -24,7 +24,7 @@ import argparse
 import json
 import sys
 
-from . import apd1, cancer_types, incidence, tmb
+from . import apd1, cancer_types, cta, incidence, tmb
 from .cache import bundle_cache_dir
 from .version import __version__
 
@@ -83,6 +83,19 @@ def _cmd_apd1(args: argparse.Namespace) -> int:
         print(f"No anti-PD-1 ORR for {args.code!r}", file=sys.stderr)
         return 1
     print(f"{value:g}")
+    return 0
+
+
+def _cmd_cta(args: argparse.Namespace) -> int:
+    if args.unfiltered:
+        genes = cta.CTA_unfiltered_gene_ids() if args.ids else cta.CTA_unfiltered_gene_names()
+    else:
+        genes = cta.CTA_gene_ids() if args.ids else cta.CTA_gene_names()
+    if args.count:
+        print(len(genes))
+    else:
+        for g in sorted(genes):
+            print(g)
     return 0
 
 
@@ -155,6 +168,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--no-inherit", action="store_true", help="Do not inherit an ancestor's ORR"
     )
     p_apd1.set_defaults(func=_cmd_apd1)
+
+    p_cta = sub.add_parser("cta", help="List cancer-testis antigens (expressed set by default)")
+    p_cta.add_argument("--unfiltered", action="store_true", help="Full candidate universe")
+    p_cta.add_argument("--ids", action="store_true", help="Ensembl gene IDs instead of symbols")
+    p_cta.add_argument("--count", action="store_true", help="Print the count only")
+    p_cta.set_defaults(func=_cmd_cta)
 
     p_plot = sub.add_parser("plot", help="Render a cancer-type reference plot to a PNG")
     p_plot.add_argument(
