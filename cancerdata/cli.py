@@ -13,9 +13,8 @@
 """``cancerdata`` command-line interface.
 
 Reference lookups over the bundled tables (cancer-type / TMB / burden) plus the
-data cache surface. The heavy per-cohort expression bundle and its
-``fetch``/``status``/``prune`` subcommands are added in a later milestone; the
-cache-dir resolution here is already the path that bundle will populate.
+data-bundle fetch/cache surface (fetch / status / cache-dir / prune) for the
+heavy per-cohort expression bundle.
 """
 
 from __future__ import annotations
@@ -24,9 +23,17 @@ import argparse
 import json
 import sys
 
-from . import cancer_types, incidence, tmb
-from .cache import bundle_cache_dir
+from . import apd1, cancer_types, cta, data_bundle, incidence, tmb
 from .version import __version__
+
+
+def _fmt_bytes(n: int) -> str:
+    size = float(n)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if size < 1024 or unit == "TB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"
 
 
 def _cmd_version(args: argparse.Namespace) -> int:
@@ -35,7 +42,45 @@ def _cmd_version(args: argparse.Namespace) -> int:
 
 
 def _cmd_cache_dir(args: argparse.Namespace) -> int:
-    print(bundle_cache_dir())
+    print(data_bundle.cache_dir())
+    return 0
+
+
+def _cmd_fetch(args: argparse.Namespace) -> int:
+    try:
+        if args.force or not data_bundle.is_local():
+            data_bundle.fetch()
+        else:
+            print(f"Already present at {data_bundle.cache_dir()}")
+    except Exception as e:  # network / extract failure
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _cmd_status(args: argparse.Namespace) -> int:
+    snap = data_bundle.status()
+    print(f"Data version: {snap['data_version']}")
+    print(f"Cache dir:    {snap['cache_dir']}")
+    print(f"Release URL:  {snap['release_url']}")
+    print(f"All local:    {'yes' if snap['all_local'] else 'no'}")
+    print("-" * 60)
+    for name, item in snap["items"].items():
+        mark = "present" if item["present"] else "missing"
+        print(f"  {name:<48} {mark:>8}  {_fmt_bytes(item['size_bytes']):>9}")
+    return 0
+
+
+def _cmd_prune(args: argparse.Namespace) -> int:
+    deleted = data_bundle.prune_cache(keep_current=not args.include_current, dry_run=not args.yes)
+    if not deleted:
+        print("Nothing to prune.")
+        return 0
+    verb = "Would delete" if not args.yes else "Deleted"
+    for entry in deleted:
+        print(f"{verb} {entry['version']}  ({_fmt_bytes(entry['size_bytes'])})  {entry['path']}")
+    if not args.yes:
+        print("\n(dry run — pass --yes to delete)")
     return 0
 
 
@@ -69,6 +114,54 @@ def _cmd_tmb(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_apd1(args: argparse.Namespace) -> int:
+    if args.code is None:
+        for code, value in sorted(apd1.cancer_apd1_response().items()):
+            print(f"{code}\t{value:g}")
+        return 0
+    try:
+        value = apd1.cancer_apd1_response(args.code, inherit=not args.no_inherit)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    if value is None:
+        print(f"No anti-PD-1 ORR for {args.code!r}", file=sys.stderr)
+        return 1
+    print(f"{value:g}")
+    return 0
+
+
+def _cmd_cta(args: argparse.Namespace) -> int:
+    if args.unfiltered:
+        genes = cta.CTA_unfiltered_gene_ids() if args.ids else cta.CTA_unfiltered_gene_names()
+    else:
+        genes = cta.CTA_gene_ids() if args.ids else cta.CTA_gene_names()
+    if args.count:
+        print(len(genes))
+    else:
+        for g in sorted(genes):
+            print(g)
+    return 0
+
+
+def _cmd_plot(args: argparse.Namespace) -> int:
+    from . import plots
+
+    fns = {
+        "apd1-vs-tmb": plots.apd1_vs_tmb,
+        "apd1-orr-bars": plots.apd1_orr_bars,
+        "incidence-vs-mortality": plots.incidence_vs_mortality,
+    }
+    try:
+        kwargs = {"region": args.region} if args.which == "incidence-vs-mortality" else {}
+        fns[args.which](save=args.out, **kwargs)
+    except (ValueError, ModuleNotFoundError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    print(f"Wrote {args.out}")
+    return 0
+
+
 def _cmd_burden(args: argparse.Namespace) -> int:
     try:
         if args.category is None:
@@ -89,7 +182,7 @@ def _cmd_burden(args: argparse.Namespace) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cancerdata",
-        description="Curated cancer reference data: ontology, TMB, incidence/mortality.",
+        description="Curated cancer reference data: ontology, TMB, incidence/mortality, expression.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -97,10 +190,27 @@ def _build_parser() -> argparse.ArgumentParser:
         func=_cmd_version
     )
 
+    # --- data bundle (fetch / cache) ---
     sub.add_parser(
         "cache-dir", help="Print the on-disk cache dir for the downloadable data bundle"
     ).set_defaults(func=_cmd_cache_dir)
 
+    p_fetch = sub.add_parser("fetch", help="Download the per-cohort expression data bundle")
+    p_fetch.add_argument("--force", action="store_true", help="Re-download even if present")
+    p_fetch.set_defaults(func=_cmd_fetch)
+
+    sub.add_parser(
+        "status", help="Report which bundle paths are cached locally (no download)"
+    ).set_defaults(func=_cmd_status)
+
+    p_prune = sub.add_parser("prune", help="Delete stale version-pinned cache dirs")
+    p_prune.add_argument("--yes", action="store_true", help="Actually delete (default: dry run)")
+    p_prune.add_argument(
+        "--include-current", action="store_true", help="Also delete the current version's cache"
+    )
+    p_prune.set_defaults(func=_cmd_prune)
+
+    # --- reference lookups ---
     p_ct = sub.add_parser(
         "cancer-type", help="Resolve a cancer type/alias/name and print its registry info"
     )
@@ -111,6 +221,33 @@ def _build_parser() -> argparse.ArgumentParser:
     p_tmb.add_argument("code", nargs="?", default=None, help="Cancer code/alias (omit for all)")
     p_tmb.add_argument("--no-inherit", action="store_true", help="Do not inherit an ancestor's TMB")
     p_tmb.set_defaults(func=_cmd_tmb)
+
+    p_apd1 = sub.add_parser(
+        "apd1", help="Anti-PD-1 monotherapy ORR (%) for a code, or the full map"
+    )
+    p_apd1.add_argument("code", nargs="?", default=None, help="Cancer code/alias (omit for all)")
+    p_apd1.add_argument(
+        "--no-inherit", action="store_true", help="Do not inherit an ancestor's ORR"
+    )
+    p_apd1.set_defaults(func=_cmd_apd1)
+
+    p_cta = sub.add_parser("cta", help="List cancer-testis antigens (expressed set by default)")
+    p_cta.add_argument("--unfiltered", action="store_true", help="Full candidate universe")
+    p_cta.add_argument("--ids", action="store_true", help="Ensembl gene IDs instead of symbols")
+    p_cta.add_argument("--count", action="store_true", help="Print the count only")
+    p_cta.set_defaults(func=_cmd_cta)
+
+    p_plot = sub.add_parser("plot", help="Render a cancer-type reference plot to a PNG")
+    p_plot.add_argument(
+        "which",
+        choices=["apd1-vs-tmb", "apd1-orr-bars", "incidence-vs-mortality"],
+        help="Which plot to render",
+    )
+    p_plot.add_argument("--out", required=True, help="Output PNG path")
+    p_plot.add_argument(
+        "--region", default="us", choices=["us", "world"], help="Region for incidence-vs-mortality"
+    )
+    p_plot.set_defaults(func=_cmd_plot)
 
     p_burden = sub.add_parser(
         "burden", help="Incidence/mortality share for a burden category, or the full map"

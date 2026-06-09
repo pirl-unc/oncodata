@@ -1,0 +1,28 @@
+cancer_code,apd1_orr_pct,drug,trial,setting,pmid_doi,confidence,notes
+SKCM,42,nivolumab,CheckMate-067,first-line advanced; nivo monotherapy arm,PMID:28889792,high,Nivo mono ~42-45% (CheckMate-067); pembro KEYNOTE-006 primary 33-37% / longer-FU ~42% (PMID:25891173); aPD1 monotherapy ~40-45% in melanoma
+LUAD,45,pembrolizumab,KEYNOTE-024,first-line; PD-L1 TPS>=50% selected,PMID:27718847,high,PD-L1>=50% selected; all-comers/low-PD-L1 ~18% (KEYNOTE-042 PMID:30955977)
+LUSC,45,pembrolizumab,KEYNOTE-024,first-line; PD-L1 TPS>=50% selected,PMID:27718847,medium,NSCLC pooled in KN-024; squamous subset similar to adeno
+LUAD_STK11,10,pembrolizumab,KEYNOTE-042 subgroup,STK11/KEAP1-mutant immune-cold subset,PMID:30955977,low,Approximate; STK11/KEAP1-mutant LUAD is immune-cold with markedly lower aPD1 benefit (reported mainly as PFS/OS HRs)
+HNSC,19,pembrolizumab,KEYNOTE-048,first-line R/M; CPS>=1; monotherapy arm,PMID:33052747,high,CPS>=20 ~23%; total population ~17%; HPV+/HPV- differential not cleanly established in KN-048
+KIRC,25,nivolumab,CheckMate-025,pretreated (post-VEGF TKI); all-comers,PMID:26406148,high,vs everolimus 5%
+BLCA,28.6,pembrolizumab,KEYNOTE-052,first-line cisplatin-ineligible; all-comers,PMID:32552471,high,Mature KEYNOTE-052 final ORR 28.6% (Vuky 2020); CPS>=10 ~47%; 2017 interim was 24%; CheckMate-275 pretreated ~20%
+COAD,5,pembrolizumab,KEYNOTE-177/-164,all-comers (response is MSI-dependent),PMID:33264544,medium,All-comer ~5%; only the ~13% MSI-H/dMMR respond (MSI-H ~45%; MSS ~0%)
+READ,5,pembrolizumab,KEYNOTE-177/-164,all-comers (response is MSI-dependent),PMID:33264544,medium,All-comer ~5%; MSI-H ~45% and MSS ~0%
+STAD,12,pembrolizumab,KEYNOTE-059,third-line; all-comers,PMID:29260193,medium,CPS>=1 ~16%; monotherapy indication later withdrawn
+LIHC,17,nivolumab,CheckMate-040,sorafenib-naive & -experienced,PMID:28434648,medium,Reported 15-20% across dose-escalation/expansion
+ESCA,18,nivolumab,ATTRACTION-3,pretreated; esophageal SCC,PMID:31582355,medium,nivo ~19%; KEYNOTE-181 ESCC subgroup ~17%
+CESC,15,pembrolizumab,KEYNOTE-158,pretreated; PD-L1+ (CPS>=1) selected,PMID:30943124,high,All responders were PD-L1+; all-comer ~12%
+HL,71,nivolumab,CheckMate-205,relapsed/refractory post-ASCT,PMID:29584546,high,Very high responder; KEYNOTE-087 pembro ~69%
+NEC_MERKEL,56,pembrolizumab,KEYNOTE-017,first-line advanced; all-comers,PMID:30726175,high,Very high responder; CR ~24%
+BRCA_Basal,5,pembrolizumab,KEYNOTE-086,pretreated metastatic TNBC; all-comers,PMID:30475950,medium,Cohort A (pretreated) ~5%; PD-L1+ untreated cohort B ~21%
+UCEC,8,pembrolizumab,KEYNOTE-158,all-comers (response is MMR-dependent),PMID:34990208,medium,dMMR/MSI-H ~50% vs pMMR ~6% (KN-158); all-comer is a weighted blend
+SCLC,13,nivolumab,CheckMate-032,pretreated; all-comers,PMID:27269732,medium,~10-19%; nivo mono ~10%; KEYNOTE-028 PD-L1-selected was higher (~33%) but not representative
+MESO,10,pembrolizumab,KEYNOTE-158,pretreated; all-comers,PMID:33125908,low,Reported ~8-20% across studies
+NPC,25,pembrolizumab,KEYNOTE-028,pretreated; PD-L1+ selected,PMID:28837405,medium,KN-028 NPC cohort ~26%
+PRAD,4,pembrolizumab,KEYNOTE-199,pretreated mCRPC,PMID:31774688,high,Near-zero anchor; ~5% PD-L1+ / ~3% PD-L1-
+PAAD,1,pembrolizumab,pooled/basket,pretreated; MSS,,low,Near-zero anchor (~0-3%); no single clean monotherapy trial; rare dMMR/MSI-H PDAC responds (~37%) but is a tiny subset
+GBM,8,nivolumab,CheckMate-143,recurrent; all-comers,PMID:32437507,high,Near-zero anchor; vs bevacizumab 23%
+COAD_MSI,45,pembrolizumab,KEYNOTE-177,first-line; MSI-H/dMMR,PMID:33264544,high,MSI-H/dMMR colon; immune-hot; the canonical aPD1-responsive subtype
+COAD_MSS,0,pembrolizumab,KEYNOTE-016/-028,MSS,PMID:26028255,high,Microsatellite-stable colon; immune-cold; ~0% response
+READ_MSI,45,pembrolizumab,KEYNOTE-177,first-line; MSI-H/dMMR,PMID:33264544,medium,MSI-H/dMMR rectal; small subset; same biology as COAD_MSI
+READ_MSS,0,pembrolizumab,KEYNOTE-016,MSS,PMID:26028255,high,Microsatellite-stable rectal; immune-cold
