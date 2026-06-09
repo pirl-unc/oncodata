@@ -33,10 +33,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+plots = [
+    "matplotlib",
+]
 dev = [
     "pytest",
     "pytest-cov",
     "ruff",
+    "matplotlib",
 ]
 
 [project.scripts]

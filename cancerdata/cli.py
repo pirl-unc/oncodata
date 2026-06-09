@@ -23,7 +23,7 @@ import argparse
 import json
 import sys
 
-from . import cancer_types, data_bundle, incidence, tmb
+from . import apd1, cancer_types, cta, data_bundle, incidence, tmb
 from .version import __version__
 
 
@@ -114,6 +114,54 @@ def _cmd_tmb(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_apd1(args: argparse.Namespace) -> int:
+    if args.code is None:
+        for code, value in sorted(apd1.cancer_apd1_response().items()):
+            print(f"{code}\t{value:g}")
+        return 0
+    try:
+        value = apd1.cancer_apd1_response(args.code, inherit=not args.no_inherit)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    if value is None:
+        print(f"No anti-PD-1 ORR for {args.code!r}", file=sys.stderr)
+        return 1
+    print(f"{value:g}")
+    return 0
+
+
+def _cmd_cta(args: argparse.Namespace) -> int:
+    if args.unfiltered:
+        genes = cta.CTA_unfiltered_gene_ids() if args.ids else cta.CTA_unfiltered_gene_names()
+    else:
+        genes = cta.CTA_gene_ids() if args.ids else cta.CTA_gene_names()
+    if args.count:
+        print(len(genes))
+    else:
+        for g in sorted(genes):
+            print(g)
+    return 0
+
+
+def _cmd_plot(args: argparse.Namespace) -> int:
+    from . import plots
+
+    fns = {
+        "apd1-vs-tmb": plots.apd1_vs_tmb,
+        "apd1-orr-bars": plots.apd1_orr_bars,
+        "incidence-vs-mortality": plots.incidence_vs_mortality,
+    }
+    try:
+        kwargs = {"region": args.region} if args.which == "incidence-vs-mortality" else {}
+        fns[args.which](save=args.out, **kwargs)
+    except (ValueError, ModuleNotFoundError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    print(f"Wrote {args.out}")
+    return 0
+
+
 def _cmd_burden(args: argparse.Namespace) -> int:
     try:
         if args.category is None:
@@ -173,6 +221,33 @@ def _build_parser() -> argparse.ArgumentParser:
     p_tmb.add_argument("code", nargs="?", default=None, help="Cancer code/alias (omit for all)")
     p_tmb.add_argument("--no-inherit", action="store_true", help="Do not inherit an ancestor's TMB")
     p_tmb.set_defaults(func=_cmd_tmb)
+
+    p_apd1 = sub.add_parser(
+        "apd1", help="Anti-PD-1 monotherapy ORR (%) for a code, or the full map"
+    )
+    p_apd1.add_argument("code", nargs="?", default=None, help="Cancer code/alias (omit for all)")
+    p_apd1.add_argument(
+        "--no-inherit", action="store_true", help="Do not inherit an ancestor's ORR"
+    )
+    p_apd1.set_defaults(func=_cmd_apd1)
+
+    p_cta = sub.add_parser("cta", help="List cancer-testis antigens (expressed set by default)")
+    p_cta.add_argument("--unfiltered", action="store_true", help="Full candidate universe")
+    p_cta.add_argument("--ids", action="store_true", help="Ensembl gene IDs instead of symbols")
+    p_cta.add_argument("--count", action="store_true", help="Print the count only")
+    p_cta.set_defaults(func=_cmd_cta)
+
+    p_plot = sub.add_parser("plot", help="Render a cancer-type reference plot to a PNG")
+    p_plot.add_argument(
+        "which",
+        choices=["apd1-vs-tmb", "apd1-orr-bars", "incidence-vs-mortality"],
+        help="Which plot to render",
+    )
+    p_plot.add_argument("--out", required=True, help="Output PNG path")
+    p_plot.add_argument(
+        "--region", default="us", choices=["us", "world"], help="Region for incidence-vs-mortality"
+    )
+    p_plot.set_defaults(func=_cmd_plot)
 
     p_burden = sub.add_parser(
         "burden", help="Incidence/mortality share for a burden category, or the full map"

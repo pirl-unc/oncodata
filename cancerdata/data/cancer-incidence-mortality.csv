@@ -4,7 +4,7 @@ breast,15.0,7.0,11.6,6.9,high,ACS-CFF2024;GLOBOCAN2022,female breast
 prostate,16.0,6.0,7.3,4.1,high,ACS-CFF2024;GLOBOCAN2022,low mortality:incidence (indolent fraction)
 colorectal,8.0,9.0,9.6,9.3,high,ACS-CFF2024;GLOBOCAN2022,COAD+READ
 pancreas,3.0,8.0,4.1,4.8,high,ACS-CFF2024;GLOBOCAN2022,high mortality:incidence
-liver,2.0,5.0,6.0,7.8,high,ACS-CFF2024;GLOBOCAN2022,liver+intrahepatic bile duct; world>>US
+liver,2.0,5.0,4.3,7.8,high,ACS-CFF2024;GLOBOCAN2022,liver+intrahepatic bile duct; world>>US (GLOBOCAN2022 866k=4.3%)
 stomach,1.5,1.8,4.9,6.8,high,ACS-CFF2024;GLOBOCAN2022,world>>US
 esophagus,1.0,2.7,4.6,4.6,medium,ACS-CFF2024;GLOBOCAN2022,adeno(West)/squamous(Asia)
 bladder,4.0,3.0,3.0,2.0,medium,ACS-CFF2024;GLOBOCAN2022,
@@ -14,7 +14,7 @@ ovary,1.6,2.6,1.6,2.1,medium,ACS-CFF2024;GLOBOCAN2022,HGSOC-dominant
 uterus_endometrium,3.0,2.0,2.2,1.0,medium,ACS-CFF2024;GLOBOCAN2022,corpus uteri
 cervix,0.8,0.7,3.3,3.6,high,ACS-CFF2024;GLOBOCAN2022,world>>US (screening/HPV gap)
 head_and_neck,3.5,1.8,5.0,4.5,medium,ACS-CFF2024;GLOBOCAN2022,oral+pharynx+larynx aggregate (incl larynx); world adds nasopharynx
-thyroid,2.0,0.4,2.5,0.5,high,ACS-CFF2024;GLOBOCAN2022,lowest mortality:incidence; overdiagnosis
+thyroid,2.0,0.4,4.1,0.5,high,ACS-CFF2024;GLOBOCAN2022,lowest mortality:incidence; overdiagnosis (GLOBOCAN2022 821k=4.1%)
 brain_cns,1.4,2.7,1.6,2.5,medium,ACS-CFF2024;GLOBOCAN2022,brain+CNS incl glioma (GBM/LGG)
 non_hodgkin_lymphoma,4.0,3.0,2.8,2.5,medium,ACS-CFF2024;GLOBOCAN2022,incl DLBCL/FL/MCL/BL
 hodgkin_lymphoma,0.4,0.1,0.4,0.2,medium,ACS-CFF2024;GLOBOCAN2022,highly curable
