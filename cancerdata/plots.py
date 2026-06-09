@@ -26,22 +26,29 @@ from __future__ import annotations
 
 from .apd1 import cancer_apd1_response
 from .cancer_types import cancer_type_registry, format_cancer_code_label
-from .incidence import _BURDEN_METRICS, cancer_burden
+from .incidence import cancer_burden
 from .tmb import cancer_tmb
+
+_PLT = None
 
 
 def _plt():
+    """Lazy, one-time matplotlib import (headless-safe Agg default; honors a
+    backend the caller already set)."""
+    global _PLT
+    if _PLT is not None:
+        return _PLT
     try:
         import matplotlib
 
-        matplotlib.use("Agg", force=False)  # headless-safe default; honor a set backend
+        matplotlib.use("Agg", force=False)
         import matplotlib.pyplot as plt
-
-        return plt
     except ModuleNotFoundError as e:  # pragma: no cover - exercised via extras
         raise ModuleNotFoundError(
             "cancerdata plotting requires matplotlib — install with `pip install cancerdata[plots]`"
         ) from e
+    _PLT = plt
+    return _PLT
 
 
 def _family_by_code() -> dict[str, str]:
@@ -134,7 +141,6 @@ def incidence_vs_mortality(*, region="us", save=None):
     if region not in ("us", "world"):
         raise ValueError("region must be 'us' or 'world'")
     inc_metric, mort_metric = f"{region}_incidence_pct", f"{region}_mortality_pct"
-    assert inc_metric in _BURDEN_METRICS and mort_metric in _BURDEN_METRICS
     inc = cancer_burden(metric=inc_metric)
     mort = cancer_burden(metric=mort_metric)
     cats = sorted(set(inc) & set(mort))
