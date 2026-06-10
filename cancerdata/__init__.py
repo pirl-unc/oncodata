@@ -67,6 +67,13 @@ from .expression import (
     representative_cohort_samples,
     within_sample_top_fraction,
 )
+from .expression_registry import (
+    ExpressionSource,
+    expression_source,
+    expression_sources,
+    registry_dataframe,
+    sources_for_cancer_code,
+)
 from .hpa import (
     gene_cell_type_ntpm,
     gene_protein_tissues,
@@ -80,6 +87,12 @@ from .incidence import (
     cancer_burden,
     cancer_burden_df,
     cancer_code_burden_map,
+)
+from .samples import (
+    sample_counts_by_cancer_code,
+    sample_manifest,
+    samples_for_cancer_code,
+    samples_for_cohort,
 )
 from .tmb import cancer_tmb, cancer_tmb_df
 from .version import __version__
@@ -99,6 +112,8 @@ __all__ = [
     "CTA_never_expressed_gene_names",
     "CTA_unfiltered_gene_ids",
     "CTA_unfiltered_gene_names",
+    # expression sources + per-sample curation
+    "ExpressionSource",
     "__version__",
     "available_percentile_cohorts",
     "available_representative_cohorts",
@@ -132,6 +147,8 @@ __all__ = [
     "cohort_registry",
     "cohort_registry_df",
     "cta_dataframe",
+    "expression_source",
+    "expression_sources",
     "family_display_name",
     "format_cancer_code_label",
     "fusion_status",
@@ -145,9 +162,15 @@ __all__ = [
     "is_mixture_cohort",
     "known_cohort_ids",
     "mixture_cohort_codes",
+    "registry_dataframe",
     "representative_cohort_samples",
     "resolve_cancer_type",
+    "sample_counts_by_cancer_code",
+    "sample_manifest",
+    "samples_for_cancer_code",
+    "samples_for_cohort",
     "sarcoma_lineage_codes",
+    "sources_for_cancer_code",
     "tissue_of_origin",
     "viral_status",
     "within_sample_top_fraction",

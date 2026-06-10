@@ -30,6 +30,7 @@ dependencies = [
     "pandas",
     "numpy",
     "pyarrow",
+    "PyYAML",
 ]
 
 [project.optional-dependencies]

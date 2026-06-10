@@ -1,0 +1,964 @@
+# Registry of every cohort-level expression data source consumed by
+# pirlygenes. Drives `pirlygenes downloads`, `pirlygenes build`, and
+# the cache layout under ~/.cache/pirlygenes/expression/<id>/.
+#
+# Field reference:
+#   id                 — stable identifier; matches the cache subdir.
+#   category           — expression | (future) protein, etc.
+#   cancer_codes       — pirlygenes cancer codes this source feeds.
+#   source_type        — gdc | geo | broad-cllmap | treehouse-compendium
+#                        | summary-only-import | pan-cancer-fpkm-table
+#   builder            — Python module/script that knows how to build
+#                        per-gene-per-cohort summaries from this source.
+#                        Today these are scripts/build_*.py; will move
+#                        to pirlygenes/builders/ when the
+#                        `pirlygenes build` dispatcher lands
+#                        (see docs/expression-data-refresh-plan.md
+#                        milestone 2).
+#   project_id         — GDC project, when source_type == gdc.
+#   accession          — GEO series accession, when source_type == geo.
+#   url                — Direct download URL for single-file sources.
+#   unit               — Native quantification unit at the source.
+#   expected_size_gb   — Rough estimate of cached size after fetch.
+#                        Used to summarize total disk usage. Treated
+#                        as a hint, not a hard cap.
+#   citation           — PMID / DOI / project URL for the source.
+#   special_handling   — Inclusion/exclusion or interpretation quirks
+#                        a re-runner needs to remember.
+
+schema_version: 1
+
+sources:
+  # ---- existing GDC builders ----
+
+  - id: cgci-blgsp
+    category: expression
+    cancer_codes: [BL]
+    source_type: gdc
+    project_id: CGCI-BLGSP
+    builder: scripts/build_bl_gdc_reference_expression.py
+    unit: TPM
+    library_prep: polyA RNA-seq   # CGCI Illumina TruSeq mRNA (polyA)
+    expected_size_gb: 2
+    citation: https://portal.gdc.cancer.gov/projects/CGCI-BLGSP
+    special_handling: >
+      Open GDC STAR-counts; one deterministic primary-tumor sample per
+      case. GENCODE v36 → Ensembl 112.
+
+  - id: mmrf-commpass
+    category: expression
+    cancer_codes: [MM]
+    source_type: gdc
+    project_id: MMRF-COMMPASS
+    builder: scripts/build_mmrf_reference_expression.py
+    unit: TPM
+    library_prep: polyA RNA-seq   # CoMMpass Illumina TruSeq stranded mRNA (polyA)
+    expected_size_gb: 5
+    citation: https://portal.gdc.cancer.gov/projects/MMRF-COMMPASS
+    special_handling: >
+      Inclusion: primary Bone Marrow CD138+ samples only
+      (sample_type == 'Primary Blood Derived Cancer - Bone Marrow' AND
+      sample_id endswith 'BM_CD138pos'); one deterministic sample per
+      case ordered by visit number.
+
+  - id: target-all
+    category: expression
+    cancer_codes: [B_ALL, T_ALL]
+    source_type: gdc
+    project_id: TARGET-ALL-P1+P2+P3
+    builder: scripts/build_target_all_reference_expression.py
+    unit: TPM
+    library_prep: polyA RNA-seq   # TARGET Illumina TruSeq mRNA (polyA)
+    expected_size_gb: 6
+    citation: https://portal.gdc.cancer.gov/projects/TARGET-ALL-P2
+    special_handling: >
+      Three TARGET ALL phases merged; split B-cell vs T-cell ALL by
+      diagnosis fields.
+
+  # ---- existing non-GDC builders ----
+
+  - id: cllmap
+    category: expression
+    cancer_codes: [CLL]
+    source_type: broad-cllmap
+    url: https://data.broadinstitute.org/cllmap/data/downloads/cllmap_rnaseq_tpms_full.tsv.gz
+    builder: scripts/build_cllmap_reference_expression.py
+    unit: TPM
+    library_prep: polyA RNA-seq   # CLL-map Broad Illumina TruSeq mRNA (polyA)
+    expected_size_gb: 1
+    citation: https://data.broadinstitute.org/cllmap/downloads.html
+    special_handling: >
+      Single bundled TPM TSV; GENCODE v19 IDs harmonized to Ensembl 112.
+
+  - id: gse100026-cml
+    category: expression
+    cancer_codes: [CML]
+    source_type: geo
+    accession: GSE100026
+    builder: scripts/build_geo_heme_reference_expression.py
+    unit: RPKM
+    expected_size_gb: 0.1
+    citation: GSE100026 (Ding 2017)
+    special_handling: >
+      Peripheral blood mononuclear cells; chronic-phase CML samples
+      only (title prefix CML-CP); RPKM → TPM within retained,
+      uniquely Ensembl-harmonized genes.
+
+  - id: gse114922-mds
+    category: expression
+    cancer_codes: [MDS]
+    source_type: recount3
+    accession: GSE114922
+    recount3_srp: SRP149374
+    source_cohort: GSE114922_SHIOZAWA_2018
+    builder: scripts/build_recount3_source.py
+    unit: recount3 Gencode-v26 coverage gene-sums
+    expected_size_gb: 0.1
+    citation: GSE114922 (Shiozawa 2018)
+    special_handling: >
+      Rebuilt from recount3 (SRP149374, Gencode v26) for coverage-complete
+      gene universe — see docs/recount3-integration.md. Selection: bone-marrow
+      CD34+ HSPCs, disease status == 'Myelodysplastic Syndrome' (runs summed
+      per biological sample → n=82). Supersedes the author-HTSeq build
+      (scripts/build_geo_heme_reference_expression.py), kept in git history.
+
+  - id: gse271664-mcl
+    category: expression
+    cancer_codes: [MCL]
+    source_type: geo
+    accession: GSE271664
+    builder: scripts/build_geo_heme_reference_expression.py
+    unit: HTSeq counts
+    expected_size_gb: 0.1
+    citation: GSE271664 (Bodor 2025)
+    special_handling: >
+      FFPE lymph-biopsy HTSeq counts; length-normalized to TPM with
+      Ensembl 112 gene spans.
+
+  - id: gse283710-mpn
+    category: expression
+    cancer_codes: [MPN]
+    source_type: geo
+    accession: GSE283710
+    builder: scripts/build_geo_heme_reference_expression.py
+    unit: raw counts
+    expected_size_gb: 0.1
+    citation: GSE283710 (WashU 2024)
+    special_handling: >
+      Sorted CD34+; chronic-phase Polycythemia vera, Essential
+      thrombocythemia, and Myelofibrosis only; length-normalized to TPM.
+
+  - id: gse171811-ctcl
+    category: expression
+    cancer_codes: [CTCL]
+    source_type: geo
+    accession: GSE171811
+    builder: scripts/build_ctcl_scrna_reference_expression.py
+    unit: nTPM (pseudobulk)
+    expected_size_gb: 1
+    citation: GSE171811 (ECCITE-seq CTCL)
+    special_handling: >
+      scRNA + TCR-β ECCITE-seq; pseudobulk per donor; output is nTPM.
+
+  # ---- imported via scripts/import_cancer_specific_expression.py ----
+  # These come from external neutral-summary tables, not per-sample
+  # quantifications. Extended-stat columns (std/min/max/p5/p10/p90/p95)
+  # are NaN here until the relevant per-sample fetcher lands —
+  # see docs/expression-data-refresh-plan.md milestone 6.
+
+  - id: treehouse-polya-25-01
+    category: expression
+    cancer_codes:
+      [ATRT, SARC_EWS, HEPB, MBL, NUTM, SARC_OS,
+       SARC_RMS_ARMS, SARC_RMS_ERMS, SARC_RMS_PRMS, SARC_RMS_SSRMS,
+       SARC_LMS, SARC_LPS_UNSPEC, SARC_MYXFIB, SARC_SYN, SARC_UPS]
+    source_type: treehouse-compendium
+    url: https://public.gi.ucsc.edu/~ekephart/public-data/#tumor_25.01_polya
+    builder: scripts/sweep_treehouse_polya_cohorts.py
+    sibling_builders:
+      - scripts/sweep_treehouse_tcga_cohorts.py  # TCGA subset of this file
+      - scripts/build_treehouse_reference_expression.py  # single-cohort CLI
+    unit: log2(TPM+1)
+    expected_size_gb: 6.2
+    citation: >
+      Treehouse Childhood Cancer Initiative, Tumor Compendium 25.01
+      PolyA (released Jan 2025; clinical 20250131v1, TPM matrix
+      2025-02-27). GSE294351.
+    files:
+      tpm: Tumor-25.01-Polya_hugo_log2tpm_58581genes_2025-02-27.tsv
+      clinical: clinical_Treehouse-Tumor-Compendium-25.01-PolyA_20250131v1.tsv
+      tpm_url: https://xena.treehouse.gi.ucsc.edu/download/Tumor-25.01-Polya_hugo_log2tpm_58581genes_2025-02-27.tsv
+      clinical_url: https://xena.treehouse.gi.ucsc.edu/download/clinical_Treehouse-Tumor-Compendium-25.01-PolyA_20250131v1.tsv
+    special_handling: >
+      13,359 samples × 58,581 genes; matrix is RSEM log2(TPM+1) keyed
+      by HUGO symbol. Builder inverse-transforms to TPM, subsets by
+      `clinical.disease == <label>`, harmonizes HUGO to Ensembl
+      release 112, sums TPM across symbols that collapse to the same
+      ENSG, then runs the standard tech-RNA zero + per-sample
+      renormalize before stat summarization. Same builder is
+      parameterized for every Treehouse cancer code listed above.
+      The TCGA subset (~9,800 samples) of this same file is extracted
+      by `scripts/sweep_treehouse_tcga_cohorts.py` and tagged
+      `source_cohort=TREEHOUSE_POLYA_25_01_TCGA_SUBSET` so a future
+      authoritative GDC build can land alongside without clobbering.
+
+  - id: treehouse-ribod-25-01
+    category: expression
+    cancer_codes: [SARC_CHOR, RB]
+    source_type: treehouse-compendium
+    url: https://public.gi.ucsc.edu/~ekephart/public-data/#tumor_25.01_ribodeplete
+    builder: scripts/sweep_treehouse_ribod_cohorts.py
+    unit: log2(TPM+1)
+    expected_size_gb: 1
+    citation: >
+      Treehouse Childhood Cancer Initiative, Tumor Compendium 25.01
+      RiboDeplete (released Jan 2025; TPM matrix 2025-03-19).
+      GSE294353.
+    files:
+      tpm: Tumor-25.01-Ribodeplete_hugo_log2tpm_58581genes_2025-03-19.tsv
+      clinical: clinical_Treehouse-Tumor-Compendium-25.01-RiboD_20250306v1.tsv
+      tpm_url: https://xena.treehouse.gi.ucsc.edu/download/Tumor-25.01-Ribodeplete_hugo_log2tpm_58581genes_2025-03-19.tsv
+      clinical_url: https://xena.treehouse.gi.ucsc.edu/download/clinical_Treehouse-Tumor-Compendium-25.01-RiboD_20250306v1.tsv
+    special_handling: >
+      RiboD (ribo-depleted) sibling of treehouse-polya-25-01; 2,079
+      samples. Same builder works after pointing `--cache-dir` /
+      `--tpm-file` / `--clinical-file` at the RiboD files. For
+      genes in the technical-RNA panel (rRNA / mtRNA), values from
+      the ribo-depleted library are not directly comparable to PolyA
+      cohorts — keep these cohorts in separate source_cohort tags so
+      consumers can hold the assay difference.
+
+  - id: beataml-ohsu-2022
+    category: expression
+    cancer_codes: [LAML_APL, LAML_ELNadv, LAML_ELNfav, LAML_ELNint]
+    source_type: summary-only-import
+    url: https://biodev.github.io/BeatAML2/
+    builder: scripts/build_beataml_reference_expression.py
+    unit: TPM
+    library_prep: polyA RNA-seq   # OHSU BeatAML Illumina TruSeq stranded mRNA (polyA)
+    expected_size_gb: 0
+    citation: BeatAML 2.0 (Bottomly 2022)
+    special_handling: >
+      Summary-only import; subgrouped by ELN risk and APL. Per-sample
+      data is available from BeatAML2 — backfill candidate for the
+      full rebuild.
+
+  - id: gse118014-pannet
+    category: expression
+    cancer_codes: [NET_PANCREAS]
+    source_type: recount3
+    accession: GSE118014
+    recount3_srp: SRP156049
+    source_cohort: GSE118014_ALVAREZ_2018
+    builder: scripts/build_recount3_source.py
+    unit: recount3 Gencode-v26 coverage gene-sums
+    expected_size_gb: 0.1
+    citation: GSE118014 (Alvarez 2018)
+    special_handling: >
+      Well-differentiated PRIMARY pancreatic neuroendocrine tumors (n=33),
+      rebuilt from recount3 (SRP156049, Gencode v26) for coverage-complete
+      genes — see docs/recount3-integration.md. Distinct from the liver-met
+      PANNET shard (gse98894-midnet). Supersedes the summary-only import
+      (scripts/import_cancer_specific_expression.py).
+
+  - id: gse299759-chon
+    category: expression
+    cancer_codes: [SARC_CHON]
+    source_type: summary-only-import
+    accession: GSE299759
+    builder: scripts/build_chon_reference_expression.py
+    unit: raw counts   # builder is raw_counts→TPM (GEO supplementary counts)
+    expected_size_gb: 0
+    citation: GSE299759 (Meijer 2026)
+    special_handling: Chondrosarcoma.
+
+  - id: gse239531-chordoma
+    category: expression
+    cancer_codes: [SARC_CHOR]
+    source_type: summary-only-import
+    accession: GSE239531
+    builder: scripts/build_chordoma_gse239531_reference_expression.py
+    unit: raw counts   # builder is raw_counts→TPM (GEO supplementary counts)
+    expected_size_gb: 0
+    citation: GSE239531 (van Oost 2024, PMID 38272563)
+    special_handling: >
+      20 primary chordoma tumors; augments the 3-sample Treehouse
+      ribo-depleted CHOR cohort. Ensembl-keyed raw counts,
+      length-normalized to TPM by the shared CHON builder core.
+
+  - id: gse75885-sarc
+    category: expression
+    cancer_codes: [SARC_DDLPS, SARC_LGFMS, SARC_PLEOLPS]
+    source_type: geo-rnaseq
+    accession: GSE75885
+    builder: scripts/build_gse75885_sarc_reference_expression.py
+    unit: RPKM   # processed matrix is RPKM-like; builder renormalizes to TPM
+    expected_size_gb: 0.02
+    citation: GSE75885 (Delespaul 2017, PMID 28278311)
+    library_prep: polyA RNA-seq   # Illumina HiSeq 2000
+    special_handling: >
+      Soft-tissue sarcoma subtypes (DDLPS n=19, PLEOLPS n=4, LGFMS n=2) from the
+      GEO processed RNA-seq matrix (GSE75885_Expression_117_sarcomas.tsv.gz),
+      per-sample subtype from series-matrix !Sample_title. Per-sample build (#305)
+      replacing the lost summary-only import. The 117-sample matrix also holds
+      LMS/UPS/MFS/pleomorphic-RMS other sources already cover.
+
+  - id: sclc-ucologne-2015
+    category: expression
+    cancer_codes: [SCLC]
+    source_type: summary-only-import
+    url: https://www.nature.com/articles/nature14664
+    builder: scripts/build_sclc_reference_expression.py
+    unit: FPKM   # George 2015 published FPKM; our builder is fpkm_to_tpm
+    expected_size_gb: 0
+    citation: SCLC U.Cologne 2015 (George 2015, PMID 26168399)
+    special_handling: Small-cell lung cancer summary import.
+
+  - id: target-nbl
+    category: expression
+    cancer_codes: [NBL_MYCNamp, NBL_MYCNnonamp]
+    source_type: summary-only-import
+    project_id: TARGET-NBL
+    builder: scripts/build_target_subprojects.py
+    unit: TPM
+    library_prep: polyA RNA-seq   # TARGET Illumina TruSeq mRNA (polyA)
+    expected_size_gb: 0
+    citation: TARGET Neuroblastoma 2018
+    special_handling: >
+      Neuroblastoma split by MYCN amplification status. Per-sample
+      data is on GDC — backfill candidate.
+
+  - id: target-rt
+    category: expression
+    cancer_codes: [RT]
+    source_type: summary-only-import
+    project_id: TARGET-RT
+    builder: scripts/build_target_subprojects.py
+    unit: TPM
+    library_prep: polyA RNA-seq   # TARGET Illumina TruSeq mRNA (polyA)
+    expected_size_gb: 0
+    citation: TARGET Rhabdoid Tumor 2017
+    special_handling: Backfill candidate from GDC.
+
+  - id: target-wt
+    category: expression
+    cancer_codes: [WILMS]
+    source_type: summary-only-import
+    project_id: TARGET-WT
+    builder: scripts/build_target_subprojects.py
+    unit: TPM
+    library_prep: polyA RNA-seq   # TARGET Illumina TruSeq mRNA (polyA)
+    expected_size_gb: 0
+    citation: TARGET Wilms Tumor 2015
+    special_handling: Backfill candidate from GDC.
+
+  # ---- net-new: TCGA bulk-adult cohorts via GDC ----
+  # All 32 cohorts currently in pan-cancer-expression.csv as
+  # FPKM_<code> columns (median only). Backfilled per-sample via the
+  # parameterized GDC builder under plan milestone 3.
+
+  - id: tcga-acc
+    category: expression
+    cancer_codes: [ACC]
+    source_type: gdc
+    project_id: TCGA-ACC
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 0.5
+    citation: TCGA Adrenocortical carcinoma
+
+  - id: tcga-blca
+    category: expression
+    cancer_codes: [BLCA]
+    source_type: gdc
+    project_id: TCGA-BLCA
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 2
+    citation: TCGA Bladder urothelial carcinoma
+
+  - id: tcga-brca
+    category: expression
+    cancer_codes: [BRCA]
+    source_type: gdc
+    project_id: TCGA-BRCA
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 6
+    citation: TCGA Breast invasive carcinoma
+
+  - id: tcga-cesc
+    category: expression
+    cancer_codes: [CESC]
+    source_type: gdc
+    project_id: TCGA-CESC
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 1.5
+    citation: TCGA Cervical squamous cell carcinoma
+
+  - id: tcga-chol
+    category: expression
+    cancer_codes: [CHOL]
+    source_type: gdc
+    project_id: TCGA-CHOL
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 0.3
+    citation: TCGA Cholangiocarcinoma
+
+  - id: tcga-coad
+    category: expression
+    cancer_codes: [COAD]
+    source_type: gdc
+    project_id: TCGA-COAD
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 2.5
+    citation: TCGA Colon adenocarcinoma
+
+  - id: tcga-dlbc
+    category: expression
+    cancer_codes: [DLBC]
+    source_type: gdc
+    project_id: TCGA-DLBC
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 0.3
+    citation: TCGA Diffuse large B-cell lymphoma
+
+  - id: tcga-esca
+    category: expression
+    cancer_codes: [ESCA]
+    source_type: gdc
+    project_id: TCGA-ESCA
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 1
+    citation: TCGA Esophageal carcinoma
+
+  - id: tcga-gbm
+    category: expression
+    cancer_codes: [GBM]
+    source_type: gdc
+    project_id: TCGA-GBM
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 1
+    citation: TCGA Glioblastoma multiforme
+
+  - id: tcga-hnsc
+    category: expression
+    cancer_codes: [HNSC]
+    source_type: gdc
+    project_id: TCGA-HNSC
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 2.5
+    citation: TCGA Head and neck squamous cell carcinoma
+
+  - id: tcga-kich
+    category: expression
+    cancer_codes: [KICH]
+    source_type: gdc
+    project_id: TCGA-KICH
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 0.3
+    citation: TCGA Kidney chromophobe
+
+  - id: tcga-kirc
+    category: expression
+    cancer_codes: [KIRC]
+    source_type: gdc
+    project_id: TCGA-KIRC
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 2.5
+    citation: TCGA Kidney renal clear cell carcinoma
+
+  - id: tcga-kirp
+    category: expression
+    cancer_codes: [KIRP]
+    source_type: gdc
+    project_id: TCGA-KIRP
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 1.5
+    citation: TCGA Kidney renal papillary cell carcinoma
+
+  - id: tcga-laml
+    category: expression
+    cancer_codes: [LAML]
+    source_type: gdc
+    project_id: TCGA-LAML
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 1
+    citation: TCGA Acute myeloid leukemia
+
+  - id: tcga-lgg
+    category: expression
+    cancer_codes: [LGG]
+    source_type: gdc
+    project_id: TCGA-LGG
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 2.5
+    citation: TCGA Brain lower-grade glioma
+
+  - id: tcga-lihc
+    category: expression
+    cancer_codes: [LIHC]
+    source_type: gdc
+    project_id: TCGA-LIHC
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 2
+    citation: TCGA Liver hepatocellular carcinoma
+
+  - id: tcga-luad
+    category: expression
+    cancer_codes: [LUAD]
+    source_type: gdc
+    project_id: TCGA-LUAD
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 3
+    citation: TCGA Lung adenocarcinoma
+
+  - id: tcga-lusc
+    category: expression
+    cancer_codes: [LUSC]
+    source_type: gdc
+    project_id: TCGA-LUSC
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 3
+    citation: TCGA Lung squamous cell carcinoma
+
+  - id: tcga-meso
+    category: expression
+    cancer_codes: [MESO]
+    source_type: gdc
+    project_id: TCGA-MESO
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 0.4
+    citation: TCGA Mesothelioma
+
+  - id: tcga-ov
+    category: expression
+    cancer_codes: [OV]
+    source_type: gdc
+    project_id: TCGA-OV
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 2
+    citation: TCGA Ovarian serous cystadenocarcinoma
+
+  - id: tcga-paad
+    category: expression
+    cancer_codes: [PAAD]
+    source_type: gdc
+    project_id: TCGA-PAAD
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 1
+    citation: TCGA Pancreatic adenocarcinoma
+
+  - id: tcga-pcpg
+    category: expression
+    cancer_codes: [PCPG]
+    source_type: gdc
+    project_id: TCGA-PCPG
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 0.8
+    citation: TCGA Pheochromocytoma and Paraganglioma
+
+  - id: tcga-prad
+    category: expression
+    cancer_codes: [PRAD]
+    source_type: gdc
+    project_id: TCGA-PRAD
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 2.5
+    citation: TCGA Prostate adenocarcinoma
+
+  - id: tcga-read
+    category: expression
+    cancer_codes: [READ]
+    source_type: gdc
+    project_id: TCGA-READ
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 0.8
+    citation: TCGA Rectum adenocarcinoma
+
+  - id: tcga-sarc
+    category: expression
+    cancer_codes: [SARC]
+    source_type: gdc
+    project_id: TCGA-SARC
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 1.5
+    citation: TCGA Sarcoma
+
+  - id: tcga-skcm
+    category: expression
+    cancer_codes: [SKCM]
+    source_type: gdc
+    project_id: TCGA-SKCM
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 2.5
+    citation: TCGA Skin cutaneous melanoma
+
+  - id: tcga-stad
+    category: expression
+    cancer_codes: [STAD]
+    source_type: gdc
+    project_id: TCGA-STAD
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 2
+    citation: TCGA Stomach adenocarcinoma
+
+  - id: tcga-tgct
+    category: expression
+    cancer_codes: [TGCT]
+    source_type: gdc
+    project_id: TCGA-TGCT
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 0.6
+    citation: TCGA Testicular germ cell tumors
+
+  - id: tcga-thca
+    category: expression
+    cancer_codes: [THCA]
+    source_type: gdc
+    project_id: TCGA-THCA
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 2.5
+    citation: TCGA Thyroid carcinoma
+
+  - id: tcga-thym
+    category: expression
+    cancer_codes: [THYM]
+    source_type: gdc
+    project_id: TCGA-THYM
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 0.6
+    citation: TCGA Thymoma
+
+  - id: tcga-ucec
+    category: expression
+    cancer_codes: [UCEC]
+    source_type: gdc
+    project_id: TCGA-UCEC
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 3
+    citation: TCGA Uterine corpus endometrial carcinoma
+
+  - id: tcga-ucs
+    category: expression
+    cancer_codes: [UCS]
+    source_type: gdc
+    project_id: TCGA-UCS
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 0.3
+    citation: TCGA Uterine carcinosarcoma
+
+  - id: tcga-uvm
+    category: expression
+    cancer_codes: [UVM]
+    source_type: gdc
+    project_id: TCGA-UVM
+    builder: scripts/sweep_treehouse_tcga_cohorts.py
+    unit: TPM
+    expected_size_gb: 0.3
+    citation: TCGA Uveal melanoma
+
+  # ─── Generic GEO-matrix Tier-A sources ─────────────────────────────────
+  # All built via scripts/build_geo_matrix.py + the YAML config below.
+  # Each carries the source-id, the direct-download URL, the unit
+  # (TPM/FPKM/RPKM/log2-TPM/raw_counts), the gene-id type, and any
+  # special handling. `pirlygenes build <source-id>` dispatches to
+  # scripts/build_geo_matrix.py which reads this block.
+
+  - id: gse120328-hl
+    category: expression
+    cancer_codes: [HL]
+    source_type: recount3
+    accession: GSE120328
+    recount3_srp: SRP162356
+    source_cohort: GSE120328_LAMPRECHT_2018
+    source_project: GEO
+    builder: scripts/build_recount3_source.py
+    unit: recount3 Gencode-v26 coverage gene-sums
+    citation: Lamprecht 2018 PMID 30546079 (cHL LCM bulk RNA-seq)
+    expected_size_gb: 0.05
+    special_handling: >
+      Lamprecht 2018 (cHL): LCM-enriched HRS tumour cells (sample titles
+      _TU; 5 paired non-tumour _NTC dropped → n=5). Rebuilt from recount3
+      (SRP162356, Gencode v26) for coverage-complete genes — see
+      docs/recount3-integration.md. HRS-cell-specific not whole-tumour —
+      flag for TME comparisons. Supersedes the FPKM author-matrix build
+      (scripts/build_geo_matrix.py).
+
+  - id: gse142334-fl
+    category: expression
+    cancer_codes: [FL]
+    source_type: geo-matrix
+    builder: scripts/build_geo_matrix.py
+    file_url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE142nnn/GSE142334/suppl/GSE142334_Proj_3970_htseq_all_samples.txt.gz
+    file_name: GSE142334_Proj_3970_htseq_all_samples.txt.gz
+    unit: raw_counts
+    gene_id_col: GeneID
+    gene_id_type: ensembl
+    drop_cols: [GeneSymbol]
+    sample_filter:
+      include_match: "F$"    # FL samples (suffix F); drop _T (transformed-FL)
+    source_cohort: GSE142334_FL_TFL_2021
+    source_project: GEO
+    citation: PMID 33569544 (FL/tFL paired bulk RNA-seq)
+    expected_size_gb: 0.01
+    notes: >
+      Paired biopsies; 6 FL (sample IDs end F) used; 6 transformed-FL
+      (suffix T) excluded by sample_filter. HTSeq raw counts (Ensembl
+      with version suffix) → length-normalized → per-sample TPM.
+
+  - id: gse248751-sarc-ccs
+    category: expression
+    cancer_codes: [SARC_CCS]
+    source_type: geo-matrix
+    builder: scripts/build_geo_matrix.py
+    file_url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE248nnn/GSE248751/suppl/GSE248751_human_CCS_counts.txt.gz
+    file_name: GSE248751_human_CCS_counts.txt.gz
+    unit: raw_counts
+    gene_id_col: ""
+    gene_id_type: ensembl
+    sample_filter:
+      include_match: "^hCCS_"    # tumor only; drop muscle1/2/3 controls
+    source_cohort: GSE248751_HUMAN_CCS_2023
+    source_project: GEO
+    citation: PMID 38136296 (Clear Cell Sarcoma frozen primary RNA-seq)
+    expected_size_gb: 0.01
+    notes: >
+      n=5 primary CCS tumors (hCCS_1..5). 3 muscle normal controls
+      excluded by sample_filter. Raw counts → length-norm TPM. Low n.
+
+  - id: gse328026-sarc-pec
+    category: expression
+    cancer_codes: [SARC_PEC]
+    source_type: geo-matrix
+    builder: scripts/build_geo_matrix.py
+    file_url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE328nnn/GSE328026/suppl/GSE328026_TPMs_all_Samples.txt.gz
+    file_name: GSE328026_TPMs_all_Samples.txt.gz
+    unit: TPM
+    gene_id_col: ""
+    gene_id_type: auto
+    source_cohort: GSE328026_PECOMA_2026
+    source_project: GEO
+    citation: GSE328026 (PEComa TPMs, public Apr 2026)
+    expected_size_gb: 0.01
+    notes: >
+      n=69 PEComa tumors. TPM directly; harmonized to Ensembl 112.
+
+  - id: gse241095-sarc-ks-skin
+    category: expression
+    cancer_codes: [SARC_KS]
+    source_type: geo-matrix
+    builder: scripts/build_geo_matrix.py
+    file_url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE241nnn/GSE241095/suppl/GSE241095_Final_skin_asperpapersamplecode.csv.gz
+    file_name: GSE241095_Final_skin_asperpapersamplecode.csv.gz
+    unit: TPM
+    gene_id_col: ""
+    gene_id_type: auto
+    sep: ","
+    sample_filter:
+      include_match: "T$"     # tumor samples (suffix T); drop matched normals (suffix N)
+    source_cohort: GSE241095_KS_SKIN_2023
+    source_project: GEO
+    citation: PMID 37740179 (Kaposi sarcoma skin lesions, Lidenge 2023)
+    expected_size_gb: 0.01
+    notes: >
+      n=10 cutaneous KS lesions (sample IDs start KS_); 10 matched
+      normals excluded by sample_filter. Companion GI shard adds
+      another n=12 KS lesions if needed.
+
+  # GSE76354 turned out to be NIH3T3 mouse cell-line ± MSANTD3
+  # transfection, NOT primary AcCC tumor RNA-seq. The agent's recon
+  # mismatched. Removing the entry; ACINIC stays in the
+  # "no clean public RNA-seq" bucket (closest is Lee 2020
+  # PRJNA433667 raw FASTQ for 21 AcCC — needs an alignment pipeline).
+
+  - id: gse294016-adcc
+    category: expression
+    cancer_codes: [ADCC]
+    source_type: geo-matrix
+    builder: scripts/build_geo_matrix.py
+    file_url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE294nnn/GSE294016/suppl/GSE294016_TPM_mat.tsv.gz
+    file_name: GSE294016_TPM_mat.tsv.gz
+    unit: TPM
+    gene_id_col: ""
+    gene_id_type: ensembl
+    transposed: true   # matrix is samples-as-rows × genes-as-cols (ENSG headers)
+    source_cohort: GSE294016_BARTL_2025_SGC
+    source_project: GEO
+    citation: PMID 40506428 (Bartl 2025 salivary gland cancer panel)
+    expected_size_gb: 0.02
+    notes: >
+      Bartl 2025 salivary-gland cancer bulk RNA-seq panel (n=95
+      total: includes ACC, AcCC, MEC, etc.). Matrix is transposed
+      (rows = samples, cols = Ensembl IDs versioned). Currently
+      routes ALL samples to ADCC; per-sample histology split (ACC
+      vs AcCC vs MEC) needs Bartl 2025 Supplementary Table 1
+      sample-→-diagnosis lookup — pending.
+
+  - id: gse235092-merkel
+    category: expression
+    cancer_codes: [NEC_MERKEL]
+    source_type: geo-matrix
+    builder: scripts/build_geo_matrix.py
+    file_url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE235nnn/GSE235092/suppl/GSE235092_all_bulk_counts.csv.gz
+    file_name: GSE235092_all_bulk_counts.csv.gz
+    unit: raw_counts
+    gene_id_col: Symbol
+    gene_id_type: symbol
+    sep: ","
+    source_cohort: GSE235092_MERKEL_2024
+    source_project: GEO
+    citation: GSE235092 (Merkel cell carcinoma bulk RNA-seq panel)
+    expected_size_gb: 0.01
+    notes: >
+      All 91 bulk-RNA Merkel cell carcinoma tumor samples
+      (Sample_source_name == "Merkel Cell Carcinoma (MCC)"); symbol-keyed
+      raw counts → length-normalized → per-sample TPM. The MCPyV viral
+      transcripts (57kT / ALTO / …) drop out as non-human at harmonization.
+
+  - id: drmetrics-lnen-2020
+    category: expression
+    cancer_codes: [NET_LUNG, NEC_LUNG_LARGECELL]
+    source_type: github-release
+    builder: scripts/build_lnen_drmetrics_reference_expression.py
+    source_cohort: DRMETRICS_ALCALA_2019_LNEN
+    url: https://github.com/IARCbioinfo/DRMetrics
+    expected_size_gb: 0.05
+    citation: PMID 31431620 (Alcala 2019) + PMID 33203751 (Gabriel 2020)
+    files:
+      counts_zip: read_counts_all.txt.zip
+      attributes_zip: Attributes.txt.zip
+    special_handling: >
+      IARC pan-LNEN cohort, 238 samples uniformly processed (STAR +
+      featureCounts, GENCODE v33, GRCh38). Histology routed via
+      Attributes.txt Histopathology_simplified — Typical/Atypical/
+      Carcinoid/Supra_carcinoid (n=118) → LUNG_NET_LC; LCNEC (n=69)
+      → LUNG_NET_LCNEC; SCLC (n=51) skipped (covered by SCLC
+      UCologne 2015).
+
+  # ─── GPL570 Affymetrix HG-U133 Plus 2.0 microarray sources ────────────
+  # Generic builder lives in pirlygenes/builders/affy_gpl570.py +
+  # scripts/build_gpl570_microarray.py. Produces a TPM-PROXY (probe-max →
+  # anti-log2 → per-sample sum-to-1e6) — not directly comparable to
+  # RNA-seq TPM in absolute magnitude; within-sample gene rank order is
+  # preserved. processing_pipeline is tagged 'gpl570_microarray_tpm_proxy_...'
+  # so consumers can hold the caveat.
+  #
+  # NOTE: no GPL570 source entries are currently registered. Both
+  # candidate cohorts audited in May 2026 turned out wrong:
+  #   - GSE63790 (Dürig HCL) is a Vemurafenib drug-treatment timecourse
+  #     (24 samples, 4 patients × DMSO/drug × time × replicates), not a
+  #     clinical reference. Dropped.
+  #   - GSE21050 (Chibon CINSARC) is 310 STS samples — UPS / LMS /
+  #     dedifferentiated liposarcoma only, zero myxoid liposarcoma —
+  #     so it cannot supply SARC_MYXLPS. Dropped.
+  # The builder + YAML schema are kept in place for the next audited
+  # GPL570 cohort.
+
+  # ─── GEO RAW.tar series-matrix-routed sources ─────────────────────────
+  # Custom one-off builder; the RAW.tar contains many per-sample HTSeq
+  # count files keyed by GSM, and the series_matrix is parsed for the
+  # primary-site / tissue characteristic to route samples to cancer codes.
+
+  - id: gse98894-midnet
+    category: expression
+    cancer_codes: [NET_MIDGUT, NET_PANCREAS, NET_RECTAL]
+    source_type: recount3
+    accession: GSE98894
+    recount3_srp: SRP107025
+    source_cohort: GSE98894_ALVAREZ_2018_NET
+    builder: scripts/build_recount3_source.py
+    unit: recount3 Gencode-v26 coverage gene-sums
+    expected_size_gb: 0.1
+    citation: PMID 30013182 (Alvarez 2018 NET master regulator analysis)
+    special_handling: >
+      Rebuilt from recount3 (SRP107025, Gencode v26) for coverage-complete
+      genes — the author HTSeq counts dropped XAGE1A/XAGE1B; recount3
+      recovers them (see docs/recount3-integration.md). Routed by recount3
+      sample 'origin' attribute: ~81 SI-NET → MID_NET, ~113 PNET → PANNET,
+      ~18 rectal NET → REC_NET. EVERY sample is a liver metastasis; all
+      shards tagged tumor_origin=metastasis, metastasis_site=liver. The
+      PANNET shard here is distinct from the primary-tumor
+      GSE118014_ALVAREZ_2018 PANNET shard — both coexist. Supersedes the
+      RAW.tar HTSeq build (scripts/build_gse98894_midgut_net.py). REC_NET
+      registry code was added with the original build.
+
+  # ─── v5.5.0 microarray cohorts ────────────────────────────────────────
+  # First production use of the generalized microarray builder
+  # (build_microarray_source) — previously GPL570-only, now handles
+  # any GEO platform whose acc.cgi text view exposes a probe→gene-
+  # symbol table.
+
+  - id: gse32662-mtc
+    category: expression
+    cancer_codes: [MTC]
+    source_type: geo-microarray
+    builder: scripts/build_v5_5_microarray_cohorts.py
+    builder_args: ["--only", "mtc"]
+    accession: GSE32662
+    platform: GPL6480
+    citation: GSE32662 (Pringle 2012 medullary thyroid carcinoma)
+    expected_size_gb: 0.05
+    source_cohort: GSE32662_PRINGLE_2012_MTC
+    tumor_origin: primary
+    special_handling: >
+      Agilent Human Genome 4x44K v1 (GPL6480) microarray series; 49
+      primary MTC cases × ~3 hybridization replicates = 52 samples.
+      series_matrix log2 intensity → probe-max → anti-log2 → per-
+      sample sum-to-1e6 (TPM-proxy). Within-sample gene rank
+      preserved; absolute TPM-proxy NOT comparable to RNA-seq cohorts.
+      Biology sanity check: CALCA (calcitonin, defining MTC marker)
+      p95 ~3400 TPM-proxy; CHGA ~948; CEACAM5 ~481.
+
+  - id: gse30929-lps
+    category: expression
+    cancer_codes: [SARC_WDLPS, SARC_DDLPS, SARC_PLEOLPS, SARC_MYXLPS]
+    source_type: geo-microarray
+    builder: scripts/build_v5_5_microarray_cohorts.py
+    builder_args: ["--only", "lps"]
+    accession: GSE30929
+    platform: GPL96
+    citation: PMID 22241786 (Singer 2007 MSKCC 140-sample LPS classifier)
+    expected_size_gb: 0.1
+    source_cohort: GSE30929_SINGER_2007_LPS
+    tumor_origin: primary
+    special_handling: >
+      Affymetrix HG-U133A (GPL96) microarray; 140 primary liposarcomas
+      from MSKCC, explicitly histology-tagged via char_subtype: 52 WD-LPS,
+      40 DD-LPS, 20 pleomorphic, 17 myxoid, 11 myxoid/round-cell. The
+      round-cell variant IS high-grade myxoid LPS (WHO grade III, same
+      FUS::DDIT3 fusion entity), so both collapse to SARC_MYXLPS (n=28).
+      Builds 4 shards from one cohort via sample_include_regex
+      (matched against char_subtype). MYXLPS biology validates:
+      FABP4 2799 / ADIPOQ 917 / PPARG 424 (adipogenic program),
+      FUS+DDIT3 both ~165 (fusion partners both expressed), STAT3 253 +
+      JAK1 207 (FUS-DDIT3/JAK-STAT axis per PMC8851354).

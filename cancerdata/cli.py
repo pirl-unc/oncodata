@@ -23,7 +23,17 @@ import argparse
 import json
 import sys
 
-from . import apd1, cancer_types, cta, data_bundle, incidence, reference_data, tmb
+from . import (
+    apd1,
+    cancer_types,
+    cta,
+    data_bundle,
+    expression_registry,
+    incidence,
+    reference_data,
+    samples,
+    tmb,
+)
 from .version import __version__
 
 
@@ -200,6 +210,46 @@ def _cmd_sources(args: argparse.Namespace) -> int:
     return 1
 
 
+def _cmd_expression_sources(args: argparse.Namespace) -> int:
+    srcs = expression_registry.expression_sources()
+    if args.code:
+        srcs = [s for s in srcs if args.code in s.cancer_codes]
+    if args.type:
+        srcs = [s for s in srcs if s.source_type == args.type]
+    if not srcs:
+        print("No matching expression sources.", file=sys.stderr)
+        return 1
+    print(f"{'Source':<26} {'Type':<20} {'Unit':<7} {'Codes':<6} Cancer codes")
+    print("-" * 100)
+    for s in sorted(srcs, key=lambda x: (x.source_type, x.id)):
+        codes = ";".join(s.cancer_codes)
+        codes = codes if len(codes) <= 40 else codes[:37] + "..."
+        print(
+            f"{s.id:<26} {s.source_type:<20} {(s.unit or ''):<7} {len(s.cancer_codes):<6} {codes}"
+        )
+    print(f"\n{len(srcs)} sources. Registry: cancerdata/data/expression_sources.yaml")
+    return 0
+
+
+def _cmd_samples(args: argparse.Namespace) -> int:
+    if args.counts or (not args.code and not args.cohort):
+        counts = samples.sample_counts_by_cancer_code(included_only=not args.all)
+        for code, n in counts.items():
+            print(f"{code}\t{n}")
+        print(f"\n{int(counts.sum())} samples across {len(counts)} cancer codes", file=sys.stderr)
+        return 0
+    if args.code:
+        df = samples.samples_for_cancer_code(args.code, included_only=not args.all)
+    else:
+        df = samples.samples_for_cohort(args.cohort, included_only=not args.all)
+    cols = [c for c in ("sample_id", "source_cohort", "sample_type", "raw_unit") if c in df.columns]
+    if df.empty:
+        print("No matching samples.", file=sys.stderr)
+        return 1
+    print(df[cols].to_string(index=False))
+    return 0
+
+
 def _cmd_burden(args: argparse.Namespace) -> int:
     try:
         if args.category is None:
@@ -312,6 +362,25 @@ def _build_parser() -> argparse.ArgumentParser:
     p_sources.add_argument("name", nargs="?", default=None, help="Source name (omit to fetch all)")
     p_sources.add_argument("--force", action="store_true", help="Re-download even if cached")
     p_sources.set_defaults(func=_cmd_sources)
+
+    p_exprsrc = sub.add_parser(
+        "expression-sources",
+        help="List the cohort expression sources (Treehouse, GDC, GEO, recount3, …)",
+    )
+    p_exprsrc.add_argument("--code", default=None, help="Only sources feeding this cancer code")
+    p_exprsrc.add_argument("--type", default=None, help="Only this source_type (e.g. gdc, geo)")
+    p_exprsrc.set_defaults(func=_cmd_expression_sources)
+
+    p_samples = sub.add_parser(
+        "samples", help="Per-sample curation manifest (counts, or rows for a code/cohort)"
+    )
+    p_samples.add_argument("--code", default=None, help="Samples assigned to this cancer code")
+    p_samples.add_argument("--cohort", default=None, help="Samples from this source cohort")
+    p_samples.add_argument("--counts", action="store_true", help="Per-cancer-code sample counts")
+    p_samples.add_argument(
+        "--all", action="store_true", help="Include excluded samples (default: included only)"
+    )
+    p_samples.set_defaults(func=_cmd_samples)
 
     return parser
 
