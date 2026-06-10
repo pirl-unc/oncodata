@@ -14,6 +14,21 @@ def test_version(capsys):
     assert "cancerdata v" in capsys.readouterr().out
 
 
+def test_proteoforms_gene_lookup(capsys):
+    assert cli.main(["proteoforms", "--gene", "SSX4B"]) == 0
+    assert "SSX4/SSX4B" in capsys.readouterr().out
+
+
+def test_proteoforms_unknown_gene_errors(capsys):
+    assert cli.main(["proteoforms", "--gene", "PRAME"]) == 1
+    assert "not in any proteoform group" in capsys.readouterr().err
+
+
+def test_proteoforms_count(capsys):
+    assert cli.main(["proteoforms", "--count"]) == 0
+    assert int(capsys.readouterr().out.strip()) >= 4
+
+
 def test_cancer_type_prints_json(capsys):
     assert cli.main(["cancer-type", "prostate"]) == 0
     info = json.loads(capsys.readouterr().out)

@@ -30,6 +30,7 @@ from . import (
     data_bundle,
     expression_registry,
     incidence,
+    proteoforms,
     reference_data,
     samples,
     tmb,
@@ -151,6 +152,24 @@ def _cmd_cta(args: argparse.Namespace) -> int:
     else:
         for g in sorted(genes):
             print(g)
+    return 0
+
+
+def _cmd_proteoforms(args: argparse.Namespace) -> int:
+    if args.gene:
+        label = proteoforms.proteoform_for_gene(args.gene)
+        if label is None:
+            print(f"{args.gene} is not in any proteoform group", file=sys.stderr)
+            return 1
+        members = proteoforms.proteoform_symbol_map()[label]
+        print(f"{label}\t{', '.join(members)}")
+        return 0
+    symbol_map = proteoforms.proteoform_symbol_map()
+    if args.count:
+        print(len(symbol_map))
+        return 0
+    for label in sorted(symbol_map):
+        print(f"{label}\t{', '.join(symbol_map[label])}")
     return 0
 
 
@@ -324,6 +343,14 @@ def _build_parser() -> argparse.ArgumentParser:
     p_cta.add_argument("--ids", action="store_true", help="Ensembl gene IDs instead of symbols")
     p_cta.add_argument("--count", action="store_true", help="Print the count only")
     p_cta.set_defaults(func=_cmd_cta)
+
+    p_proteoforms = sub.add_parser(
+        "proteoforms",
+        help="List identical-protein CGA groups whose TPM sums to proteoform level",
+    )
+    p_proteoforms.add_argument("--gene", help="Show the group for one gene (Ensembl ID or symbol)")
+    p_proteoforms.add_argument("--count", action="store_true", help="Print the group count only")
+    p_proteoforms.set_defaults(func=_cmd_proteoforms)
 
     p_plot = sub.add_parser("plot", help="Render a cancer-type reference plot to a PNG")
     p_plot.add_argument(

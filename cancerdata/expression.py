@@ -269,3 +269,37 @@ def within_sample_top_fraction(cancer_type, *, threshold: float = 0.95) -> pd.Da
     if "n_samples" in df.columns:
         keep.append("n_samples")
     return df[keep]
+
+
+# ---------- proteoform-level summation (identical-protein paralogs) ----------
+
+
+def proteoform_representative_samples(
+    cancer_types: str | Iterable[str] | None = None,
+    *,
+    k: int | None = None,
+) -> pd.DataFrame:
+    """Representative per-sample vectors with identical-protein genes summed to
+    proteoform level.
+
+    Same per-sample medoid vectors as :func:`representative_cohort_samples`
+    (``format="wide"``), but the member genes of each proteoform group
+    (CTAG1A+CTAG1B → ``CTAG1A/CTAG1B``, SSX4+SSX4B → ``SSX4/SSX4B``, the 12-member
+    CT47A family, …) are *summed* per sample — the multi-mapping-correct unit
+    when reads can't be uniquely assigned between identical-protein loci. Genes in
+    no group pass through unchanged.
+
+    Always operates on linear ``clean_tpm_v4`` (summing log1p values would be
+    wrong); ``log1p`` afterward if you need it. This is the runtime,
+    every-cohort proteoform view over the shipped medoid samples; the same
+    :func:`cancerdata._build.sum_proteoform_tpm` core can run inside the offline
+    percentile/within-sample generators to ship proteoform-summed artifacts.
+    """
+    from ._build import sum_proteoform_tpm
+    from .proteoforms import proteoform_group_map
+
+    wide = representative_cohort_samples(cancer_types, k=k, normalize="tpm_clean", format="wide")
+    sample_cols = [c for c in wide.columns if c not in ("Ensembl_Gene_ID", "Symbol")]
+    if wide.empty or not sample_cols:
+        return wide
+    return sum_proteoform_tpm(wide, proteoform_group_map(), sample_cols)

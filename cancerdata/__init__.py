@@ -64,6 +64,7 @@ from .expression import (
     available_representative_cohorts,
     available_within_sample_cohorts,
     cohort_gene_percentiles,
+    proteoform_representative_samples,
     representative_cohort_samples,
     within_sample_top_fraction,
 )
@@ -87,6 +88,13 @@ from .incidence import (
     cancer_burden,
     cancer_burden_df,
     cancer_code_burden_map,
+)
+from .proteoforms import (
+    gene_to_proteoform,
+    proteoform_for_gene,
+    proteoform_group_map,
+    proteoform_groups,
+    proteoform_symbol_map,
 )
 from .samples import (
     sample_counts_by_cancer_code,
@@ -155,6 +163,7 @@ __all__ = [
     "gene_cell_type_ntpm",
     "gene_protein_tissues",
     "gene_tissue_ntpm",
+    "gene_to_proteoform",
     "hpa_normal_tissue",
     # HPA normal-tissue reference data
     "hpa_rna_consensus",
@@ -162,6 +171,11 @@ __all__ = [
     "is_mixture_cohort",
     "known_cohort_ids",
     "mixture_cohort_codes",
+    "proteoform_for_gene",
+    "proteoform_group_map",
+    "proteoform_groups",
+    "proteoform_representative_samples",
+    "proteoform_symbol_map",
     "registry_dataframe",
     "representative_cohort_samples",
     "resolve_cancer_type",
