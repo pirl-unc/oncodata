@@ -45,39 +45,64 @@ _LABEL_COLUMN = "proteoform_id"
 _SYMBOL_COLUMN = "member_symbol"
 _GENE_ID_COLUMN = "member_gene_id"
 
+#: Registry scopes -> bundled dataset name. ``cta`` is the shipped default (the
+#: focused CGA universe); ``genome`` is the opt-in genome-wide identical-protein
+#: grouping (issue #12) — a strict superset whose summation shifts many more
+#: genes' expression, so it is offered, not defaulted.
+_DATASET_BY_SCOPE = {
+    "cta": "proteoform-groups",
+    "genome": "proteoform-groups-genome",
+}
 
-@lru_cache(maxsize=1)
-def _proteoform_frame() -> pd.DataFrame:
-    """Cached registry frame. Internal, read-only — public callers get a copy."""
-    df = get_data("proteoform-groups", copy=False)
+
+def _dataset_for_scope(scope: str) -> str:
+    try:
+        return _DATASET_BY_SCOPE[scope]
+    except KeyError:
+        raise ValueError(
+            f"scope must be one of {sorted(_DATASET_BY_SCOPE)}, got {scope!r}"
+        ) from None
+
+
+@lru_cache(maxsize=len(_DATASET_BY_SCOPE))
+def _proteoform_frame(scope: str = "cta") -> pd.DataFrame:
+    """Cached registry frame for a scope. Internal, read-only — public callers
+    get a copy."""
+    df = get_data(_dataset_for_scope(scope), copy=False)
     df[_GENE_ID_COLUMN] = df[_GENE_ID_COLUMN].astype(str).str.split(".").str[0]
     return df
 
 
-def proteoform_groups() -> pd.DataFrame:
+def proteoform_groups(*, scope: str = "cta") -> pd.DataFrame:
     """The proteoform registry: one row per member gene. Defensive copy.
 
     Columns: ``proteoform_id`` (slash-joined sorted member symbols),
     ``member_symbol``, ``member_gene_id`` (unversioned Ensembl), ``protein_length``,
     ``n_members``.
+
+    ``scope="genome"`` returns the genome-wide identical-protein grouping (every
+    protein-coding family, not just CGAs); the default ``"cta"`` registry is a
+    strict subset of it.
     """
-    return _proteoform_frame().copy()
+    return _proteoform_frame(scope).copy()
 
 
-@lru_cache(maxsize=1)
-def proteoform_group_map() -> dict[str, tuple[str, ...]]:
-    """``{proteoform label: (member gene IDs, …)}`` for every group."""
-    df = _proteoform_frame()
+@lru_cache(maxsize=len(_DATASET_BY_SCOPE))
+def proteoform_group_map(*, scope: str = "cta") -> dict[str, tuple[str, ...]]:
+    """``{proteoform label: (member gene IDs, …)}`` for every group (see
+    :func:`proteoform_groups` for ``scope``)."""
+    df = _proteoform_frame(scope)
     out: dict[str, tuple[str, ...]] = {}
     for label, sub in df.groupby(_LABEL_COLUMN):
         out[str(label)] = tuple(sub[_GENE_ID_COLUMN].astype(str))
     return out
 
 
-@lru_cache(maxsize=1)
-def proteoform_symbol_map() -> dict[str, tuple[str, ...]]:
-    """``{proteoform label: (member symbols, …)}`` for every group."""
-    df = _proteoform_frame()
+@lru_cache(maxsize=len(_DATASET_BY_SCOPE))
+def proteoform_symbol_map(*, scope: str = "cta") -> dict[str, tuple[str, ...]]:
+    """``{proteoform label: (member symbols, …)}`` for every group (see
+    :func:`proteoform_groups` for ``scope``)."""
+    df = _proteoform_frame(scope)
     out: dict[str, tuple[str, ...]] = {}
     for label, sub in df.groupby(_LABEL_COLUMN):
         out[str(label)] = tuple(sub[_SYMBOL_COLUMN].astype(str))
