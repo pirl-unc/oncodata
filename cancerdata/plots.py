@@ -168,21 +168,35 @@ def incidence_vs_mortality(*, region="us", save=None):
 
 def _cta_expression_matrix(stat, cohorts):
     """cohorts × CTA-gene matrix of the requested ``stat`` TPM (NaN where a cohort
-    lacks a gene). Rows are cohort codes, columns are CTA symbols."""
+    lacks a gene). Rows are cohort codes, columns are CTA symbols. Cohorts without
+    a percentile vector (summary-only or unknown codes) are skipped with a warning
+    rather than aborting the whole plot."""
+    import warnings
+
     import pandas as pd
 
     col = _STAT_PERCENTILE_COL[stat]
     id_to_name = CTA_gene_id_to_name()
     cta_ids = set(CTA_gene_ids())
     rows = {}
+    skipped = []
     for code in cohorts:
-        df = cohort_gene_percentiles(code, as_tpm=True)
+        try:
+            df = cohort_gene_percentiles(code, as_tpm=True)
+        except ValueError:
+            skipped.append(str(code))
+            continue
         ids = df["Ensembl_Gene_ID"].astype(str).str.split(".").str[0]
         mask = ids.isin(cta_ids)
         sub = df.loc[mask]
         rows[code] = pd.Series(
             sub[col].to_numpy(),
             index=ids[mask].map(id_to_name),
+        )
+    if skipped:
+        warnings.warn(
+            f"skipped {len(skipped)} cohort(s) without a percentile vector: {', '.join(skipped)}",
+            stacklevel=2,
         )
     matrix = pd.DataFrame(rows).T  # cohorts (rows) × CTA symbols (cols)
     return matrix.loc[:, ~matrix.columns.duplicated()]
@@ -233,6 +247,11 @@ def cta_expression_heatmap(
         raise ValueError("no cohorts with a percentile vector — is the expression bundle present?")
 
     matrix = _cta_expression_matrix(stat, cohorts)
+    if matrix.empty or matrix.shape[1] == 0:
+        raise ValueError(
+            "no CTA expression data for the selected cohorts — none had a percentile "
+            "vector, or none expressed any CTA gene."
+        )
     # Columns: top CTAs by peak, ordered by breadth (#cohorts > high_tpm) then peak.
     peak = matrix.max(axis=0, skipna=True)
     breadth = (matrix > high_tpm).sum(axis=0)

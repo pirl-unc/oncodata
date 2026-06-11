@@ -71,3 +71,13 @@ def test_cta_expression_heatmap_proteoform_not_implemented():
 def test_cta_expression_heatmap_no_cohorts():
     with pytest.raises(ValueError, match="no cohorts"):
         plots.cta_expression_heatmap(cohorts=[])
+
+
+def test_cta_expression_heatmap_skips_unusable_cohorts():
+    # A code with no percentile vector is skipped with a warning, not a crash; with
+    # only unusable codes the matrix is empty -> clean ValueError.
+    with (
+        pytest.warns(UserWarning, match="without a percentile vector"),
+        pytest.raises(ValueError, match="no CTA expression data"),
+    ):
+        plots.cta_expression_heatmap(cohorts=["NOT_A_REAL_COHORT"])
