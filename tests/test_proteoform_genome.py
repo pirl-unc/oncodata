@@ -11,6 +11,7 @@ import pytest
 from cancerdata.proteoforms import (
     proteoform_group_map,
     proteoform_groups,
+    proteoform_symbol_map,
 )
 
 
@@ -36,6 +37,13 @@ def test_n_members_matches_actual_group_size():
     sizes = df.groupby("proteoform_id")["member_gene_id"].nunique()
     declared = df.groupby("proteoform_id")["n_members"].first()
     assert (sizes == declared).all()
+
+
+def test_no_empty_or_nan_member_symbols():
+    # Genome scope includes unsymbolled genes; the generator fills the gene id so
+    # the symbol map never carries an empty string or a literal "nan".
+    for members in proteoform_symbol_map(scope="genome").values():
+        assert all(m and m != "nan" for m in members), members
 
 
 def test_no_duplicate_member_gene_ids():

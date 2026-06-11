@@ -65,10 +65,13 @@ def _dataset_for_scope(scope: str) -> str:
 
 
 @lru_cache(maxsize=len(_DATASET_BY_SCOPE))
-def _proteoform_frame(scope: str = "cta") -> pd.DataFrame:
+def _proteoform_frame(scope: str) -> pd.DataFrame:
     """Cached registry frame for a scope. Internal, read-only — public callers
-    get a copy."""
-    df = get_data(_dataset_for_scope(scope), copy=False)
+    get a copy. ``scope`` is required (no default) so the cache has exactly one
+    key per scope; callers that want the default pass ``"cta"`` explicitly."""
+    # get_data() returns its own copy (copy defaults True); normalize the gene-id
+    # column on that copy — never mutate the shared get_data cache in place.
+    df = get_data(_dataset_for_scope(scope))
     df[_GENE_ID_COLUMN] = df[_GENE_ID_COLUMN].astype(str).str.split(".").str[0]
     return df
 
@@ -81,8 +84,11 @@ def proteoform_groups(*, scope: str = "cta") -> pd.DataFrame:
     ``n_members``.
 
     ``scope="genome"`` returns the genome-wide identical-protein grouping (every
-    protein-coding family, not just CGAs); the default ``"cta"`` registry is a
-    strict subset of it.
+    protein-coding family, not just CGAs). The default ``"cta"`` registry is a
+    *refinement* of it: every CTA group's member genes fall within a single genome
+    group, but the genome group may merge in additional non-CTA paralogs and so
+    carry a larger label (e.g. CTA ``CT45A5/CT45A7`` ⊆ genome ``CT45A5/CT45A6/CT45A7``).
+    Do not assume a gene keeps the same label across scopes.
     """
     return _proteoform_frame(scope).copy()
 
@@ -114,7 +120,7 @@ def _member_to_label() -> dict[str, str]:
     """Lookup keyed by BOTH the unversioned gene ID and the uppercased symbol ->
     proteoform label. The two key spaces don't collide (``ENSG…`` vs symbols), so
     one flat dict serves both ``proteoform_for_gene`` lookup paths."""
-    df = _proteoform_frame()
+    df = _proteoform_frame("cta")
     out: dict[str, str] = {}
     for _, row in df.iterrows():
         label = str(row[_LABEL_COLUMN])
@@ -133,5 +139,5 @@ def proteoform_for_gene(gene: str) -> str | None:
 
 def gene_to_proteoform() -> dict[str, str]:
     """``{member gene ID: proteoform label}`` (Ensembl IDs only)."""
-    df = _proteoform_frame()
+    df = _proteoform_frame("cta")
     return dict(zip(df[_GENE_ID_COLUMN].astype(str), df[_LABEL_COLUMN].astype(str)))

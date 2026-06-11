@@ -28,7 +28,9 @@ row per member gene for every group of two or more.
 ``--scope genome`` instead scans *all* protein-coding genes in the release,
 producing the full identical-protein grouping (histone clusters, tubulins,
 ubiquitins, … — any family with byte-identical loci whose RNA-seq reads multi-map
-and individually under-count). The CTA-scoped registry is a strict subset of it.
+and individually under-count). The CTA-scoped registry is a refinement of it: each
+CTA group's members fall within one genome group, which may merge in extra non-CTA
+paralogs (so the genome label can be larger than the CTA label).
 The genome registry is the opt-in variant (issue #12): genome-wide summation
 shifts many more genes' expression than the focused CTA subset, so it is offered,
 not shipped as the default for the percentile/within-sample artifacts.
@@ -138,8 +140,10 @@ def build_proteoform_groups(
         if len(members) < min_members:
             continue
         # Genome scope includes genes with no HGNC symbol; fall back to the gene id
-        # so the label stays unique and non-empty (CTA members all have symbols).
-        label = "/".join(sorted((symbol or gene_id) for symbol, gene_id in members))
+        # for both the label and the member symbol so neither is empty/NaN (CTA
+        # members all have symbols, so this is a no-op for the shipped default).
+        members = [(symbol or gene_id, gene_id) for symbol, gene_id in members]
+        label = "/".join(sorted(symbol for symbol, _ in members))
         for symbol, gene_id in members:
             rows.append(
                 {
