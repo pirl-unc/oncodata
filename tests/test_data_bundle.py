@@ -4,6 +4,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
+import tarfile
 import urllib.error
 
 import pytest
@@ -76,6 +77,23 @@ def test_fetch_falls_back_when_primary_404s(monkeypatch, tmp_path):
         if url == data_bundle.RELEASE_URL:
             raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
         # fallback "succeeds"
+
+    monkeypatch.setattr(data_bundle, "_download_and_extract", fake_download)
+    out = data_bundle.fetch(verbose=False)
+    assert out == data_bundle.cache_dir()
+    assert attempted == [data_bundle.RELEASE_URL, data_bundle.FALLBACK_RELEASE_URL]
+
+
+def test_fetch_falls_back_on_corrupt_primary_tarball(monkeypatch, tmp_path):
+    # A 200 response whose body isn't a valid tar (e.g. an HTML error page) must
+    # fall back to the next source, not propagate.
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path / f"v{DATA_VERSION}"))
+    attempted = []
+
+    def fake_download(url, root, *, verbose):
+        attempted.append(url)
+        if url == data_bundle.RELEASE_URL:
+            raise tarfile.ReadError("not a gzip file")
 
     monkeypatch.setattr(data_bundle, "_download_and_extract", fake_download)
     out = data_bundle.fetch(verbose=False)

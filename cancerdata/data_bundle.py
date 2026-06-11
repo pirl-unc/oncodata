@@ -142,10 +142,17 @@ def find(relative_path: str) -> Path | None:
 
 
 def _download_and_extract(url: str, root: Path, *, verbose: bool) -> None:
-    """Download a tarball from ``url`` and extract it into ``root``. Raises
-    ``urllib.error.URLError``/``HTTPError`` if the URL is unreachable (e.g. 404)."""
+    """Download a tarball from ``url`` and extract it into ``root``.
+
+    Extraction goes into a staging dir first and is promoted into ``root`` only
+    after it completes, so a failed/corrupt download never leaves a half-populated
+    cache that a later run would read as valid. Raises ``urllib.error.URLError``
+    (unreachable, e.g. 404) or ``tarfile.TarError`` (corrupt/non-tar body) — the
+    caller falls back to the next source on either.
+    """
     with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
         tmp_path = Path(tmp.name)
+    staging = Path(tempfile.mkdtemp(prefix=".staging-", dir=root))
     try:
         with urllib.request.urlopen(url) as resp, tmp_path.open("wb") as h:
             shutil.copyfileobj(resp, h, length=1024 * 1024)
@@ -155,11 +162,20 @@ def _download_and_extract(url: str, root: Path, *, verbose: bool) -> None:
         with tarfile.open(tmp_path) as tf:
             # filter=data is Python 3.12+; fall back to the older API.
             try:
-                tf.extractall(root, filter="data")
+                tf.extractall(staging, filter="data")
             except TypeError:
-                tf.extractall(root)
+                tf.extractall(staging)
+        # Promote staged entries into the cache, replacing any prior copy.
+        for entry in staging.iterdir():
+            dest = root / entry.name
+            if dest.is_dir():
+                shutil.rmtree(dest)
+            elif dest.exists():
+                dest.unlink()
+            shutil.move(str(entry), str(dest))
     finally:
         tmp_path.unlink(missing_ok=True)
+        shutil.rmtree(staging, ignore_errors=True)
 
 
 def fetch(*, verbose: bool = True) -> Path:
@@ -184,7 +200,9 @@ def fetch(*, verbose: bool = True) -> Path:
             sys.stderr.flush()
         try:
             _download_and_extract(url, root, verbose=verbose)
-        except (urllib.error.URLError, urllib.error.HTTPError) as e:
+        except (urllib.error.URLError, tarfile.TarError) as e:
+            # URLError covers HTTPError (404); TarError covers a corrupt body or
+            # an HTML error page served with 200 — fall back to the next source.
             errors.append(f"{url}: {e}")
             if verbose:
                 sys.stderr.write(f"cancerdata: {url} unavailable ({e}); trying next source\n")

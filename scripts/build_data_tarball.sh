@@ -20,6 +20,15 @@ set -euo pipefail
 SRC="${1:?usage: build_data_tarball.sh <source-dir> [output-dir]}"
 OUT_DIR="${2:-.}"
 
+# Resolve user-supplied paths to absolute BEFORE cd'ing into the repo, so a
+# relative source/output dir stays relative to the caller's CWD.
+SRC="$(cd "$SRC" 2>/dev/null && pwd)" || {
+    echo "error: source dir '$1' not found" >&2
+    exit 1
+}
+mkdir -p "${OUT_DIR%/}"
+OUT_DIR="$(cd "${OUT_DIR%/}" && pwd)"
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
@@ -37,7 +46,6 @@ if ((${#missing[@]})); then
     exit 1
 fi
 
-mkdir -p "${OUT_DIR%/}"
 echo "packaging ${#PATHS[@]} bundle paths from $SRC -> $OUT"
 tar -czf "$OUT" -C "$SRC" "${PATHS[@]}"
 SIZE="$(du -h "$OUT" | cut -f1)"
