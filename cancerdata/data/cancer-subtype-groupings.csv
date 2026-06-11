@@ -1,0 +1,12 @@
+group_code,axis,member_code,basis
+MSI,microsatellite,COAD_MSI,MSI-H/dMMR colon
+MSI,microsatellite,READ_MSI,MSI-H/dMMR rectum
+MSI,microsatellite,UCEC_MSI,MSI-H/dMMR endometrial
+MSS,microsatellite,COAD_MSS,microsatellite-stable colon
+MSS,microsatellite,READ_MSS,microsatellite-stable rectum
+POLE,hypermutation,UCEC_POLE,POLE-ultramutated endometrial
+HPV_POS,viral_hpv,HNSC_HPVpos,HPV-driven head and neck
+HPV_POS,viral_hpv,CESC,HPV-driven cervical (entity is HPV-defining)
+HPV_NEG,viral_hpv,HNSC_HPVneg,HPV-negative head and neck
+MYCN_AMP,copy_number_mycn,NBL_MYCNamp,MYCN-amplified neuroblastoma
+MYCN_NONAMP,copy_number_mycn,NBL_MYCNnonamp,MYCN-non-amplified neuroblastoma

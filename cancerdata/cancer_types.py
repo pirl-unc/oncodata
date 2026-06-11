@@ -526,6 +526,55 @@ def cancer_type_subtypes_of(parent_code):
     return df[df["parent_code"] == parent_code]["code"].tolist()
 
 
+def _parent_of_map():
+    """``{code: parent_code}`` from the registry (empty parents dropped)."""
+    df = cancer_type_registry()
+    out = {}
+    for code, parent in zip(df["code"], df["parent_code"]):
+        if isinstance(parent, str) and parent:
+            out[str(code)] = parent
+    return out
+
+
+def _walk_ancestors(code, parent_of):
+    """Codes on the ``parent_code`` chain above ``code`` (excluding itself)."""
+    seen, cur = [], code
+    while cur in parent_of:
+        cur = parent_of[cur]
+        if cur in seen:  # defensive: a cycle would otherwise loop forever
+            break
+        seen.append(cur)
+    return seen
+
+
+def cancer_subtype_groupings():
+    """Orthogonal cross-cutting subtype groupings (``cancer-subtype-groupings.csv``).
+
+    Axes such as microsatellite (MSI/MSS), hypermutation (POLE), viral_hpv, and
+    copy_number_mycn cut *across* the organ ``parent_code`` tree — a leaf belongs to
+    its organ parent **and** to a mechanism group. Returns the long-form
+    ``group_code, axis, member_code, basis`` table (defensive copy).
+    """
+    return get_data("cancer-subtype-groupings").copy()
+
+
+def cancer_subtype_group(group_code, *, under=None):
+    """Member registry codes of a cross-cutting group (e.g. ``"MSI"``, ``"MSS"``,
+    ``"POLE"``, ``"HPV_POS"``, ``"MYCN_AMP"``).
+
+    ``cancer_subtype_group("MSI")`` returns every MSI subtype across cancers;
+    ``cancer_subtype_group("POLE")`` the POLE-ultramutated subtypes. With ``under``,
+    restrict to members that are descendants of that hierarchy node —
+    ``cancer_subtype_group("MSI", under="CRC")`` -> the colorectal MSI cross-cut.
+    """
+    df = cancer_subtype_groupings()
+    members = df[df["group_code"] == group_code]["member_code"].tolist()
+    if under is not None:
+        parent_of = _parent_of_map()
+        members = [m for m in members if under in _walk_ancestors(m, parent_of)]
+    return members
+
+
 def mixture_cohort_codes():
     """Return parent codes flagged as mixture cohorts in the registry.
 
