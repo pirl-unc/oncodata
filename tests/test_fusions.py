@@ -66,6 +66,16 @@ def test_protein_family():
     assert protein_family("NOT_A_GENE") is None
 
 
+def test_nan_query_does_not_match_fusion_negative_rows():
+    # The "(none)" fusion-negative rows have NaN gene names; a 'NAN'/'nan' query
+    # must NOT match them (regression: .astype(str) turned NaN into "NAN").
+    assert cancer_types_with_fusion(partner="NAN") == []
+    assert cancer_types_with_fusion(partner="nan") == []
+    assert cancer_types_with_fusion("NAN-NAN") == []
+    assert fusion_partners("NAN") == set()
+    assert protein_family("NAN") is None
+
+
 def test_every_fusion_code_is_a_registry_code():
     # A fusion row must never reference a cancer code that doesn't exist.
     fusion_codes = set(cancer_fusions_df()["cancer_code"])

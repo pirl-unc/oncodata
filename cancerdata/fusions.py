@@ -44,6 +44,16 @@ def _truthy(series):
     return series.astype(str).str.lower() == "true"
 
 
+def _upper(series):
+    """Uppercased view of a gene/family column with NaN preserved as non-matching.
+
+    The fusion-negative ``"(none)"`` rows carry NaN gene names; ``.str.upper()``
+    keeps those NaN (so ``NaN == "X"`` is False) instead of ``.astype(str)``
+    turning them into the literal string ``"NAN"`` that a query could match.
+    """
+    return series.str.upper()
+
+
 def cancer_fusions(
     cancer_type=None, *, defining_only=False, pathognomonic_only=False, include_subtypes=False
 ):
@@ -81,9 +91,9 @@ def fusion_partners(gene, *, side=None):
     df = cancer_fusions_df()
     out = set()
     if side in (None, "5prime"):
-        out |= set(df.loc[df["gene_5prime"].astype(str).str.upper() == g, "gene_3prime"])
+        out |= set(df.loc[_upper(df["gene_5prime"]) == g, "gene_3prime"])
     if side in (None, "3prime"):
-        out |= set(df.loc[df["gene_3prime"].astype(str).str.upper() == g, "gene_5prime"])
+        out |= set(df.loc[_upper(df["gene_3prime"]) == g, "gene_5prime"])
     return {p for p in out if isinstance(p, str) and p.strip()}
 
 
@@ -104,8 +114,8 @@ def cancer_types_with_fusion(
     if len(given) != 1:
         raise ValueError("pass exactly one of fusion=, partner=, or partner_family=")
     df = cancer_fusions(defining_only=defining_only)
-    g5 = df["gene_5prime"].astype(str).str.upper()
-    g3 = df["gene_3prime"].astype(str).str.upper()
+    g5 = _upper(df["gene_5prime"])
+    g3 = _upper(df["gene_3prime"])
     if fusion is not None:
         parts = str(fusion).upper().replace("::", "-").split("-")
         if len(parts) != 2:
@@ -117,9 +127,10 @@ def cancer_types_with_fusion(
         mask = (g5 == p) | (g3 == p)
     else:
         fam = str(partner_family).strip().upper()
-        f5 = df["gene_5prime_family"].astype(str).str.upper()
-        f3 = df["gene_3prime_family"].astype(str).str.upper()
+        f5 = _upper(df["gene_5prime_family"])
+        f3 = _upper(df["gene_3prime_family"])
         mask = (f5 == fam) | (f3 == fam)
+    mask = mask.fillna(False)
     hits = df[mask]
     if as_rows:
         return hits.reset_index(drop=True)
@@ -132,7 +143,7 @@ def protein_family(gene):
     g = str(gene).strip().upper()
     df = cancer_fusions_df()
     for col, fam in (("gene_5prime", "gene_5prime_family"), ("gene_3prime", "gene_3prime_family")):
-        hit = df.loc[df[col].astype(str).str.upper() == g, fam]
+        hit = df.loc[_upper(df[col]) == g, fam]
         for v in hit:
             if isinstance(v, str) and v.strip():
                 return v
