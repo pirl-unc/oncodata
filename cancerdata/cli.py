@@ -97,6 +97,58 @@ def _cmd_prune(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_data(args: argparse.Namespace) -> int:
+    """Unified data management over the catalog (expression bundle + HPA sources)."""
+    from . import catalog
+
+    if args.action == "list":
+        for d in catalog.datasets():
+            print(f"{d.name:<46} {d.kind:<7} {d.description}")
+        return 0
+
+    if args.action == "status":
+        try:
+            rows = catalog.status(args.name)
+        except KeyError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        print(f"{'Dataset':<46} {'Kind':<7} {'Present':<8} {'Size':>10}  Description")
+        print("-" * 100)
+        for r in rows:
+            present = "yes" if r["present"] else "no"
+            size = _fmt_bytes(r["size_bytes"])
+            print(f"{r['name']:<46} {r['kind']:<7} {present:<8} {size:>10}  {r['description']}")
+        return 0
+
+    if args.action == "fetch":
+        try:
+            downloaded = catalog.fetch(args.name or "all", force=args.force)
+        except KeyError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        except Exception as e:  # network / extract failure
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        print(f"Downloaded: {', '.join(downloaded)}" if downloaded else "Already present.")
+        return 0
+
+    if args.action == "path":
+        if not args.name:
+            print("Error: 'data path' requires a dataset name", file=sys.stderr)
+            return 1
+        try:
+            print(catalog.ensure(args.name))
+        except KeyError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        except Exception as e:  # network / extract failure
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        return 0
+
+    return 1
+
+
 def _cmd_cancer_type(args: argparse.Namespace) -> int:
     try:
         info = cancer_types.cancer_type_info(args.query)
@@ -396,6 +448,21 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Which share to report (default: us_incidence_pct)",
     )
     p_burden.set_defaults(func=_cmd_burden)
+
+    p_data = sub.add_parser(
+        "data",
+        help="Unified data management over every managed dataset (expression bundle + HPA)",
+    )
+    p_data.add_argument(
+        "action",
+        choices=["list", "status", "fetch", "path"],
+        help="list (catalog), status (cache state), fetch (download), path (ensure + print)",
+    )
+    p_data.add_argument(
+        "name", nargs="?", default=None, help="Dataset name (omit for all on list/status/fetch)"
+    )
+    p_data.add_argument("--force", action="store_true", help="Re-download even if cached")
+    p_data.set_defaults(func=_cmd_data)
 
     p_sources = sub.add_parser(
         "sources", help="Manage HPA normal-tissue reference sources (RNA / IHC / single-cell)"

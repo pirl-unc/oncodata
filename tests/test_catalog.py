@@ -8,7 +8,7 @@
 
 import pytest
 
-from cancerdata import catalog, data_bundle, reference_data
+from cancerdata import catalog, cli, data_bundle, reference_data
 
 
 def test_datasets_span_both_backends():
@@ -108,3 +108,43 @@ def test_datasets_disjoint_backends():
     bundle = set(data_bundle.DOWNLOADABLE_PATHS)
     hpa = set(reference_data.REFERENCE_SOURCES)
     assert bundle.isdisjoint(hpa)
+
+
+# ---- unified `cancerdata data` CLI over the catalog ----
+
+
+def test_cli_data_list(capsys):
+    assert cli.main(["data", "list"]) == 0
+    out = capsys.readouterr().out
+    for d in catalog.datasets():
+        assert d.name in out
+
+
+def test_cli_data_status_absent(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path / "b" / "vX"))
+    monkeypatch.setenv("CANCERDATA_DATA_DIR", str(tmp_path / "ref"))
+    assert cli.main(["data", "status"]) == 0
+    out = capsys.readouterr().out
+    assert "Present" in out and "no" in out
+
+
+def test_cli_data_status_unknown_errors(capsys):
+    assert cli.main(["data", "status", "nope"]) == 1
+    assert "unknown dataset" in capsys.readouterr().err
+
+
+def test_cli_data_path_requires_name(capsys):
+    assert cli.main(["data", "path"]) == 1
+    assert "requires a dataset name" in capsys.readouterr().err
+
+
+def test_cli_data_fetch_reports(monkeypatch, capsys):
+    monkeypatch.setattr(catalog, "fetch", lambda name="all", *, force=False: ["hpa_normal_tissue"])
+    assert cli.main(["data", "fetch", "hpa_normal_tissue"]) == 0
+    assert "Downloaded: hpa_normal_tissue" in capsys.readouterr().out
+
+
+def test_cli_data_fetch_nothing(monkeypatch, capsys):
+    monkeypatch.setattr(catalog, "fetch", lambda name="all", *, force=False: [])
+    assert cli.main(["data", "fetch"]) == 0
+    assert "Already present." in capsys.readouterr().out
