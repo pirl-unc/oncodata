@@ -8,17 +8,34 @@ Curated cancer reference data — cancer-type ontology, tumor mutational burden
 and cancer-testis antigens — behind one small Python API, a data fetch/cache
 CLI, and a set of reference plots.
 
-`cancerdata` sits at the **bottom of the openvax/PIRL stack**: it depends only on
-pandas/numpy/pyarrow and is consumed by `pirlygenes` (gene-set curation and
-analysis) and `tsarina` (personalized target selection). The small curated
-tables ship in the wheel; the heavy per-cohort expression bundle downloads on
-first use from the matching GitHub Release.
+## cancerdata is the base layer
 
-Everything keys on the cancer-type registry: per-type facts (TMB, incidence,
-mortality, anti-PD-1 ORR), per-cohort expression (summary stats + percentiles +
-medoid samples), and the cancer-testis-antigen definition (HPA tissue-restriction
-over the candidate list) all live here, so the analyses/plots that combine them
-don't need a target-selection library.
+`cancerdata` is the **foundation of the openvax/PIRL dependency pyramid** — the
+single upstream **source of truth** for cancer reference data. It depends only on
+pandas / numpy / pyarrow / PyYAML, and it **never imports its consumers**: data
+and logic flow only downward. It does not mirror these definitions from anywhere;
+it owns them.
+
+Anything that needs to know about
+
+- **gene expression of cancer samples** — per-cohort RNA-seq in a normalized,
+  comparable space: summary stats, tail-weighted percentiles, and medoid/exemplar
+  samples per cancer type/subtype;
+- **HPA protein / RNA** normal-tissue expression;
+- the **definition of cancer-testis antigens** — the HPA tissue-restriction call
+  over the candidate list (HPA-only; no MS/peptide layer);
+- the **ontology of cancer types** — codes, the parent/child hierarchy, subtypes,
+  families, characteristic driver fusions, and the cross-cutting MSI/POLE/HPV
+  groupings; and
+- **anti-PD-1 response rates** and **TMB** per cancer type
+
+depends on `cancerdata` — including `pirlygenes` (gene-set curation/analysis),
+`tsarina` (personalized target selection), `hitlist` (panel selection),
+`trufflepig` (sample classification), and anything else downstream.
+
+Everything keys on the cancer-type registry. The small curated tables ship in the
+wheel; the heavy per-cohort expression bundle downloads on first use from
+cancerdata's own GitHub Release.
 
 ## Install
 
