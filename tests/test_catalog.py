@@ -148,3 +148,16 @@ def test_cli_data_fetch_nothing(monkeypatch, capsys):
     monkeypatch.setattr(catalog, "fetch", lambda name="all", *, force=False: [])
     assert cli.main(["data", "fetch"]) == 0
     assert "Already present." in capsys.readouterr().out
+
+
+def test_cli_help_never_crashes():
+    # argparse formats help strings as `%`-templates; an unescaped `%` (e.g. a
+    # literal "(%)") raises ValueError at --help time. Walk every parser.
+    import argparse
+
+    parser = cli._build_parser()
+    parser.format_help()  # top-level: covers every subcommand's help= string
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            for subparser in action.choices.values():
+                subparser.format_help()  # each subcommand's own argument help

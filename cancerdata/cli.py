@@ -390,7 +390,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_tmb.set_defaults(func=_cmd_tmb)
 
     p_apd1 = sub.add_parser(
-        "apd1", help="Anti-PD-1 monotherapy ORR (%) for a code, or the full map"
+        "apd1", help="Anti-PD-1 monotherapy ORR (%%) for a code, or the full map"
     )
     p_apd1.add_argument("code", nargs="?", default=None, help="Cancer code/alias (omit for all)")
     p_apd1.add_argument(
