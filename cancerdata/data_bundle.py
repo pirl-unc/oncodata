@@ -19,16 +19,19 @@ GitHub Release.
 
 Cache layout (version-pinned so upgrades trigger a re-fetch):
 
-  ~/.cache/pirlygenes/bundled_data/v<DATA_VERSION>/
+  ~/.cache/cancerdata/bundled_data/v<DATA_VERSION>/
     cancer-reference-expression/...
     cancer-reference-expression-percentiles/...
     pan-cancer-expression.csv
     hpa-cell-type-expression.csv
 
-The historical ``~/.cache/pirlygenes`` root and ``PIRLYGENES_BUNDLED_DATA`` env
-var are preserved (this data used to be fetched by pirlygenes) so existing caches
-are reused as-is; ``CANCERDATA_BUNDLED_DATA`` takes precedence when set. The
-bundle is still hosted on the pirlygenes releases until its ownership migrates.
+cancerdata now owns the bundle: new downloads land under ``~/.cache/cancerdata``
+and prefer the ``pirl-unc/cancerdata`` release. To avoid a forced re-download
+during the migration, an already-populated legacy ``~/.cache/pirlygenes`` cache
+for the current version is reused as-is, and the fetch falls back to the
+``pirl-unc/pirlygenes`` release if cancerdata hasn't published this version's
+tarball yet. The ``PIRLYGENES_BUNDLED_DATA`` env var is still honored;
+``CANCERDATA_BUNDLED_DATA`` takes precedence when set.
 
 Public API:
   cache_dir()      → version-pinned cache Path
@@ -47,23 +50,41 @@ import shutil
 import sys
 import tarfile
 import tempfile
+import urllib.error
 import urllib.request
 from pathlib import Path
 
 from .version import DATA_VERSION
 
-# The bundle is hosted on the pirlygenes releases for now (the data historically
-# lived there); ownership migrates to a cancerdata release in a later milestone.
-GITHUB_REPO = "pirl-unc/pirlygenes"
-TARBALL_FILENAME = f"pirlygenes-data-v{DATA_VERSION}.tar.gz"
-RELEASE_URL = (
-    f"https://github.com/{GITHUB_REPO}/releases/download/v{DATA_VERSION}/{TARBALL_FILENAME}"
-)
+
+def _release_url(repo: str, filename: str) -> str:
+    return f"https://github.com/{repo}/releases/download/v{DATA_VERSION}/{filename}"
+
+
+# cancerdata owns the bundle: its own release is tried first. The historical
+# pirlygenes release is kept as a fallback for one migration release so a version
+# whose cancerdata tarball isn't uploaded yet still fetches (a 404 from the
+# primary falls through to the fallback rather than hanging the user).
+GITHUB_REPO = "pirl-unc/cancerdata"
+TARBALL_FILENAME = f"cancerdata-data-v{DATA_VERSION}.tar.gz"
+RELEASE_URL = _release_url(GITHUB_REPO, TARBALL_FILENAME)
+
+FALLBACK_GITHUB_REPO = "pirl-unc/pirlygenes"
+FALLBACK_TARBALL_FILENAME = f"pirlygenes-data-v{DATA_VERSION}.tar.gz"
+FALLBACK_RELEASE_URL = _release_url(FALLBACK_GITHUB_REPO, FALLBACK_TARBALL_FILENAME)
+
+#: Release URLs tried in order until one downloads.
+RELEASE_URLS: tuple[str, ...] = (RELEASE_URL, FALLBACK_RELEASE_URL)
 
 #: Env var that overrides the cache (points at the version-pinned dir).
 CACHE_DIR_ENV_VAR = "CANCERDATA_BUNDLED_DATA"
 #: Back-compat env var honored when this package's own override is unset.
 LEGACY_CACHE_DIR_ENV_VAR = "PIRLYGENES_BUNDLED_DATA"
+
+#: Default cache parents. New downloads go under the cancerdata root; an existing
+#: pirlygenes cache for the current version is reused to avoid a re-download.
+_DEFAULT_CACHE_PARENT = Path.home() / ".cache" / "cancerdata" / "bundled_data"
+_LEGACY_CACHE_PARENT = Path.home() / ".cache" / "pirlygenes" / "bundled_data"
 
 # Names that live in the downloadable tarball (relative to the cache root) and
 # are NOT bundled in the wheel. load_dataset checks here after the wheel data dir.
@@ -81,12 +102,23 @@ def _cache_override() -> str | None:
 
 
 def cache_root() -> Path:
-    """Parent of all version-pinned cache dirs (``v<version>/`` lives inside)."""
+    """Parent of all version-pinned cache dirs (``v<version>/`` lives inside).
+
+    Defaults to the cancerdata cache root, but if *this* version was already
+    downloaded under the legacy pirlygenes root (and not yet under the new one),
+    that legacy root is returned so the migration doesn't force a re-download.
+    """
     override = _cache_override()
     if override:
         # Override points at the version-pinned dir; its parent is the root.
         return Path(override).expanduser().parent
-    return Path.home() / ".cache" / "pirlygenes" / "bundled_data"
+    version_dir = f"v{DATA_VERSION}"
+    if (
+        not (_DEFAULT_CACHE_PARENT / version_dir).exists()
+        and (_LEGACY_CACHE_PARENT / version_dir).exists()
+    ):
+        return _LEGACY_CACHE_PARENT
+    return _DEFAULT_CACHE_PARENT
 
 
 def cache_dir() -> Path:
@@ -109,26 +141,20 @@ def find(relative_path: str) -> Path | None:
     return candidate if candidate.exists() else None
 
 
-def fetch(*, verbose: bool = True) -> Path:
-    """Download + extract the bundle for this version into the cache.
+def _download_and_extract(url: str, root: Path, *, verbose: bool) -> None:
+    """Download a tarball from ``url`` and extract it into ``root``.
 
-    Always overwrites — safe to call to repair a corrupt cache. Returns the
-    cache directory.
+    Extraction goes into a staging dir first and is promoted into ``root`` only
+    after it completes, so a failed/corrupt download never leaves a half-populated
+    cache that a later run would read as valid. Raises ``urllib.error.URLError``
+    (unreachable, e.g. 404) or ``tarfile.TarError`` (corrupt/non-tar body) — the
+    caller falls back to the next source on either.
     """
-    root = cache_dir()
-    root.mkdir(parents=True, exist_ok=True)
-    if verbose:
-        sys.stderr.write(
-            f"cancerdata: downloading data bundle for v{DATA_VERSION} "
-            "(~350 MB, one-time)\n"
-            f"  from {RELEASE_URL}\n"
-            f"  to   {root}\n"
-        )
-        sys.stderr.flush()
     with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
         tmp_path = Path(tmp.name)
+    staging = Path(tempfile.mkdtemp(prefix=".staging-", dir=root))
     try:
-        with urllib.request.urlopen(RELEASE_URL) as resp, tmp_path.open("wb") as h:
+        with urllib.request.urlopen(url) as resp, tmp_path.open("wb") as h:
             shutil.copyfileobj(resp, h, length=1024 * 1024)
         if verbose:
             sys.stderr.write("cancerdata: extracting...\n")
@@ -136,15 +162,60 @@ def fetch(*, verbose: bool = True) -> Path:
         with tarfile.open(tmp_path) as tf:
             # filter=data is Python 3.12+; fall back to the older API.
             try:
-                tf.extractall(root, filter="data")
+                tf.extractall(staging, filter="data")
             except TypeError:
-                tf.extractall(root)
+                tf.extractall(staging)
+        # Promote staged entries into the cache, replacing any prior copy.
+        for entry in staging.iterdir():
+            dest = root / entry.name
+            if dest.is_dir():
+                shutil.rmtree(dest)
+            elif dest.exists():
+                dest.unlink()
+            shutil.move(str(entry), str(dest))
     finally:
         tmp_path.unlink(missing_ok=True)
-    if verbose:
-        sys.stderr.write(f"cancerdata: data bundle ready at {root}\n")
-        sys.stderr.flush()
-    return root
+        shutil.rmtree(staging, ignore_errors=True)
+
+
+def fetch(*, verbose: bool = True) -> Path:
+    """Download + extract the bundle for this version into the cache.
+
+    Tries each URL in :data:`RELEASE_URLS` (cancerdata first, pirlygenes fallback)
+    until one succeeds, so a version not yet published on the cancerdata release
+    transparently falls back. Always overwrites — safe to call to repair a corrupt
+    cache. Returns the cache directory.
+    """
+    root = cache_dir()
+    root.mkdir(parents=True, exist_ok=True)
+    errors: list[str] = []
+    for url in RELEASE_URLS:
+        if verbose:
+            sys.stderr.write(
+                f"cancerdata: downloading data bundle for v{DATA_VERSION} "
+                "(~350 MB, one-time)\n"
+                f"  from {url}\n"
+                f"  to   {root}\n"
+            )
+            sys.stderr.flush()
+        try:
+            _download_and_extract(url, root, verbose=verbose)
+        except (urllib.error.URLError, tarfile.TarError) as e:
+            # URLError covers HTTPError (404); TarError covers a corrupt body or
+            # an HTML error page served with 200 — fall back to the next source.
+            errors.append(f"{url}: {e}")
+            if verbose:
+                sys.stderr.write(f"cancerdata: {url} unavailable ({e}); trying next source\n")
+                sys.stderr.flush()
+            continue
+        if verbose:
+            sys.stderr.write(f"cancerdata: data bundle ready at {root}\n")
+            sys.stderr.flush()
+        return root
+    raise RuntimeError(
+        "cancerdata: could not download the data bundle from any release source:\n  "
+        + "\n  ".join(errors)
+    )
 
 
 def ensure_local(*, auto_fetch: bool = True, verbose: bool = True) -> Path:
@@ -188,6 +259,7 @@ def status() -> dict:
         "data_version": DATA_VERSION,
         "cache_dir": str(root),
         "release_url": RELEASE_URL,
+        "release_urls": list(RELEASE_URLS),
         "items": items,
         "all_local": is_local(),
     }
@@ -273,8 +345,12 @@ def prune_cache(*, keep_current: bool = True, dry_run: bool = False) -> list[dic
 
 __all__ = [
     "DOWNLOADABLE_PATHS",
+    "FALLBACK_GITHUB_REPO",
+    "FALLBACK_RELEASE_URL",
+    "FALLBACK_TARBALL_FILENAME",
     "GITHUB_REPO",
     "RELEASE_URL",
+    "RELEASE_URLS",
     "TARBALL_FILENAME",
     "cache_dir",
     "cache_root",

@@ -74,6 +74,8 @@ def _cmd_status(args: argparse.Namespace) -> int:
     print(f"Data version: {snap['data_version']}")
     print(f"Cache dir:    {snap['cache_dir']}")
     print(f"Release URL:  {snap['release_url']}")
+    for fallback in snap.get("release_urls", [])[1:]:
+        print(f"  fallback:   {fallback}")
     print(f"All local:    {'yes' if snap['all_local'] else 'no'}")
     print("-" * 60)
     for name, item in snap["items"].items():
