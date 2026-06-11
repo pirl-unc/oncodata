@@ -575,6 +575,79 @@ def cancer_subtype_group(group_code, *, under=None):
     return members
 
 
+def _children_map():
+    """``{parent_code: [child codes in registry order]}``."""
+    df = cancer_type_registry()
+    out: dict[str, list[str]] = {}
+    for code, parent in zip(df["code"], df["parent_code"]):
+        if isinstance(parent, str) and parent:
+            out.setdefault(parent, []).append(str(code))
+    return out
+
+
+def cancer_type_ancestors(cancer_type):
+    """Codes on the parent chain above ``cancer_type``, nearest parent first.
+
+    ``cancer_type_ancestors("COAD_MSI")`` -> ``["COAD", "CRC"]``. Empty for a
+    top-level code. Accepts any alias/display name.
+    """
+    code = resolve_cancer_type(cancer_type, strict=False) or cancer_type
+    return _walk_ancestors(code, _parent_of_map())
+
+
+def cancer_type_descendants(cancer_type, *, include_self=False):
+    """Every registry code transitively beneath ``cancer_type`` (depth-first,
+    registry order).
+
+    ``cancer_type_descendants("CRC")`` -> ``["COAD", "COAD_MSI", "COAD_MSS",
+    "READ", "READ_MSI", "READ_MSS"]`` — the whole subtree, so you can roll a parent
+    down to its leaves. ``include_self`` prepends the node itself.
+    """
+    code = resolve_cancer_type(cancer_type, strict=False) or cancer_type
+    children = _children_map()
+    out: list[str] = []
+    seen: set[str] = set()
+
+    def _visit(node):
+        for child in children.get(node, []):
+            if child in seen:  # defensive against a malformed cycle
+                continue
+            seen.add(child)
+            out.append(child)
+            _visit(child)
+
+    _visit(code)
+    return [code, *out] if include_self else out
+
+
+def cancer_type_lineage(cancer_type):
+    """Path from the root down to ``cancer_type`` (root first), e.g.
+    ``cancer_type_lineage("COAD_MSI")`` -> ``["CRC", "COAD", "COAD_MSI"]``."""
+    code = resolve_cancer_type(cancer_type, strict=False) or cancer_type
+    return [*reversed(cancer_type_ancestors(code)), code]
+
+
+def cancer_type_tree(root=None):
+    """The hierarchy as nested ``{code: {child: {...}}}`` dicts.
+
+    ``root=None`` returns the whole forest (every code with no parent at the top
+    level); pass a code to get just that subtree. Leaves map to ``{}``.
+    """
+    children = _children_map()
+
+    def _subtree(node):
+        return {child: _subtree(child) for child in children.get(node, [])}
+
+    if root is not None:
+        code = resolve_cancer_type(root, strict=False) or root
+        return {code: _subtree(code)}
+    df = cancer_type_registry()
+    roots = [
+        str(c) for c, p in zip(df["code"], df["parent_code"]) if not (isinstance(p, str) and p)
+    ]
+    return {r: _subtree(r) for r in roots}
+
+
 def mixture_cohort_codes():
     """Return parent codes flagged as mixture cohorts in the registry.
 
