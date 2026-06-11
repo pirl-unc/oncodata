@@ -23,6 +23,9 @@ _CONSUMERS = {"pirlygenes", "tsarina", "hitlist", "trufflepig"}
 
 
 def _imported_top_level_modules(path):
+    # Static (AST) scan of `import`/`from ... import` statements. A dynamic import
+    # (importlib.import_module("pirlygenes"), __import__(...)) would evade this —
+    # acceptable for a guard, since a static import is the realistic regression.
     tree = ast.parse(path.read_text(), filename=str(path))
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
