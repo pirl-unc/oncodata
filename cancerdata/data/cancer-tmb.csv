@@ -107,6 +107,17 @@ MBL_G3,0.5,,Northcott 2017,PMID:28726821,low,MB Group 3; baseline low TMB.
 MBL_G4,0.5,,Northcott 2017,PMID:28726821,low,MB Group 4; lowest mutation rate of the four.
 LUAD_EGFR,3.5,,Wang 2021,PMID:33846346,medium,Never-smoker; LOWER TMB than parent LUAD (8.1).
 HCL,0.2,1,Tiacci 2011,PMID:22072557,low,"Hairy cell leukemia; BRAF V600E-driven, genomically near-silent (~5 somatic mutations, WES n=1)."
-ACINIC,,,,,none,Acinic cell carcinoma (salivary); low TMB; no published per-Mb median.
+ACINIC,2.6,,Salivary gland CGP,PMID:28961851,low,Acinic cell carcinoma (salivary); low TMB; no published per-Mb median.
 ALCL,,,,,none,Anaplastic large cell lymphoma; ALK+ has the lowest lymphoma mutation burden; no published per-Mb median.
 URETH,,,,,none,Urethral carcinoma; rare; no published per-Mb median.
+UCEC_POLE,100,,TCGA endometrial (Kandoth 2013),PMID:23636398,low,POLE-ultramutated; median TMB very high (>100 mut/Mb) - order-of-magnitude estimate
+UCEC_MSI,18,,TCGA endometrial (Kandoth 2013),PMID:23636398,low,MSI-H hypermutated; elevated TMB estimate
+UCEC_CNL,2.5,,TCGA endometrial (Kandoth 2013),PMID:23636398,low,copy-number-low endometrioid; low TMB
+UCEC_CNH,2.8,,TCGA endometrial (Kandoth 2013),PMID:23636398,low,copy-number-high serous-like; low TMB
+COAD_MSI,46,,Chalmers 2017,PMID:28420421,medium,MSI-H/dMMR hypermutated colon; median much greater than 20/Mb (TCGA >12); MSS bulk COAD is 3.1
+READ_MSI,46,,Chalmers 2017,PMID:28420421,medium,MSI-H/dMMR hypermutated rectal; identical dMMR biology to COAD_MSI
+CRC,4.5,6004,Fabrizio 2018,PMID:30151257,high,Colorectal all-comers pooled median; MSS ~3.5 and MSI-H ~46 (Chalmers); umbrella value for CRC pooling
+MENINGIOMA,0.5,,Anaplastic meningioma WGS,DOI:10.1038/s41598-018-31659-0,low,Among the lowest-TMB tumors; grade I dominant ~0.5; atypical/anaplastic rise to ~2
+CHOROID_PLEXUS,0.5,,Choroid plexus tumor landscape,PMID:33249490,low,Very low (median ~20 coding mutations/tumor); hypermutant Li-Fraumeni/RRD subset is the exception
+ATC,3.8,141,ATC genomic landscape,DOI:10.1016/j.celrep.2024.113826,medium,Anaplastic thyroid; higher than differentiated (~0.4) but below TMB-high; dedifferentiated drivers
+THYMCA,0.7,,Chalmers 2017,PMID:28420421,low,Thymic carcinoma; very low like thymoma (mean ~0.72 mut/Mb in TET series); TMB-high in only ~7%

@@ -10,3 +10,4 @@ HPV_POS,viral_hpv,CESC,HPV-driven cervical (entity is HPV-defining)
 HPV_NEG,viral_hpv,HNSC_HPVneg,HPV-negative head and neck
 MYCN_AMP,copy_number_mycn,NBL_MYCNamp,MYCN-amplified neuroblastoma
 MYCN_NONAMP,copy_number_mycn,NBL_MYCNnonamp,MYCN-non-amplified neuroblastoma
+HPV_NEG,viral_hpv,CESC_HPVneg,HPV-negative cervical (gastric-type/clear-cell)
