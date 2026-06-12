@@ -28,6 +28,7 @@ tissue-restriction definition and protein-level / single-cell comparisons.
 
 from __future__ import annotations
 
+import contextlib
 from functools import lru_cache
 
 import pandas as pd
@@ -35,22 +36,38 @@ import pandas as pd
 from . import reference_data
 
 
+def _read_hpa(name: str) -> pd.DataFrame:
+    """Load an HPA table, caching a columnar **parquet** copy next to the raw TSV
+    so repeated/cold reads are fast and compact (HPA TSVs are large — single-cell
+    is tens of MB; parquet is a few-fold smaller and skips re-parsing). The parquet
+    cache is best-effort and regenerated if the TSV is re-downloaded."""
+    tsv = reference_data.ensure(name)
+    parquet = tsv.with_suffix(".parquet")
+    if parquet.exists() and parquet.stat().st_mtime >= tsv.stat().st_mtime:
+        return pd.read_parquet(parquet)
+    df = pd.read_csv(tsv, sep="\t")
+    # parquet cache is an optimization, not required — never fail a read over it.
+    with contextlib.suppress(Exception):
+        df.to_parquet(parquet, index=False)
+    return df
+
+
 @lru_cache(maxsize=1)
 def hpa_rna_consensus() -> pd.DataFrame:
     """HPA RNA consensus per-tissue nTPM (downloads HPA v23 on first use)."""
-    return pd.read_csv(reference_data.ensure("hpa_rna_consensus"), sep="\t")
+    return _read_hpa("hpa_rna_consensus")
 
 
 @lru_cache(maxsize=1)
 def hpa_normal_tissue() -> pd.DataFrame:
     """HPA IHC protein detection per tissue/cell type (downloads on first use)."""
-    return pd.read_csv(reference_data.ensure("hpa_normal_tissue"), sep="\t")
+    return _read_hpa("hpa_normal_tissue")
 
 
 @lru_cache(maxsize=1)
 def hpa_single_cell() -> pd.DataFrame:
     """HPA single-cell-type RNA nTPM (downloads on first use)."""
-    return pd.read_csv(reference_data.ensure("hpa_single_cell"), sep="\t")
+    return _read_hpa("hpa_single_cell")
 
 
 def _strip_version(gene_id: str) -> str:
