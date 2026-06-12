@@ -48,6 +48,28 @@ def test_status_reports_missing_without_download(monkeypatch, tmp_path):
     assert all(not v["present"] for v in snap["items"].values())
 
 
+def test_is_local_requires_nonempty_dirs(monkeypatch, tmp_path):
+    # #21: an interrupted extract that created the shard directories but no
+    # shards must NOT read as "local" (else ensure_local never re-fetches).
+    root = tmp_path / f"v{DATA_VERSION}"
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(root))
+    # Create every downloadable path but leave the directories empty.
+    for p in data_bundle.DOWNLOADABLE_PATHS:
+        target = root / p
+        if target.suffix:  # a file entry
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("x")
+        else:  # a directory entry — created but empty
+            target.mkdir(parents=True, exist_ok=True)
+    assert data_bundle.is_local() is False
+    # Now drop a shard into each directory entry -> complete.
+    for p in data_bundle.DOWNLOADABLE_PATHS:
+        target = root / p
+        if not target.suffix:
+            (target / "shard.parquet").write_text("data")
+    assert data_bundle.is_local() is True
+
+
 def test_prune_keeps_current(monkeypatch, tmp_path):
     root = tmp_path / "bundled_data"
     (root / "v1.0.0").mkdir(parents=True)

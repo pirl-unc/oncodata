@@ -124,6 +124,26 @@ def _manifest_path() -> Path:
     return cache_dir() / "manifest.json"
 
 
+def _manifest_key(name: str, version: str) -> str:
+    """Manifest record key. Keyed by ``(name, version)`` so each cached version of
+    a multi-version source (e.g. ``hpa_rna_consensus`` v23 + latest) keeps its own
+    size/sha256 record — a single per-name record would only validate whichever
+    version was downloaded last."""
+    return f"{name}@{version}"
+
+
+def _manifest_record(name: str, version: str) -> dict:
+    """The manifest record for ``(name, version)``. Falls back to a legacy
+    per-name record (pre-versioned-key manifests) so an existing cache keeps its
+    provenance until the next download rewrites it in the new layout."""
+    manifest = _read_manifest()
+    record = manifest.get(_manifest_key(name, version))
+    if record is not None:
+        return record
+    legacy = manifest.get(name) or {}
+    return legacy if legacy.get("version") == version else {}
+
+
 def _read_manifest() -> dict:
     path = _manifest_path()
     if not path.exists():
@@ -140,19 +160,39 @@ def _write_manifest(manifest: dict) -> None:
         _manifest_path().write_text(json.dumps(manifest, indent=2, sort_keys=True))
 
 
+def _cached_file_ok(name: str, version: str, dest: Path) -> bool:
+    """Cheap reuse check: trust an existing cached file only if its size matches
+    the size recorded in the manifest for this ``(name, version)`` (when one
+    exists). Catches a TSV left truncated by a process killed mid-extract — a
+    partial write that the old ``exists()``-only reuse would have served forever
+    (issue #21). A file with no manifest record is trusted (can't disprove;
+    preserves back-compat). The full content hash is checked only on explicit
+    :func:`verify` to avoid re-hashing a large TSV on every access."""
+    expected = _manifest_record(name, version).get("bytes")
+    if expected is None:
+        return True
+    try:
+        return dest.stat().st_size == int(expected)
+    except OSError:
+        return False
+
+
 def download(name: str, version: str | None = None, *, force: bool = False) -> Path:
     """Download *name*/*version* into the cache (extracting the ``.zip``) and
-    record it in the manifest. A cached copy is reused unless ``force=True``."""
+    record it in the manifest. A cached copy is reused unless ``force=True`` —
+    or it fails the manifest size check (a truncated/partial cache), in which
+    case it is re-fetched."""
     version = resolve_version(name, version)
     spec = _source(name)
     dest = local_path(name, version)
     url = spec["urls"][version]
 
-    if dest.exists() and not force:
+    if dest.exists() and not force and _cached_file_ok(name, version, dest):
         return dest
 
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp_zip = dest.parent / (spec["filename"] + ".zip.part")
+    tmp_tsv = dest.parent / (spec["filename"] + ".part")
     try:
         sys.stderr.write(f"cancerdata: downloading {name} ({url})\n")
         sys.stderr.flush()
@@ -160,16 +200,20 @@ def download(name: str, version: str | None = None, *, force: bool = False) -> P
             shutil.copyfileobj(resp, h, length=1024 * 1024)
         with zipfile.ZipFile(tmp_zip) as zf:
             member = _zip_member(zf, spec["filename"])
-            with zf.open(member) as src, dest.open("wb") as out:
+            with zf.open(member) as src, tmp_tsv.open("wb") as out:
                 shutil.copyfileobj(src, out, length=1024 * 1024)
+        # Atomic promote: a process killed mid-extract leaves tmp_tsv, never a
+        # partial dest. A prior good copy survives a failed re-download untouched.
+        os.replace(tmp_tsv, dest)
     except Exception as e:  # network / zip / IO — surface uniformly
-        dest.unlink(missing_ok=True)
         raise ReferenceDataError(f"failed to download {name} ({url}): {e}") from e
     finally:
         tmp_zip.unlink(missing_ok=True)
+        tmp_tsv.unlink(missing_ok=True)
 
     manifest = _read_manifest()
-    manifest[name] = {
+    manifest[_manifest_key(name, version)] = {
+        "name": name,
         "version": version,
         "url": url,
         "path": str(dest),
@@ -179,6 +223,26 @@ def download(name: str, version: str | None = None, *, force: bool = False) -> P
     }
     _write_manifest(manifest)
     return dest
+
+
+def verify(name: str, version: str | None = None) -> bool:
+    """Full-content integrity check of a cached source against the manifest sha256.
+
+    Returns ``True`` when the cached file's sha256 matches what the manifest
+    recorded at download time, ``False`` on mismatch or when the file is missing.
+    Raises if there is no manifest record to check against (nothing to verify).
+    Unlike the cheap size check on reuse, this re-hashes the file — call it
+    deliberately (a cache audit), not on every access."""
+    version = resolve_version(name, version)
+    dest = local_path(name, version)
+    expected = _manifest_record(name, version).get("sha256")
+    if not expected:
+        raise ReferenceDataError(
+            f"no manifest sha256 recorded for {name!r} {version}; nothing to verify"
+        )
+    if not dest.exists():
+        return False
+    return hashlib.sha256(dest.read_bytes()).hexdigest() == expected
 
 
 def _zip_member(zf: zipfile.ZipFile, preferred: str) -> str:
@@ -193,18 +257,21 @@ def _zip_member(zf: zipfile.ZipFile, preferred: str) -> str:
 
 
 def ensure(name: str, version: str | None = None) -> Path:
-    """Return a local path to *name*/*version*, downloading if absent."""
+    """Return a local path to *name*/*version*, downloading if absent or if the
+    cached copy fails the manifest size check (a truncated/partial file)."""
+    version = resolve_version(name, version)
     path = local_path(name, version)
-    return path if path.exists() else download(name, version)
+    if path.exists() and _cached_file_ok(name, version, path):
+        return path
+    return download(name, version)
 
 
 def status() -> list[dict]:
     """One row per source: cached?, version, size, description."""
-    manifest = _read_manifest()
     rows = []
     for name, spec in REFERENCE_SOURCES.items():
         path = local_path(name)
-        record = manifest.get(name) or {}
+        record = _manifest_record(name, DEFAULT_HPA_VERSION)
         rows.append(
             {
                 "name": name,
