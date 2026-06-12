@@ -1,0 +1,69 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+"""Completeness guard: the manifest must classify every pirlygenes dataset (#35)."""
+
+from pathlib import Path
+
+from cancerdata import data_bundle, data_manifest, reference_data
+
+_DATA_DIR = Path(__file__).resolve().parents[1] / "cancerdata" / "data"
+
+_BUCKETS = {
+    "WHEEL": set(data_manifest.WHEEL),
+    "BUNDLE": set(data_manifest.BUNDLE),
+    "PLANNED": set(data_manifest.PLANNED),
+    "SUPERSEDED": set(data_manifest.SUPERSEDED),
+    "OUT_OF_SCOPE": set(data_manifest.OUT_OF_SCOPE),
+}
+
+
+def test_every_pirlygenes_dataset_is_classified():
+    # Each of the 77 frozen pirlygenes assets must fall in exactly one bucket —
+    # so nothing pirlygenes ships is silently dropped or left unclassified.
+    classified = set().union(*_BUCKETS.values())
+    unclassified = data_manifest.PIRLYGENES_DATA - classified
+    assert not unclassified, f"unclassified pirlygenes datasets: {sorted(unclassified)}"
+
+
+def test_buckets_are_disjoint():
+    names = list(_BUCKETS)
+    for i, a in enumerate(names):
+        for b in names[i + 1 :]:
+            overlap = _BUCKETS[a] & _BUCKETS[b]
+            assert not overlap, f"{a} & {b} overlap: {sorted(overlap)}"
+
+
+def test_classification_only_covers_known_pirlygenes_data():
+    # A bucket entry that isn't a real pirlygenes asset is a typo/stale classification
+    # (HPA + SOURCE are runtime/derived, not pirlygenes files, so excluded).
+    classified = set().union(*_BUCKETS.values())
+    stray = classified - data_manifest.PIRLYGENES_DATA
+    assert not stray, f"classified names not in the pirlygenes snapshot: {sorted(stray)}"
+
+
+def _wheel_file_exists(name: str) -> bool:
+    return any((_DATA_DIR / f"{name}{ext}").exists() for ext in (".csv", ".csv.gz", ".yaml"))
+
+
+def test_wheel_tables_actually_ship():
+    missing = [n for n in data_manifest.WHEEL if not _wheel_file_exists(n)]
+    assert not missing, f"WHEEL tables not present in the wheel: {missing}"
+
+
+def test_planned_tables_not_yet_present():
+    # PLANNED = still to port; if one is already in data/, move it to WHEEL.
+    present = [n for n in data_manifest.PLANNED if _wheel_file_exists(n)]
+    assert not present, f"PLANNED tables already shipped — promote to WHEEL: {present}"
+
+
+def test_bundle_matches_downloadable_paths():
+    bundle_stems = {p.removesuffix(".csv") for p in data_bundle.DOWNLOADABLE_PATHS}
+    assert bundle_stems == set(data_manifest.BUNDLE)
+
+
+def test_hpa_matches_reference_sources():
+    assert set(data_manifest.HPA) == set(reference_data.REFERENCE_SOURCES)
