@@ -134,7 +134,10 @@ def proteoform_for_gene(gene: str) -> str | None:
     symbol (case-insensitive). ``None`` if the gene isn't in any group."""
     key = str(gene).split(".")[0]
     mapping = _member_to_label()
-    return mapping.get(key) or mapping.get(str(gene).upper())
+    label = mapping.get(key)
+    if label is None:
+        label = mapping.get(str(gene).upper())
+    return label
 
 
 def gene_to_proteoform() -> dict[str, str]:

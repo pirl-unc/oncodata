@@ -47,3 +47,16 @@ def test_burden_category_override_table():
 
 def test_burden_category_unknown_returns_none():
     assert incidence.burden_category("not_a_real_cancer") is None
+
+
+def test_every_registry_code_resolves_to_a_burden_category():
+    # Drift guard: the primary_tissue/family -> burden maps in incidence.py must
+    # cover the registry's vocabulary. A new registry primary_tissue/family that
+    # nothing maps would silently yield None here.
+    from cancerdata.cancer_types import cancer_type_registry
+
+    registry = cancer_type_registry()
+    unmapped = [
+        code for code in registry["code"].astype(str) if incidence.burden_category(code) is None
+    ]
+    assert not unmapped, f"registry codes with no burden category: {unmapped}"
