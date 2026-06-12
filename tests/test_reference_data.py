@@ -12,22 +12,24 @@ import pytest
 from cancerdata import reference_data
 
 
-def _seed_cache(name, content: bytes):
-    """Write a cached TSV + a manifest recording its true size/sha256."""
-    dest = reference_data.local_path(name)
+def _seed_cache(name, content: bytes, version="v23"):
+    """Write a cached TSV + a manifest recording its true size/sha256, merging
+    into any existing manifest (so multiple versions can be seeded)."""
+    dest = reference_data.local_path(name, version)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(content)
-    manifest = {
-        name: {
-            "version": "v23",
-            "url": "http://example/test",
-            "path": str(dest),
-            "bytes": len(content),
-            "sha256": hashlib.sha256(content).hexdigest(),
-            "downloaded_at": "2024-01-01T00:00:00+00:00",
-        }
+    manifest_path = reference_data.cache_dir() / "manifest.json"
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    manifest[reference_data._manifest_key(name, version)] = {
+        "name": name,
+        "version": version,
+        "url": "http://example/test",
+        "path": str(dest),
+        "bytes": len(content),
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "downloaded_at": "2024-01-01T00:00:00+00:00",
     }
-    (reference_data.cache_dir() / "manifest.json").write_text(json.dumps(manifest))
+    manifest_path.write_text(json.dumps(manifest))
     return dest
 
 
@@ -75,9 +77,9 @@ def test_cached_file_ok_detects_truncation(monkeypatch, tmp_path):
     # #21: a TSV left truncated by a killed extract must NOT be served as valid.
     monkeypatch.setenv("CANCERDATA_DATA_DIR", str(tmp_path))
     dest = _seed_cache("hpa_rna_consensus", b"Gene\tTissue\tnTPM\n" * 100)
-    assert reference_data._cached_file_ok("hpa_rna_consensus", dest) is True
+    assert reference_data._cached_file_ok("hpa_rna_consensus", "v23", dest) is True
     dest.write_bytes(b"Gene\tTissue\n")  # truncated -> size no longer matches manifest
-    assert reference_data._cached_file_ok("hpa_rna_consensus", dest) is False
+    assert reference_data._cached_file_ok("hpa_rna_consensus", "v23", dest) is False
 
 
 def test_cached_file_ok_trusts_unrecorded(monkeypatch, tmp_path):
@@ -86,7 +88,32 @@ def test_cached_file_ok_trusts_unrecorded(monkeypatch, tmp_path):
     dest = reference_data.local_path("hpa_rna_consensus")
     dest.parent.mkdir(parents=True)
     dest.write_text("Gene\tTissue\tnTPM\n")
-    assert reference_data._cached_file_ok("hpa_rna_consensus", dest) is True
+    assert reference_data._cached_file_ok("hpa_rna_consensus", "v23", dest) is True
+
+
+def test_cached_file_ok_is_per_version(monkeypatch, tmp_path):
+    # Each cached version keeps its own size record: truncating v23 must be
+    # detected even after a (good) 'latest' was the last thing downloaded.
+    monkeypatch.setenv("CANCERDATA_DATA_DIR", str(tmp_path))
+    v23 = _seed_cache("hpa_rna_consensus", b"v23-data" * 50, version="v23")
+    latest = _seed_cache("hpa_rna_consensus", b"latest-data" * 80, version="latest")
+    assert reference_data._cached_file_ok("hpa_rna_consensus", "v23", v23) is True
+    assert reference_data._cached_file_ok("hpa_rna_consensus", "latest", latest) is True
+    v23.write_bytes(b"trunc")  # corrupt only v23
+    assert reference_data._cached_file_ok("hpa_rna_consensus", "v23", v23) is False
+    # 'latest' is unaffected — its own record still matches.
+    assert reference_data._cached_file_ok("hpa_rna_consensus", "latest", latest) is True
+
+
+def test_verify_is_per_version(monkeypatch, tmp_path):
+    monkeypatch.setenv("CANCERDATA_DATA_DIR", str(tmp_path))
+    _seed_cache("hpa_rna_consensus", b"v23-data" * 50, version="v23")
+    latest = _seed_cache("hpa_rna_consensus", b"latest-data" * 80, version="latest")
+    assert reference_data.verify("hpa_rna_consensus", "v23") is True
+    assert reference_data.verify("hpa_rna_consensus", "latest") is True
+    latest.write_bytes(b"corrupted")
+    assert reference_data.verify("hpa_rna_consensus", "latest") is False
+    assert reference_data.verify("hpa_rna_consensus", "v23") is True  # unaffected
 
 
 def test_ensure_refetches_corrupt_cache(monkeypatch, tmp_path):

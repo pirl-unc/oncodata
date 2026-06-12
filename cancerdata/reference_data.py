@@ -124,6 +124,26 @@ def _manifest_path() -> Path:
     return cache_dir() / "manifest.json"
 
 
+def _manifest_key(name: str, version: str) -> str:
+    """Manifest record key. Keyed by ``(name, version)`` so each cached version of
+    a multi-version source (e.g. ``hpa_rna_consensus`` v23 + latest) keeps its own
+    size/sha256 record — a single per-name record would only validate whichever
+    version was downloaded last."""
+    return f"{name}@{version}"
+
+
+def _manifest_record(name: str, version: str) -> dict:
+    """The manifest record for ``(name, version)``. Falls back to a legacy
+    per-name record (pre-versioned-key manifests) so an existing cache keeps its
+    provenance until the next download rewrites it in the new layout."""
+    manifest = _read_manifest()
+    record = manifest.get(_manifest_key(name, version))
+    if record is not None:
+        return record
+    legacy = manifest.get(name) or {}
+    return legacy if legacy.get("version") == version else {}
+
+
 def _read_manifest() -> dict:
     path = _manifest_path()
     if not path.exists():
@@ -140,17 +160,16 @@ def _write_manifest(manifest: dict) -> None:
         _manifest_path().write_text(json.dumps(manifest, indent=2, sort_keys=True))
 
 
-def _cached_file_ok(name: str, dest: Path) -> bool:
+def _cached_file_ok(name: str, version: str, dest: Path) -> bool:
     """Cheap reuse check: trust an existing cached file only if its size matches
-    the size recorded in the manifest (when one exists). Catches a TSV left
-    truncated by a process killed mid-extract — a partial write that the old
-    ``exists()``-only reuse would have served forever (issue #21). A file with no
-    manifest record is trusted (can't disprove; preserves back-compat). The full
-    content hash is checked only on explicit :func:`verify` to avoid re-hashing a
-    large TSV on every access."""
-    record = _read_manifest().get(name) or {}
-    expected = record.get("bytes")
-    if expected is None or str(record.get("path")) != str(dest):
+    the size recorded in the manifest for this ``(name, version)`` (when one
+    exists). Catches a TSV left truncated by a process killed mid-extract — a
+    partial write that the old ``exists()``-only reuse would have served forever
+    (issue #21). A file with no manifest record is trusted (can't disprove;
+    preserves back-compat). The full content hash is checked only on explicit
+    :func:`verify` to avoid re-hashing a large TSV on every access."""
+    expected = _manifest_record(name, version).get("bytes")
+    if expected is None:
         return True
     try:
         return dest.stat().st_size == int(expected)
@@ -168,7 +187,7 @@ def download(name: str, version: str | None = None, *, force: bool = False) -> P
     dest = local_path(name, version)
     url = spec["urls"][version]
 
-    if dest.exists() and not force and _cached_file_ok(name, dest):
+    if dest.exists() and not force and _cached_file_ok(name, version, dest):
         return dest
 
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -193,7 +212,8 @@ def download(name: str, version: str | None = None, *, force: bool = False) -> P
         tmp_tsv.unlink(missing_ok=True)
 
     manifest = _read_manifest()
-    manifest[name] = {
+    manifest[_manifest_key(name, version)] = {
+        "name": name,
         "version": version,
         "url": url,
         "path": str(dest),
@@ -215,10 +235,11 @@ def verify(name: str, version: str | None = None) -> bool:
     deliberately (a cache audit), not on every access."""
     version = resolve_version(name, version)
     dest = local_path(name, version)
-    record = _read_manifest().get(name) or {}
-    expected = record.get("sha256")
+    expected = _manifest_record(name, version).get("sha256")
     if not expected:
-        raise ReferenceDataError(f"no manifest sha256 recorded for {name!r}; nothing to verify")
+        raise ReferenceDataError(
+            f"no manifest sha256 recorded for {name!r} {version}; nothing to verify"
+        )
     if not dest.exists():
         return False
     return hashlib.sha256(dest.read_bytes()).hexdigest() == expected
@@ -238,19 +259,19 @@ def _zip_member(zf: zipfile.ZipFile, preferred: str) -> str:
 def ensure(name: str, version: str | None = None) -> Path:
     """Return a local path to *name*/*version*, downloading if absent or if the
     cached copy fails the manifest size check (a truncated/partial file)."""
+    version = resolve_version(name, version)
     path = local_path(name, version)
-    if path.exists() and _cached_file_ok(name, path):
+    if path.exists() and _cached_file_ok(name, version, path):
         return path
     return download(name, version)
 
 
 def status() -> list[dict]:
     """One row per source: cached?, version, size, description."""
-    manifest = _read_manifest()
     rows = []
     for name, spec in REFERENCE_SOURCES.items():
         path = local_path(name)
-        record = manifest.get(name) or {}
+        record = _manifest_record(name, DEFAULT_HPA_VERSION)
         rows.append(
             {
                 "name": name,
