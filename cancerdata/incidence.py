@@ -15,6 +15,8 @@ resolution of a cancer type to its anatomic burden category."""
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from .cancer_types import cancer_type_registry, resolve_cancer_type
 from .load_dataset import get_data
 
@@ -69,96 +71,29 @@ def cancer_burden(category=None, *, metric="us_incidence_pct"):
 # true exceptions the ontology can't express.
 
 # Sarcoma family -> bone_and_joint when its primary_tissue is skeletal, else
-# soft_tissue_sarcoma.
+# soft_tissue_sarcoma. This (and heme-plasma -> myeloma) is a genuine family
+# *override*: the histology decides the burden category even when the anatomic
+# site would map elsewhere (e.g. DSRCT in peritoneum, DFSP in skin, endometrial
+# stromal sarcoma) — so it is kept in code, not data. The bulk lookups
+# (primary_tissue -> category, family -> category fallback) live in data files.
 _BONE_SARCOMA_TISSUES = {"bone", "cartilage", "notochord"}
 
-# Registry primary_tissue -> burden category. Covers every non-heme tissue in
-# the registry; heme tissues are routed by :data:`_HEME_TISSUE_BURDEN` below.
-_PRIMARY_TISSUE_BURDEN = {
-    "lung": "lung",
-    "breast": "breast",
-    "prostate": "prostate",
-    "colon": "colorectal",
-    "rectum": "colorectal",
-    "colorectum": "colorectal",  # the CRC parent node (subtypes split colon/rectum)
-    "pancreas": "pancreas",
-    "liver": "liver",
-    "bile_duct": "gallbladder_biliary",
-    "stomach": "stomach",
-    "esophagus": "esophagus",
-    "small_intestine": "small_intestine",
-    "bladder": "bladder",
-    "kidney": "kidney",
-    "kidney_cns_soft": "kidney",
-    "ovary": "ovary",
-    "endometrium": "uterus_endometrium",
-    "cervix": "cervix",
-    "vulva": "vulva",
-    "vagina": "vagina",
-    "penis": "penis",
-    "urethra": "bladder",
-    "anal_canal": "anus",
-    "fallopian_tube": "ovary",
-    "peritoneum_serous": "ovary",  # HGSC pooled with OV
-    "gallbladder": "gallbladder_biliary",
-    "thyroid": "thyroid",
-    "thyroid_c_cell": "thyroid",
-    "testis": "testicular_germ_cell",
-    "pleura": "mesothelioma",
-    "peritoneum": "mesothelioma",
-    "oral_cavity": "head_and_neck",
-    "oropharynx": "head_and_neck",
-    "pharynx": "head_and_neck",
-    "nasopharynx": "head_and_neck",
-    "larynx": "head_and_neck",
-    "salivary_gland": "head_and_neck",
-    "midline_structures": "head_and_neck",
-    "thymus": "head_and_neck",
-    "thorax": "head_and_neck",
-    "cerebrum": "brain_cns",
-    "cerebellum": "brain_cns",
-    "eye": "eye_ocular",
-    "retina": "eye_ocular",
-    "skin": "melanoma",
-    "epidermis": "non_melanoma_skin",  # BCC / cSCC keratinocyte carcinomas
-    "ependyma": "brain_cns",
-    "meninges": "brain_cns",
-    "choroid_plexus": "brain_cns",
-    "sellar_suprasellar": "brain_cns",
-    "pons_midline": "brain_cns",
-    "pituitary": "brain_cns",
-    "adrenal_cortex": "adrenal",
-    "adrenal_medulla": "adrenal",
-    "sympathetic_ganglia": "adrenal",
-    "bone": "bone_and_joint",
-    "cartilage": "bone_and_joint",
-    "notochord": "bone_and_joint",
-    "soft_tissue": "soft_tissue_sarcoma",
-    "smooth_muscle": "soft_tissue_sarcoma",
-    "skeletal_muscle": "soft_tissue_sarcoma",
-    "adipose": "soft_tissue_sarcoma",
-    "nerve_sheath": "soft_tissue_sarcoma",
-    "vascular_endothelium": "soft_tissue_sarcoma",
-    "gi_wall": "soft_tissue_sarcoma",
-    # Site-agnostic NET parent node; organ-specific NET subtypes carry their own
-    # primary_tissue (pancreas, lung, ...) and route there instead.
-    "neuroendocrine": "other_and_unknown_primary",
-}
-# Heme (non-plasma): lymph node -> lymphoma; marrow/blood/spleen -> leukemia.
-# AML and Hodgkin are exceptions carried in cancer-code-burden-map.csv.
-_HEME_TISSUE_BURDEN = {
-    "lymph_node": "non_hodgkin_lymphoma",
-    "bone_marrow": "leukemia_all_other",
-    "peripheral_blood": "leukemia_all_other",
-    "spleen_marrow": "leukemia_all_other",
-}
-# Last-resort family fallback when primary_tissue is blank/unmapped.
-_FAMILY_BURDEN = {
-    "sarcoma": "soft_tissue_sarcoma",
-    "melanoma": "melanoma",
-    "cns": "brain_cns",
-    "carcinoma-skin": "non_melanoma_skin",
-}
+
+@lru_cache(maxsize=1)
+def _tissue_burden_map() -> dict[str, str]:
+    """``{primary_tissue: burden_category}`` from ``tissue-burden-map.csv`` (solid +
+    heme tissues; the scopes don't share a tissue token so one flat map suffices)."""
+    df = get_data("tissue-burden-map")
+    return dict(zip(df["primary_tissue"].astype(str), df["burden_category"].astype(str)))
+
+
+@lru_cache(maxsize=1)
+def _family_burden_map() -> dict[str, str]:
+    """``{family: burden_category}`` fallback from ``family-burden-map.csv`` — used
+    only when a code's primary_tissue is blank/unmapped (melanoma at non-skin sites,
+    the cns-* families, carcinoma-skin)."""
+    df = get_data("family-burden-map")
+    return dict(zip(df["family"].astype(str), df["burden_category"].astype(str)))
 
 
 def burden_category(cancer_type):
@@ -167,9 +102,10 @@ def burden_category(cancer_type):
     Order: normalize via :func:`resolve_cancer_type`; the small explicit
     ``cancer-code-burden-map`` *override* (walking the ``parent_code`` chain);
     then registry-driven — sarcoma family splits bone vs soft tissue, plasma
-    cell -> myeloma, other heme by tissue, then ``primary_tissue``, then
-    ``family``. Returns ``None`` only when nothing matches — callers should
-    **warn**, not silently skip (an unmapped cohort is a coverage gap)."""
+    cell -> myeloma, then ``primary_tissue`` (``tissue-burden-map.csv``), then
+    ``family`` (``family-burden-map.csv``). Returns ``None`` only when nothing
+    matches — callers should **warn**, not silently skip (an unmapped cohort is
+    a coverage gap)."""
     try:
         code = resolve_cancer_type(cancer_type)
     except ValueError:
@@ -177,6 +113,8 @@ def burden_category(cancer_type):
     if code is None:
         return None
     override = cancer_code_burden_map()
+    tissue_map = _tissue_burden_map()
+    family_map = _family_burden_map()
     reg = cancer_type_registry().set_index("code")
     # 1. explicit override (true exceptions only), walking up the parent chain
     cur, seen = code, set()
@@ -200,11 +138,9 @@ def burden_category(cancer_type):
             return "bone_and_joint" if tissue in _BONE_SARCOMA_TISSUES else "soft_tissue_sarcoma"
         if family == "heme-plasma":
             return "multiple_myeloma"
-        if family.startswith("heme") and tissue in _HEME_TISSUE_BURDEN:
-            return _HEME_TISSUE_BURDEN[tissue]
-        if tissue in _PRIMARY_TISSUE_BURDEN:
-            return _PRIMARY_TISSUE_BURDEN[tissue]
-        if family in _FAMILY_BURDEN:
-            return _FAMILY_BURDEN[family]
+        if tissue in tissue_map:
+            return tissue_map[tissue]
+        if family in family_map:
+            return family_map[family]
         cur = str(row.get("parent_code", "") or "").strip() or None
     return None

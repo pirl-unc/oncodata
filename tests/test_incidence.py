@@ -60,3 +60,14 @@ def test_every_registry_code_resolves_to_a_burden_category():
         code for code in registry["code"].astype(str) if incidence.burden_category(code) is None
     ]
     assert not unmapped, f"registry codes with no burden category: {unmapped}"
+
+
+def test_family_burden_map_has_no_stale_families():
+    # Drift guard for the data-driven family fallback: every family key must be a
+    # current registry family. (This caught the stale 'cns' slug left after the
+    # registry split cns -> cns-glial/-embryonal/... .)
+    from cancerdata.cancer_types import cancer_type_registry
+
+    registry_families = set(cancer_type_registry()["family"].dropna().astype(str))
+    stale = [f for f in incidence._family_burden_map() if f not in registry_families]
+    assert not stale, f"family-burden-map keys not in the registry: {stale}"
