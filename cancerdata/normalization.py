@@ -67,7 +67,8 @@ def clean_tpm(
     ``values`` is genes (rows) × samples (cols). Provide a ``gene_table``
     (``Symbol`` + ``Ensembl_Gene_ID``, row-aligned to ``values``) so the censored
     (technical/ribosomal) rows can be identified, or an explicit boolean
-    ``removable`` mask.
+    ``removable`` mask **positionally aligned to ``values``'s rows** (it is applied
+    by position, not by index label).
 
     The technical compartment is forced to ``technical_fraction`` of the 1e6
     budget (default 25%) and the biological compartment to the remaining
