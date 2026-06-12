@@ -129,10 +129,24 @@ def cache_dir() -> Path:
     return cache_root() / f"v{DATA_VERSION}"
 
 
+def _path_complete(path: Path) -> bool:
+    """A downloadable entry counts as present only if it actually holds data.
+
+    A bare file must exist; a directory must contain at least one file. An
+    interrupted extract that created the shard directories but no shards (or a
+    legacy/empty cache dir) would otherwise read as "local" forever and never
+    re-fetch — later reads then fail with confusing empties (issue #21)."""
+    if not path.exists():
+        return False
+    if path.is_dir():
+        return any(f.is_file() for f in path.rglob("*"))
+    return True
+
+
 def is_local() -> bool:
-    """Every downloadable path exists in the cache for this version."""
+    """Every downloadable path is present AND non-empty in the cache."""
     root = cache_dir()
-    return all((root / p).exists() for p in DOWNLOADABLE_PATHS)
+    return all(_path_complete(root / p) for p in DOWNLOADABLE_PATHS)
 
 
 def find(relative_path: str) -> Path | None:

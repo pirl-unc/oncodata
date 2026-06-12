@@ -140,19 +140,40 @@ def _write_manifest(manifest: dict) -> None:
         _manifest_path().write_text(json.dumps(manifest, indent=2, sort_keys=True))
 
 
+def _cached_file_ok(name: str, dest: Path) -> bool:
+    """Cheap reuse check: trust an existing cached file only if its size matches
+    the size recorded in the manifest (when one exists). Catches a TSV left
+    truncated by a process killed mid-extract — a partial write that the old
+    ``exists()``-only reuse would have served forever (issue #21). A file with no
+    manifest record is trusted (can't disprove; preserves back-compat). The full
+    content hash is checked only on explicit :func:`verify` to avoid re-hashing a
+    large TSV on every access."""
+    record = _read_manifest().get(name) or {}
+    expected = record.get("bytes")
+    if expected is None or str(record.get("path")) != str(dest):
+        return True
+    try:
+        return dest.stat().st_size == int(expected)
+    except OSError:
+        return False
+
+
 def download(name: str, version: str | None = None, *, force: bool = False) -> Path:
     """Download *name*/*version* into the cache (extracting the ``.zip``) and
-    record it in the manifest. A cached copy is reused unless ``force=True``."""
+    record it in the manifest. A cached copy is reused unless ``force=True`` —
+    or it fails the manifest size check (a truncated/partial cache), in which
+    case it is re-fetched."""
     version = resolve_version(name, version)
     spec = _source(name)
     dest = local_path(name, version)
     url = spec["urls"][version]
 
-    if dest.exists() and not force:
+    if dest.exists() and not force and _cached_file_ok(name, dest):
         return dest
 
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp_zip = dest.parent / (spec["filename"] + ".zip.part")
+    tmp_tsv = dest.parent / (spec["filename"] + ".part")
     try:
         sys.stderr.write(f"cancerdata: downloading {name} ({url})\n")
         sys.stderr.flush()
@@ -160,13 +181,16 @@ def download(name: str, version: str | None = None, *, force: bool = False) -> P
             shutil.copyfileobj(resp, h, length=1024 * 1024)
         with zipfile.ZipFile(tmp_zip) as zf:
             member = _zip_member(zf, spec["filename"])
-            with zf.open(member) as src, dest.open("wb") as out:
+            with zf.open(member) as src, tmp_tsv.open("wb") as out:
                 shutil.copyfileobj(src, out, length=1024 * 1024)
+        # Atomic promote: a process killed mid-extract leaves tmp_tsv, never a
+        # partial dest. A prior good copy survives a failed re-download untouched.
+        os.replace(tmp_tsv, dest)
     except Exception as e:  # network / zip / IO — surface uniformly
-        dest.unlink(missing_ok=True)
         raise ReferenceDataError(f"failed to download {name} ({url}): {e}") from e
     finally:
         tmp_zip.unlink(missing_ok=True)
+        tmp_tsv.unlink(missing_ok=True)
 
     manifest = _read_manifest()
     manifest[name] = {
@@ -181,6 +205,25 @@ def download(name: str, version: str | None = None, *, force: bool = False) -> P
     return dest
 
 
+def verify(name: str, version: str | None = None) -> bool:
+    """Full-content integrity check of a cached source against the manifest sha256.
+
+    Returns ``True`` when the cached file's sha256 matches what the manifest
+    recorded at download time, ``False`` on mismatch or when the file is missing.
+    Raises if there is no manifest record to check against (nothing to verify).
+    Unlike the cheap size check on reuse, this re-hashes the file — call it
+    deliberately (a cache audit), not on every access."""
+    version = resolve_version(name, version)
+    dest = local_path(name, version)
+    record = _read_manifest().get(name) or {}
+    expected = record.get("sha256")
+    if not expected:
+        raise ReferenceDataError(f"no manifest sha256 recorded for {name!r}; nothing to verify")
+    if not dest.exists():
+        return False
+    return hashlib.sha256(dest.read_bytes()).hexdigest() == expected
+
+
 def _zip_member(zf: zipfile.ZipFile, preferred: str) -> str:
     """Pick the .tsv member to extract (preferred name, else the first .tsv)."""
     names = zf.namelist()
@@ -193,9 +236,12 @@ def _zip_member(zf: zipfile.ZipFile, preferred: str) -> str:
 
 
 def ensure(name: str, version: str | None = None) -> Path:
-    """Return a local path to *name*/*version*, downloading if absent."""
+    """Return a local path to *name*/*version*, downloading if absent or if the
+    cached copy fails the manifest size check (a truncated/partial file)."""
     path = local_path(name, version)
-    return path if path.exists() else download(name, version)
+    if path.exists() and _cached_file_ok(name, path):
+        return path
+    return download(name, version)
 
 
 def status() -> list[dict]:
