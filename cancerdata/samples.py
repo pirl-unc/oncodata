@@ -26,6 +26,7 @@ from functools import lru_cache
 
 import pandas as pd
 
+from .cancer_types import resolve_cancer_type
 from .load_dataset import get_data
 
 
@@ -40,9 +41,13 @@ def sample_manifest() -> pd.DataFrame:
 
 
 def samples_for_cancer_code(code: str, *, included_only: bool = True) -> pd.DataFrame:
-    """Manifest rows assigned to a cancer code (included samples by default)."""
+    """Manifest rows assigned to a cancer code (included samples by default).
+
+    The code is alias-resolved, so ``"prostate"`` / ``"lung_adeno"`` / a pre-rename
+    code all work (an unknown code passes through and simply matches nothing)."""
+    resolved = resolve_cancer_type(code, strict=False) or code
     df = _manifest()
-    sub = df[df["cancer_code"].astype(str) == code]
+    sub = df[df["cancer_code"].astype(str) == resolved]
     if included_only and "included" in sub.columns:
         sub = sub[sub["included"].astype(str).str.lower().isin(("true", "1"))]
     return sub.copy()
