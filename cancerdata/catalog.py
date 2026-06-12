@@ -36,7 +36,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import data_bundle, reference_data
+from . import data_bundle, data_manifest, reference_data
 
 _BUNDLE = "bundle"
 _HPA = "hpa"
@@ -151,6 +151,40 @@ def _size_bytes(p: Path | None) -> int:
     if p.is_dir():
         return sum(f.stat().st_size for f in p.rglob("*") if f.is_file())
     return p.stat().st_size
+
+
+def inventory() -> list[dict]:
+    """The complete cancerdata-domain data inventory — the full picture behind the
+    fetchable :func:`datasets`. One row per dataset with ``name``, ``held``
+    (``wheel`` / ``bundle`` / ``hpa`` / ``source`` / ``planned``), ``category``,
+    ``available`` (present locally / shipped), and ``description``. Driven by
+    :mod:`cancerdata.data_manifest` so it stays exhaustive against pirlygenes.
+    """
+    bundle_member = {p.removesuffix(".csv"): p for p in data_bundle.DOWNLOADABLE_PATHS}
+    rows: list[dict] = []
+
+    def _add(name, held, category, description, available):
+        rows.append(
+            {
+                "name": name,
+                "held": held,
+                "category": category,
+                "available": available,
+                "description": description,
+            }
+        )
+
+    for name, (cat, desc) in sorted(data_manifest.WHEEL.items()):
+        _add(name, "wheel", cat, desc, True)  # ships in the wheel — always present
+    for name, (cat, desc) in sorted(data_manifest.BUNDLE.items()):
+        _add(name, "bundle", cat, desc, data_bundle.find(bundle_member[name]) is not None)
+    for name, (cat, desc) in sorted(data_manifest.HPA.items()):
+        _add(name, "hpa", cat, desc, reference_data.local_path(name).exists())
+    for name, (cat, desc) in sorted(data_manifest.SOURCE.items()):
+        _add(name, "source", cat, desc, False)  # not distributed through cancerdata yet
+    for name, (cat, desc) in sorted(data_manifest.PLANNED.items()):
+        _add(name, "planned", cat, desc, False)  # cancerdata-domain, still to port
+    return rows
 
 
 def status(name: str | None = None) -> list[dict]:

@@ -116,8 +116,8 @@ def test_datasets_disjoint_backends():
 def test_cli_data_list(capsys):
     assert cli.main(["data", "list"]) == 0
     out = capsys.readouterr().out
-    for d in catalog.datasets():
-        assert d.name in out
+    for r in catalog.inventory():
+        assert r["name"] in out
 
 
 def test_cli_data_status_absent(monkeypatch, tmp_path, capsys):
@@ -161,3 +161,36 @@ def test_cli_help_never_crashes():
         if isinstance(action, argparse._SubParsersAction):
             for subparser in action.choices.values():
                 subparser.format_help()  # each subcommand's own argument help
+
+
+# ---- full inventory (manifest-driven) ----
+
+
+def test_inventory_covers_all_held_buckets():
+    from cancerdata import data_manifest
+
+    rows = catalog.inventory()
+    names = {r["name"] for r in rows}
+    assert set(data_manifest.WHEEL) <= names
+    assert set(data_manifest.PLANNED) <= names
+    assert {"per-sample-tpm-matrices"} <= names  # the raw source matrices
+    held = {r["held"] for r in rows}
+    assert held == {"wheel", "bundle", "hpa", "source", "planned"}
+
+
+def test_inventory_wheel_always_available():
+    wheel = [r for r in catalog.inventory() if r["held"] == "wheel"]
+    assert wheel and all(r["available"] for r in wheel)
+
+
+def test_inventory_planned_not_available():
+    planned = [r for r in catalog.inventory() if r["held"] == "planned"]
+    assert planned and all(not r["available"] for r in planned)
+
+
+def test_cli_data_list_shows_full_inventory(capsys):
+    assert cli.main(["data", "list"]) == 0
+    out = capsys.readouterr().out
+    assert "housekeeping-genes" in out  # a planned dataset appears
+    assert "per-sample-tpm-matrices" in out  # the raw source matrices appear
+    assert "planned" in out and "wheel" in out

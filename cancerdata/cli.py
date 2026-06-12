@@ -102,8 +102,14 @@ def _cmd_data(args: argparse.Namespace) -> int:
     from . import catalog
 
     if args.action == "list":
-        for d in catalog.datasets():
-            print(f"{d.name:<46} {d.kind:<7} {d.description}")
+        # The full inventory: every cancerdata-domain dataset and how it's held.
+        print(f"{'Dataset':<46} {'Held':<8} {'Avail':<6} {'Category':<14} Description")
+        print("-" * 110)
+        for r in catalog.inventory():
+            avail = "yes" if r["available"] else "-"
+            print(
+                f"{r['name']:<46} {r['held']:<8} {avail:<6} {r['category']:<14} {r['description']}"
+            )
         return 0
 
     if args.action == "status":
