@@ -15,24 +15,27 @@
 Ties the pieces together so cancerdata can **regenerate** (not just hold) its
 expression bundle:
 
-    raw per-sample TPM matrices  (one+ per cancer code, possibly multi-source)
-        -> pool samples per code  (outer-join on gene; not-measured stays NaN)
-        -> clean_tpm               (two-compartment biological view)
+    raw per-sample TPM matrices  (candidate source cohorts per cancer code)
+        -> select ONE source per code  (the source-matrices.csv choice; never pool)
+        -> clean_tpm                   (two-compartment biological view)
+        -> drop technical genes        (biology-only, matching the shipped artifact)
         -> percentile vectors / n=5 representatives / within-sample top-fractions
 
 Input matrices are discovered under ``--cache`` as
 ``<cohort>/derived/<NAME>_per_sample_tpm.parquet``. The derived ``<NAME>`` is mapped
 to a cancer code case-insensitively (``tcga_acc`` -> ``ACC``, ``LAML_ELNadv`` kept),
 matched against the reference codes in ``--ref`` (a dir of ``<CODE>.parquet`` whose
-names define the canonical casing). Several matrices mapping to one code are pooled.
+names define the canonical casing). A code with several candidate source cohorts is
+resolved to the single one recorded in ``source-matrices.csv`` (pirlygenes selects
+one source per code; it never pools) — so the artifacts match the shipped reference.
 
 Outputs land under ``--out`` (a staging dir, NOT ``cancerdata/data`` — the artifacts
 are large and ship via the release tarball, so they're never committed):
 
-    <out>/clean/<CODE>.parquet                                 (pooled clean-TPM matrix)
-    <out>/cancer-reference-expression-percentiles/<CODE>.parquet
+    <out>/clean/<CODE>.parquet                                 (clean-TPM matrix, full)
+    <out>/cancer-reference-expression-percentiles/<CODE>.parquet      (biology-only)
     <out>/cancer-reference-expression-representatives/<CODE>.parquet + _provenance.csv
-    <out>/cancer-reference-expression-within-sample-top5/<CODE>.parquet
+    <out>/cancer-reference-expression-within-sample-top5/<CODE>.parquet (biology-only)
 
 ``--validate`` additionally correlates each rebuilt percentile vector against the
 reference artifact in ``--ref`` and prints the per-code agreement.
@@ -57,7 +60,9 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from cancerdata._build import cohort_medoids, cohort_percentile_vectors, within_sample_top_fractions
+from cancerdata.gene_families import clean_tpm_censored_gene_ids
 from cancerdata.normalization import clean_tpm
+from cancerdata.source_matrices import registry as source_registry
 
 _BASE = ["Ensembl_Gene_ID", "Symbol"]
 
@@ -68,58 +73,85 @@ def _code_key(name: str) -> str:
     return n.replace("_", "").lower()
 
 
-def discover(cache: Path, ref: Path) -> dict[str, list[Path]]:
-    """Map each reference cancer code to its one-or-more per-sample matrices."""
+def _source_key(name: str) -> str:
+    """Normalize a cohort directory or registry source-cohort id to a join key —
+    by GSE accession when present, else alphanumeric-only (so ``treehouse-polya-25-01``
+    and ``TREEHOUSE_POLYA_25_01`` match, and ``gse75885-sarc`` matches its registry
+    id ``GSE75885_DELESPAUL_2017`` on the shared GSE accession)."""
+    import re
+
+    m = re.search(r"GSE\d+", name.upper())
+    return m.group() if m else re.sub(r"[^A-Z0-9]", "", name.upper())
+
+
+def discover(cache: Path, ref: Path) -> dict[str, list[tuple[str, Path]]]:
+    """Map each reference cancer code to its candidate ``(cohort_dir, matrix path)``."""
     ref_by_key = {_code_key(p.stem): p.stem for p in ref.glob("*.parquet")}
-    by_code: dict[str, list[Path]] = defaultdict(list)
+    by_code: dict[str, list[tuple[str, Path]]] = defaultdict(list)
     unmatched = []
     for m in cache.glob("*/derived/*_per_sample_tpm.parquet"):
+        cohort_dir = m.parent.parent.name
         stem = m.name.replace("_per_sample_tpm.parquet", "")
         code = ref_by_key.get(_code_key(stem))
         if code is None:
             unmatched.append(stem)
             continue
-        by_code[code].append(m)
+        by_code[code].append((cohort_dir, m))
     if unmatched:
         print(f"  note: {len(unmatched)} matrices matched no reference code: {unmatched}")
     return dict(by_code)
 
 
-def pool_matrices(paths: list[Path]) -> pd.DataFrame:
-    """Pool one+ per-sample matrices for a code: outer-join on gene id, concat
-    sample columns. A gene absent in one source stays NaN there (not-measured is
-    not zero). Sample columns are uniquified by source stem to avoid collisions."""
-    frames = []
-    for p in paths:
-        df = pd.read_parquet(p)
-        samples = [c for c in df.columns if c not in _BASE]
-        if len(paths) > 1:
-            tag = p.name.replace("_per_sample_tpm.parquet", "")
-            df = df.rename(columns={s: f"{tag}:{s}" for s in samples})
-        frames.append(df)
-    if len(frames) == 1:
-        return frames[0]
-    merged = frames[0]
-    for nxt in frames[1:]:
-        merged = merged.merge(nxt, on="Ensembl_Gene_ID", how="outer", suffixes=("", "_dup"))
-        # collapse duplicated Symbol column from the join
-        if "Symbol_dup" in merged.columns:
-            merged["Symbol"] = merged["Symbol"].fillna(merged["Symbol_dup"])
-            merged = merged.drop(columns=["Symbol_dup"])
-    return merged
+def _select_source(code: str, candidates: list[tuple[str, Path]], code_to_source: dict) -> Path:
+    """Pick the single source matrix for a code — never pool.
+
+    pirlygenes selects exactly one source cohort per code (RNA-seq over microarray
+    proxy, then a primary-tumor source, then most samples); cancerdata's shipped
+    ``source-matrices.csv`` already records that choice as ``code -> source_cohort``.
+    So with a single candidate we use it; with several we keep the one whose cohort
+    directory matches the registry's source_cohort. This replaces the old concat-pool
+    (which over-counted multi-source codes) — single-source codes were always a no-op."""
+    if len(candidates) == 1:
+        return candidates[0][1]
+    src = code_to_source.get(code)
+    if src is not None:
+        want = _source_key(src)
+        hits = [p for d, p in candidates if _source_key(d) == want]
+        if len(hits) == 1:
+            return hits[0]
+    # Fall back to the most-sampled source so a registry miss still picks one source,
+    # never a pool. (Not expected for the shipped registry.)
+    print(
+        f"  warn: {code} has {len(candidates)} sources, no unique registry match; "
+        f"using the largest",
+        flush=True,
+    )
+    return max(candidates, key=lambda c: pd.read_parquet(c[1]).shape[1])[1]
 
 
-def build_clean(paths: list[Path]) -> pd.DataFrame:
-    """Pooled, clean-TPM matrix for a code (genes x samples + id cols)."""
-    pooled = pool_matrices(paths)
-    samples = [c for c in pooled.columns if c not in _BASE]
-    gene_table = pooled[_BASE]
-    clean = clean_tpm(pooled[samples], gene_table=gene_table)
+def build_clean(path: Path) -> pd.DataFrame:
+    """Clean-TPM matrix for one source's per-sample matrix (genes x samples + ids)."""
+    raw = pd.read_parquet(path)
+    samples = [c for c in raw.columns if c not in _BASE]
+    gene_table = raw[_BASE]
+    clean = clean_tpm(raw[samples], gene_table=gene_table)
     return pd.concat([gene_table.reset_index(drop=True), clean.reset_index(drop=True)], axis=1)
+
+
+def _drop_technical(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop the clean-TPM censored (technical + ribosomal) genes, so the percentile /
+    within-sample artifacts describe the biological view pirlygenes ships. clean_tpm
+    has already deflated these into the technical compartment; dropping the rows
+    doesn't change any biological gene's percentile (they're per-row independent)."""
+    censored = clean_tpm_censored_gene_ids()
+    unversioned = df["Ensembl_Gene_ID"].astype(str).str.split(".").str[0]
+    return df[~unversioned.isin(censored)].reset_index(drop=True)
 
 
 def rebuild(cache: Path, ref: Path, out: Path, *, limit: int | None, validate: bool) -> None:
     by_code = discover(cache, ref)
+    reg = source_registry()
+    code_to_source = dict(zip(reg["cancer_code"].astype(str), reg["source_cohort"].astype(str)))
     codes = sorted(by_code)
     if limit:
         codes = codes[:limit]
@@ -135,13 +167,18 @@ def rebuild(cache: Path, ref: Path, out: Path, *, limit: int | None, validate: b
     provenance: list[dict] = []
     corrs: list[float] = []
     for code in codes:
-        clean_df = build_clean(by_code[code])
+        source_path = _select_source(code, by_code[code], code_to_source)
+        clean_df = build_clean(source_path)
         samples = [c for c in clean_df.columns if c not in _BASE]
         clean_df.to_parquet(clean_dir / f"{code}.parquet", index=False, compression="zstd")
 
-        pct = cohort_percentile_vectors(clean_df, samples)
+        # Biological view (technical genes dropped) for the percentile + within-sample
+        # artifacts, matching pirlygenes' shipped biology-only artifacts.
+        bio_df = _drop_technical(clean_df)
+        pct = cohort_percentile_vectors(bio_df, samples)
         pct.to_parquet(pct_dir / f"{code}.parquet", index=False, compression="zstd")
 
+        # Representatives keep the full gene set (real per-sample vectors).
         reps = cohort_medoids(clean_df, k=5)
         rep_cols = [c for c in reps.columns if c not in _BASE]
         rep_ids = [f"{code}__rep{i}" for i in range(1, len(rep_cols) + 1)]
@@ -151,12 +188,12 @@ def rebuild(cache: Path, ref: Path, out: Path, *, limit: int | None, validate: b
             provenance.append(
                 {
                     "representative_id": rep_id,
-                    "source_cohort": code,
+                    "source_cohort": code_to_source.get(code, code),
                     "n_cohort_samples": len(samples),
                 }
             )
 
-        ws = within_sample_top_fractions(clean_df, samples)
+        ws = within_sample_top_fractions(bio_df, samples)
         ws.to_parquet(ws_dir / f"{code}.parquet", index=False, compression="zstd")
 
         msg = f"  {code}: {len(samples)} samples, {len(pct)} genes"
