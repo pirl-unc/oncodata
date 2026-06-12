@@ -27,8 +27,13 @@ from __future__ import annotations
 from .apd1 import cancer_apd1_response
 from .cancer_types import cancer_type_registry, format_cancer_code_label
 from .cta import CTA_gene_id_to_name, CTA_gene_ids
-from .expression import available_percentile_cohorts, cohort_gene_percentiles
-from .incidence import cancer_burden
+from .expression import (
+    available_percentile_cohorts,
+    available_within_sample_cohorts,
+    cohort_gene_percentiles,
+    within_sample_top_fraction,
+)
+from .incidence import burden_category, cancer_burden
 from .tmb import cancer_tmb
 
 _PLT = None
@@ -287,3 +292,117 @@ def cta_expression_heatmap(
     cbar.set_label(f"{stat} TPM (log)")
     fig.tight_layout()
     return _save(fig, save)
+
+
+def _cta_prevalence_by_cohort(threshold):
+    """``{cohort code: fraction of samples where the single most-prevalent CTA is a
+    top-expressed gene}`` from the within-sample artifact.
+
+    This is the best **shipped** proxy for "fraction of patients with a targetable
+    CTA": the within-sample artifact gives, per gene, the fraction of a cohort's
+    samples in which it ranks in the top ``(1-threshold)`` *within that sample*; we
+    take the max over the CTA set. It is a lower bound on the true "≥1 CTA expressed"
+    union (different patients may express different CTAs), which needs the per-sample
+    joint matrices — see :func:`cancerdata.expression.proteoform_representative_samples`
+    and #13. Cohorts without a within-sample shard are skipped."""
+    import pandas as pd
+
+    cta_ids = set(CTA_gene_ids())
+    out = {}
+    for code in available_within_sample_cohorts():
+        df = within_sample_top_fraction(code, threshold=threshold)
+        frac_col = next((c for c in df.columns if c.startswith("frac_samples_top")), None)
+        if frac_col is None:
+            continue
+        ids = df["Ensembl_Gene_ID"].astype(str).str.split(".").str[0]
+        cta_frac = pd.to_numeric(df.loc[ids.isin(cta_ids), frac_col], errors="coerce")
+        out[str(code)] = float(cta_frac.max()) if len(cta_frac) and cta_frac.notna().any() else 0.0
+    return out
+
+
+def cta_addressable_burden(
+    *,
+    threshold=0.95,
+    metric="us_incidence_pct",
+    n=25,
+    save=None,
+):
+    """Bar chart of **CTA-addressable cancer burden** per cancer type.
+
+    Combines two things cancerdata owns: the incidence share of each cancer
+    (:func:`cancerdata.incidence.cancer_burden`) and the within-sample prevalence of
+    the most-expressed CTA in that cohort (:func:`_cta_prevalence_by_cohort`). The
+    bar is ``incidence_share × CTA_prevalence`` — a relative measure of how many
+    patients a CTA-directed therapy could address, ranking cancers by opportunity.
+
+    ``threshold`` is the within-sample rank cut (0.99/0.95/0.90 → top 1/5/10%);
+    ``metric`` selects the incidence basis; ``n`` caps the bars shown. Bars are
+    coloured by registry family. Needs the within-sample bundle present.
+
+    Scope note: incidence is at burden-category granularity (several subtypes share
+    a category), and the prevalence is the single-best-CTA proxy — an exact "fraction
+    expressing ≥1 CTA" union needs the per-sample matrices (#13). So read this as a
+    relative prioritization, not an absolute patient count."""
+    import numpy as np
+
+    plt = _plt()
+    prevalence = _cta_prevalence_by_cohort(threshold)
+    if not prevalence:
+        raise ValueError(
+            "no within-sample CTA prevalence available — is the within-sample bundle present? "
+            "(see available_within_sample_cohorts())"
+        )
+    burden = cancer_burden(metric=metric)  # {burden category: share}
+
+    rows = []
+    for code, prev in prevalence.items():
+        category = burden_category(code)
+        inc = burden.get(category) if category else None
+        if inc is None or not inc:
+            continue
+        rows.append((code, float(inc) * prev, prev))
+    if not rows:
+        raise ValueError("no cohort mapped to both a burden category and CTA prevalence")
+
+    rows.sort(key=lambda r: r[1], reverse=True)
+    rows = rows[:n]
+    codes = [r[0] for r in rows]
+    scores = [r[1] for r in rows]
+    color_by_code, fam_color = _family_colors(codes)
+
+    fig, ax = plt.subplots(figsize=(8, max(4, 0.32 * len(codes))))
+    y = np.arange(len(codes))
+    ax.barh(y, scores, color=[color_by_code[c] for c in codes])
+    ax.set_yticks(y)
+    ax.set_yticklabels([format_cancer_code_label(c) for c in codes], fontsize=7)
+    ax.invert_yaxis()
+    ax.set_xlabel(f"Addressable burden  (incidence share × top-CTA prevalence, thr={threshold})")
+    ax.set_title(f"CTA-addressable cancer burden — top {len(codes)} cancers")
+    handles = [plt.Rectangle((0, 0), 1, 1, color=c) for c in fam_color.values()]
+    ax.legend(handles, list(fam_color), fontsize=6, title="family", loc="lower right")
+    fig.tight_layout()
+    return _save(fig, save)
+
+
+def cta_specific_9mer_counts(*, save=None, **kwargs):
+    """**Scaffold** — CTA-specific 9-mer (peptide) counts per cancer type.
+
+    The faithful plot counts, per cancer type, the unique 9-mer peptides derived
+    from CTAs expressed in that cohort — a measure of the CTA-specific neoepitope
+    source breadth. It needs two inputs cancerdata does not ship:
+
+    1. the **proteome** (translated CTA protein sequences) to enumerate 9-mers —
+       a ``pyensembl``/reference-proteome dependency that is out of cancerdata's
+       pandas-only base-layer scope, and
+    2. the **per-sample expression matrices** to decide which CTAs are expressed
+       per patient (the shipped percentile/within-sample summaries can't recover
+       per-sample peptide sets).
+
+    This is intentionally the heaviest plot and is tracked as its own follow-up
+    (#15); it is not wired to shipped data. Raising keeps the API surface explicit
+    rather than returning a misleading partial figure."""
+    raise NotImplementedError(
+        "cta_specific_9mer_counts needs a reference proteome (9-mer enumeration, e.g. "
+        "via pyensembl) and the per-sample expression matrices — neither is in "
+        "cancerdata's shipped, pandas-only base layer. Tracked as a follow-up in #15."
+    )

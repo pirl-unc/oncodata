@@ -81,3 +81,38 @@ def test_cta_expression_heatmap_skips_unusable_cohorts():
         pytest.raises(ValueError, match="no CTA expression data"),
     ):
         plots.cta_expression_heatmap(cohorts=["NOT_A_REAL_COHORT"])
+
+
+# ---- CTA addressable burden (P2) + 9mer scaffold (P3) ----
+
+
+def test_cta_addressable_burden_renders(tmp_path, monkeypatch):
+    # Hermetic: stub the within-sample prevalence so the test doesn't need the
+    # bundle. Real codes map to a burden category + incidence, so bars render.
+    monkeypatch.setattr(
+        plots,
+        "_cta_prevalence_by_cohort",
+        lambda threshold: {"LUAD": 0.6, "SKCM": 0.4, "BRCA": 0.2},
+    )
+    out = tmp_path / "burden.png"
+    fig = plots.cta_addressable_burden(n=10, save=str(out))
+    assert out.exists() and out.stat().st_size > 0
+    assert fig is not None
+
+
+def test_cta_addressable_burden_no_within_sample(monkeypatch):
+    monkeypatch.setattr(plots, "_cta_prevalence_by_cohort", lambda threshold: {})
+    with pytest.raises(ValueError, match="no within-sample CTA prevalence"):
+        plots.cta_addressable_burden()
+
+
+def test_cta_addressable_burden_no_mapped_cohorts(monkeypatch):
+    # A code that resolves to no burden category yields no bars -> clean ValueError.
+    monkeypatch.setattr(plots, "_cta_prevalence_by_cohort", lambda threshold: {"NOT_A_CODE": 0.5})
+    with pytest.raises(ValueError, match="no cohort mapped"):
+        plots.cta_addressable_burden()
+
+
+def test_cta_specific_9mer_counts_not_implemented():
+    with pytest.raises(NotImplementedError, match="#15"):
+        plots.cta_specific_9mer_counts()
