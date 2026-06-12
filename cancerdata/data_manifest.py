@@ -131,6 +131,8 @@ CANCERDATA_ORIGINATED: dict[str, tuple[str, str]] = {
     "proteoform-groups": ("gene-id", "byte-identical CTA proteoform groups"),
     "proteoform-groups-genome": ("gene-id", "byte-identical proteoform groups (genome-wide)"),
     "source-matrices": ("expression", "per-cohort raw-matrix registry (code/source/n_samples)"),
+    "tissue-burden-map": ("ontology", "primary_tissue -> anatomic burden category"),
+    "family-burden-map": ("ontology", "registry family -> burden category (fallback)"),
 }
 
 #: pirlygenes data that is NOT cancerdata's domain — target selection / therapy /

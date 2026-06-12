@@ -99,3 +99,12 @@ def test_clear_caches_allows_reload(monkeypatch):
     assert "PRAD" in cd.CANCER_TYPE_NAMES
     cancer_types._clear_caches()
     assert "PRAD" in cd.CANCER_TYPE_NAMES
+
+
+def test_every_registry_family_has_a_curated_display_name():
+    # Drift guard: every registry family must have a curated label, not the
+    # title-cased fallback. (This caught the stale 'cns'/'endocrine' keys left
+    # after the registry split those into cns-*/endocrine-* families.)
+    families = set(cancer_types.cancer_type_registry()["family"].dropna().astype(str))
+    missing = sorted(f for f in families if f not in cancer_types._FAMILY_DISPLAY_NAMES)
+    assert not missing, f"registry families without a curated display name: {missing}"

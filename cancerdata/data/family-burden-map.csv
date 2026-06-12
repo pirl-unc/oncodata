@@ -1,0 +1,10 @@
+family,burden_category
+melanoma,melanoma
+carcinoma-skin,non_melanoma_skin
+cns-glial,brain_cns
+cns-embryonal,brain_cns
+cns-ependymal,brain_cns
+cns-meningeal,brain_cns
+cns-choroid,brain_cns
+cns-sellar,brain_cns
+sarcoma,soft_tissue_sarcoma
