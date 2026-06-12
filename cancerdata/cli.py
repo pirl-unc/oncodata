@@ -103,12 +103,17 @@ def _cmd_data(args: argparse.Namespace) -> int:
 
     if args.action == "list":
         # The full inventory: every cancerdata-domain dataset and how it's held.
-        print(f"{'Dataset':<46} {'Held':<8} {'Avail':<6} {'Category':<14} Description")
-        print("-" * 110)
+        # `Cohorts` is the per-cohort file count held *inside* a directory dataset.
+        print(
+            f"{'Dataset':<46} {'Held':<8} {'Avail':<6} {'Cohorts':>8} {'Category':<14} Description"
+        )
+        print("-" * 120)
         for r in catalog.inventory():
             avail = "yes" if r["available"] else "-"
+            cohorts = str(r["cohorts"]) if r["cohorts"] is not None else "-"
             print(
-                f"{r['name']:<46} {r['held']:<8} {avail:<6} {r['category']:<14} {r['description']}"
+                f"{r['name']:<46} {r['held']:<8} {avail:<6} {cohorts:>8} "
+                f"{r['category']:<14} {r['description']}"
             )
         return 0
 
@@ -118,12 +123,18 @@ def _cmd_data(args: argparse.Namespace) -> int:
         except KeyError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
-        print(f"{'Dataset':<46} {'Kind':<7} {'Present':<8} {'Size':>10}  Description")
-        print("-" * 100)
+        print(
+            f"{'Dataset':<46} {'Kind':<7} {'Present':<8} {'Size':>10} {'Cohorts':>8}  Description"
+        )
+        print("-" * 110)
         for r in rows:
             present = "yes" if r["present"] else "no"
             size = _fmt_bytes(r["size_bytes"])
-            print(f"{r['name']:<46} {r['kind']:<7} {present:<8} {size:>10}  {r['description']}")
+            cohorts = str(r["cohorts"]) if r["cohorts"] is not None else "-"
+            print(
+                f"{r['name']:<46} {r['kind']:<7} {present:<8} {size:>10} {cohorts:>8}  "
+                f"{r['description']}"
+            )
         return 0
 
     if args.action == "fetch":

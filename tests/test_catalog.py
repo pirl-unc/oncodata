@@ -33,7 +33,8 @@ def test_status_uniform_and_absent(monkeypatch, tmp_path):
     rows = catalog.status()
     assert {r["name"] for r in rows} == {d.name for d in catalog.datasets()}
     assert all(
-        set(r) == {"name", "kind", "present", "path", "size_bytes", "description"} for r in rows
+        set(r) == {"name", "kind", "present", "path", "size_bytes", "cohorts", "description"}
+        for r in rows
     )
     assert all(r["present"] is False and r["size_bytes"] == 0 for r in rows)
 
@@ -194,3 +195,19 @@ def test_cli_data_list_shows_full_inventory(capsys):
     assert "housekeeping-genes" in out  # a planned dataset appears
     assert "per-sample-tpm-matrices" in out  # the raw source matrices appear
     assert "planned" in out and "wheel" in out
+
+
+def test_cohort_count_surfaces_per_cohort_scale(monkeypatch, tmp_path):
+    # A directory dataset reports the per-cohort file count (the cancer-type scale
+    # held *inside* one catalog entry); single-file/absent datasets report None.
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path / "vX"))
+    member = tmp_path / "vX" / "cancer-reference-expression-percentiles"
+    member.mkdir(parents=True)
+    for code in ("ACC", "BRCA", "LUAD"):
+        (member / f"{code}.parquet").write_bytes(b"x")
+    (member / "_provenance.csv").write_text("x")  # excluded (leading underscore)
+
+    rows = {r["name"]: r for r in catalog.status()}
+    assert rows["cancer-reference-expression-percentiles"]["cohorts"] == 3
+    # a single-file dataset has no per-cohort breakdown
+    assert rows["pan-cancer-expression.csv"]["cohorts"] is None

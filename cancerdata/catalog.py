@@ -153,6 +153,16 @@ def _size_bytes(p: Path | None) -> int:
     return p.stat().st_size
 
 
+def _cohort_count(p: Path | None) -> int | None:
+    """Per-cohort file count for a directory dataset (one file per cancer cohort);
+    ``None`` for a single-file dataset. This is the cohort scale held *inside* an
+    expression artifact — e.g. ``cancer-reference-expression-percentiles`` is one
+    catalog entry but ~118 cancer cohorts."""
+    if p is None or not p.is_dir():
+        return None
+    return sum(1 for f in p.iterdir() if f.is_file() and not f.name.startswith("_"))
+
+
 def inventory() -> list[dict]:
     """The complete cancerdata-domain data inventory — the full picture behind the
     fetchable :func:`datasets`. One row per dataset with ``name``, ``held``
@@ -163,13 +173,14 @@ def inventory() -> list[dict]:
     bundle_member = {p.removesuffix(".csv"): p for p in data_bundle.DOWNLOADABLE_PATHS}
     rows: list[dict] = []
 
-    def _add(name, held, category, description, available):
+    def _add(name, held, category, description, available, cohorts=None):
         rows.append(
             {
                 "name": name,
                 "held": held,
                 "category": category,
                 "available": available,
+                "cohorts": cohorts,
                 "description": description,
             }
         )
@@ -177,7 +188,8 @@ def inventory() -> list[dict]:
     for name, (cat, desc) in sorted(data_manifest.WHEEL.items()):
         _add(name, "wheel", cat, desc, True)  # ships in the wheel — always present
     for name, (cat, desc) in sorted(data_manifest.BUNDLE.items()):
-        _add(name, "bundle", cat, desc, data_bundle.find(bundle_member[name]) is not None)
+        member = data_bundle.find(bundle_member[name])
+        _add(name, "bundle", cat, desc, member is not None, _cohort_count(member))
     for name, (cat, desc) in sorted(data_manifest.HPA.items()):
         _add(name, "hpa", cat, desc, reference_data.local_path(name).exists())
     for name, (cat, desc) in sorted(data_manifest.SOURCE.items()):
@@ -189,7 +201,8 @@ def inventory() -> list[dict]:
 
 def status(name: str | None = None) -> list[dict]:
     """Uniform status rows over the catalog: ``name``, ``kind``, ``present``,
-    ``path``, ``size_bytes``, ``description``. One dataset if ``name`` given."""
+    ``path``, ``size_bytes``, ``cohorts`` (per-cohort file count for directory
+    datasets, else ``None``), ``description``. One dataset if ``name`` given."""
     names = [dataset(name).name] if name is not None else [d.name for d in datasets()]
     rows = []
     for n in names:
@@ -202,6 +215,7 @@ def status(name: str | None = None) -> list[dict]:
                 "present": p is not None,
                 "path": str(p) if p is not None else None,
                 "size_bytes": _size_bytes(p),
+                "cohorts": _cohort_count(p),
                 "description": d.description,
             }
         )
