@@ -1,0 +1,2 @@
+group_canonical_ensembl_gene_id,group_symbol,reason
+ENSG00000224089,CT47A10,CT47A cluster: 12 loci encode the identical CT47 protein (100% aa); cDNA-identity already merges 10; this override unifies the 2 cDNA-distinct members (CT47A1/CT47A6) so the whole antigen collapses to one

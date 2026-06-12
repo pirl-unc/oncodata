@@ -66,6 +66,12 @@ WHEEL: dict[str, tuple[str, str]] = {
     "small-noncoding-rnas": ("normalization", "small non-coding RNA loci"),
     "nuclear-retained-lncrnas": ("normalization", "polyA-bias nuclear-retained lncRNAs"),
     "hemoglobin-genes": ("normalization", "hemoglobin genes"),
+    # gene-id / symbol resolution (R-resolve)
+    "ensembl-id-aliases": ("gene-id", "alt-haplotype → primary-contig Ensembl gene ids"),
+    "ncbi-symbol-synonyms": ("gene-id", "NCBI gene symbol synonyms → official symbol"),
+    "extra-tx-mappings": ("gene-id", "supplemental transcript→gene mappings"),
+    "cdna-identical-gene-groups": ("gene-id", "cDNA-identical gene groups"),
+    "proteoform-collapse-overrides": ("gene-id", "manual proteoform-collapse overrides"),
 }
 
 #: {name: (category, description)} — heavy artifacts in the release tarball.
@@ -92,12 +98,6 @@ SOURCE: dict[str, tuple[str, str]] = {
 
 #: {name: (category, description)} — cancerdata-domain tables still to port.
 PLANNED: dict[str, tuple[str, str]] = {
-    # gene-id / symbol resolution
-    "ensembl-id-aliases": ("gene-id", "retired→current Ensembl gene-id aliases"),
-    "ncbi-symbol-synonyms": ("gene-id", "NCBI gene symbol synonyms"),
-    "extra-tx-mappings": ("gene-id", "supplemental transcript→gene mappings"),
-    "cdna-identical-gene-groups": ("gene-id", "cDNA-identical gene groups"),
-    "proteoform-collapse-overrides": ("gene-id", "manual proteoform-collapse overrides"),
     # ontology metadata (O5)
     "cancer-key-genes": ("ontology", "per-type biomarkers + therapy targets"),
     "cancer-driver-genes": ("ontology", "per-type driver genes"),
