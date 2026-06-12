@@ -47,6 +47,21 @@ def test_non_cta_excluded_genes_dropped():
     assert cta.NON_CTA_EXCLUDED_GENE_IDS.isdisjoint(cta.CTA_unfiltered_gene_ids())
 
 
+def test_no_histone_or_tubulin_survives_in_cta_universe():
+    # The exclusion is a gene-family rule, not a hand-list: EVERY core histone
+    # and alpha-tubulin candidate is dropped, so a sibling can't be left in (the
+    # H1-6-vs-H2BC1 inconsistency the family rule fixed). Guards future drift.
+    from cancerdata.gene_families import gene_family_ids
+    from cancerdata.load_dataset import get_data
+
+    raw = get_data("cancer-testis-antigens")
+    uid = raw["Ensembl_Gene_ID"].astype(str).str.split(".").str[0]
+    histone_candidates = set(uid[uid.isin(gene_family_ids("histone"))])
+    tubulin_candidates = set(uid[raw["Symbol"].str.match(r"^TUBA\d", na=False)])
+    survivors = (histone_candidates | tubulin_candidates) & cta.CTA_unfiltered_gene_ids()
+    assert not survivors, f"housekeeping structural genes left in the CTA universe: {survivors}"
+
+
 def test_cgb8_not_deny_listed():
     # #20: CGB8 was hardcoded out as "placental hCG-beta" while its hCG-beta
     # siblings (CGB1/2/3/5/7) flow through the normal HPA filter. CGB8 must be
