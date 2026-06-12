@@ -80,6 +80,7 @@ _PRIMARY_TISSUE_BURDEN = {
     "prostate": "prostate",
     "colon": "colorectal",
     "rectum": "colorectal",
+    "colorectum": "colorectal",  # the CRC parent node (subtypes split colon/rectum)
     "pancreas": "pancreas",
     "liver": "liver",
     "bile_duct": "gallbladder_biliary",
@@ -121,6 +122,8 @@ _PRIMARY_TISSUE_BURDEN = {
     "skin": "melanoma",
     "epidermis": "non_melanoma_skin",  # BCC / cSCC keratinocyte carcinomas
     "ependyma": "brain_cns",
+    "meninges": "brain_cns",
+    "choroid_plexus": "brain_cns",
     "sellar_suprasellar": "brain_cns",
     "pons_midline": "brain_cns",
     "pituitary": "brain_cns",
@@ -137,6 +140,9 @@ _PRIMARY_TISSUE_BURDEN = {
     "nerve_sheath": "soft_tissue_sarcoma",
     "vascular_endothelium": "soft_tissue_sarcoma",
     "gi_wall": "soft_tissue_sarcoma",
+    # Site-agnostic NET parent node; organ-specific NET subtypes carry their own
+    # primary_tissue (pancreas, lung, ...) and route there instead.
+    "neuroendocrine": "other_and_unknown_primary",
 }
 # Heme (non-plasma): lymph node -> lymphoma; marrow/blood/spleen -> leukemia.
 # AML and Hodgkin are exceptions carried in cancer-code-burden-map.csv.

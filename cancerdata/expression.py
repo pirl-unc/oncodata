@@ -35,6 +35,7 @@ import numpy as np
 import pandas as pd
 
 from . import data_bundle
+from ._build import WITHIN_SAMPLE_THRESHOLDS as _WITHIN_SAMPLE_THRESHOLD_COLS
 from .cancer_types import cohort_aggregates, resolve_cancer_type
 from .load_dataset import _BUNDLED_DATA_DIR
 
@@ -226,12 +227,9 @@ def cohort_gene_percentiles(cancer_type, *, as_tpm: bool = True) -> pd.DataFrame
 
 # ---------- within-sample percentile prevalence (signal a) ----------
 
-#: within-sample percentile-rank threshold -> output column in the artifact.
-_WITHIN_SAMPLE_THRESHOLD_COLS = {
-    0.99: "frac_samples_top1pct",
-    0.95: "frac_samples_top5pct",
-    0.90: "frac_samples_top10pct",
-}
+#: within-sample percentile-rank threshold -> output column: ``_WITHIN_SAMPLE_THRESHOLD_COLS``
+#: (imported above from :data:`cancerdata._build.WITHIN_SAMPLE_THRESHOLDS`) is the single
+#: source of truth shared with the generator, so the read side and write side can't drift.
 
 
 def _within_sample_root(*, proteoform: bool = False) -> Path:

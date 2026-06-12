@@ -23,6 +23,7 @@ in ``data/cohort-registry.csv`` and ``data/cancer-cohort-aggregates.csv``.
 from __future__ import annotations
 
 import threading
+from functools import lru_cache
 
 from .load_dataset import get_data
 
@@ -219,6 +220,7 @@ def _clear_caches():
     not part of the public surface.
     """
     CANCER_TYPE_NAMES.clear_cache()
+    _registry_frame.cache_clear()
 
 
 def resolve_cancer_type(cancer_type, *, strict=True):
@@ -483,6 +485,13 @@ def cancer_type_families():
 # ---------- Cancer-type registry ----------
 
 
+@lru_cache(maxsize=1)
+def _registry_frame():
+    """Cached registry frame (shared, read-only). Internal hot-path callers use
+    this; the public :func:`cancer_type_registry` returns a defensive copy."""
+    return get_data("cancer-type-registry", copy=False)
+
+
 def cancer_type_registry():
     """Return the cancer-type registry: one row per code with family / tissue /
     template / parent / source.
@@ -493,7 +502,7 @@ def cancer_type_registry():
     ``primary_template``, ``parent_code``, ``expression_source``, ``notes`` and
     more. Returns a defensive copy so callers can mutate freely.
     """
-    return get_data("cancer-type-registry").copy()
+    return _registry_frame().copy()
 
 
 def cancer_types_in_family(family):
@@ -528,7 +537,7 @@ def cancer_type_subtypes_of(parent_code):
 
 def _parent_of_map():
     """``{code: parent_code}`` from the registry (empty parents dropped)."""
-    df = cancer_type_registry()
+    df = _registry_frame()
     out = {}
     for code, parent in zip(df["code"], df["parent_code"]):
         if isinstance(parent, str) and parent:
@@ -577,7 +586,7 @@ def cancer_subtype_group(group_code, *, under=None):
 
 def _children_map():
     """``{parent_code: [child codes in registry order]}``."""
-    df = cancer_type_registry()
+    df = _registry_frame()
     out: dict[str, list[str]] = {}
     for code, parent in zip(df["code"], df["parent_code"]):
         if isinstance(parent, str) and parent:
