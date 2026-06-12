@@ -1,0 +1,52 @@
+fusion_class,surrogate_gene,surrogate_role,cancer_code,rationale,refs
+EWSR1-FLI1,NR0B1,activated_ectopic,SARC_EWS,EWS-FLI1 directly binds GGAA microsatellite in NR0B1 promoter → ectopic expression in ~90% of Ewing sarcoma. Normally silent outside adrenal.,PMID:17035403
+EWSR1-FLI1,FATE1,activated_ectopic,SARC_EWS,EWS-FLI1 target; GGAA microsatellite in promoter; ectopic expression in Ewing sarcoma. Normally silent outside testis.,DOI:10.1038/359162a0
+EWSR1-FLI1,GLG1,activated,SARC_EWS,EWS-FLI1 downstream target; part of the Ewing signature expression panel.,PMID:17035403
+EWSR1-FLI1,PHOX2B,activated_ectopic,SARC_EWS,EWS-FLI1 target; not normally expressed in mesenchymal tissue — its expression narrows candidates to Ewing or neuroblastoma.,PMID:17035403
+EWSR1-WT1,WT1,activated,SARC_DSRCT,DSRCT expresses the C-terminal WT1 portion from the EWSR1-WT1 fusion; WT1 expression in a small-blue-round-cell tumor + abdominal site narrows to DSRCT.,PMID:8187063
+PAX3-FOXO1,MYOD1,myogenic_lineage,SARC_RMS_ARMS,PAX3-FOXO1 locks myogenic lineage; MYOD1 expression is a defining marker of rhabdomyosarcoma.,PMID:8275086
+PAX3-FOXO1,MYOG,myogenic_lineage,SARC_RMS_ARMS,Same as MYOD1 — myogenic lineage.,PMID:8275086
+PAX3-FOXO1,SOX10,activated,SARC_RMS_ARMS,PAX3-FOXO1 target; SOX10 aberrantly expressed in alveolar-RMS.,PMID:8275086
+PAX3-FOXO1,PIPOX,activated,SARC_RMS_ARMS,PAX3-FOXO1 signature gene; used in multi-gene ARMS classifiers.,PMID:8275086
+PAX3-FOXO1,ASS1,activated,SARC_RMS_ARMS,PAX3-FOXO1 signature gene.,PMID:8275086
+SS18-SSX,SSX1,activated_ectopic,SARC_SYN,SS18-SSX fusion directly derepresses the SSX paralogs. Normally silent outside testis.,DOI:10.1038/ng0894-502
+SS18-SSX,SSX2,activated_ectopic,SARC_SYN,Same — SS18-SSX derepresses SSX2.,DOI:10.1038/ng0894-502
+SS18-SSX,SSX4,activated_ectopic,SARC_SYN,Same — SS18-SSX derepresses SSX4.,DOI:10.1038/ng0894-502
+SS18-SSX,CTAG1B,activated_ectopic,SARC_SYN,NY-ESO-1 is expressed in ~70% of synovial sarcoma via SS18-SSX-mediated chromatin opening.,DOI:10.1038/ng0894-502
+SS18-SSX,PRAME,activated_ectopic,SARC_SYN,Frequently co-expressed with NY-ESO-1 in synovial sarcoma.,DOI:10.1038/ng0894-502
+NUTM1-BRD4,NUTM1,activated_ectopic,NUTM,NUTM1 is silent in normal tissues; expression >1 TPM in a poorly-differentiated carcinoma is near-diagnostic of NUT rearrangement.,PMID:12543779
+NUTM1-BRD4,PRAME,activated_ectopic,NUTM,~70% of NUT carcinoma expresses PRAME from BRD4-mediated chromatin derepression.,PMID:12543779
+NUTM1-BRD4,MAGEA1,activated_ectopic,NUTM,MAGE-A panel is broadly derepressed in NUT carcinoma.,PMID:12543779
+NUTM1-BRD4,MAGEA3,activated_ectopic,NUTM,MAGE-A panel is broadly derepressed in NUT carcinoma.,PMID:12543779
+NUTM1-BRD4,CTAG1B,activated_ectopic,NUTM,NY-ESO-1 co-expresses with PRAME in a subset of NUT carcinoma.,PMID:12543779
+CIC-DUX4,ETV1,activated,SARC_CIC,CIC-DUX4 directly activates the ETV1/4/5 paralog panel. ETV1 elevated in CIC-rearranged sarcoma.,PMID:16717057
+CIC-DUX4,ETV4,activated,SARC_CIC,CIC-DUX4 target.,PMID:16717057
+CIC-DUX4,ETV5,activated,SARC_CIC,CIC-DUX4 target.,PMID:16717057
+CIC-DUX4,DUX4,activated_ectopic,SARC_CIC,DUX4 is normally silenced in somatic tissue; CIC-DUX4 fusion expresses the DUX4 portion.,PMID:16717057
+BCOR-CCNB3,CCNB3,activated_ectopic,SARC_BCOR,CCNB3 is normally testis-restricted; expression in a small-blue-round-cell sarcoma is near-pathognomonic.,PMID:22387997
+MN1-BEND2,BEND2,activated_ectopic,ATRT,BEND2 is normally silent in the CNS; its expression signals MN1-BEND2 fusion astroblastoma.,PMID:29539486
+ZFTA-RELA,L1CAM,activated,EPN,ZFTA-RELA drives L1CAM expression via NFκB activation; L1CAM is a pathognomonic IHC + expression marker for RELA-fusion ependymoma.,PMID:24553141
+ZFTA-RELA,CCND1,activated,EPN,NFκB target activated by ZFTA-RELA.,PMID:24553141
+ALK_rearrangement,ALK,activated_ectopic,LUAD;SARC_IMT;ALCL,ALK is normally silent post-development; expression >1 TPM plus an epithelial/mesenchymal context signals ALK rearrangement.,PMID:17625570
+NTRK_fusion,NTRK1,activated_ectopic,pan_cancer,NTRK1 is normally restricted to neural tissue; ectopic expression in other lineages signals NTRK1 fusion. TRK-inhibitor eligible (larotrectinib / entrectinib).,PMID:29466156
+NTRK_fusion,NTRK2,activated_ectopic,pan_cancer,Same — ectopic NTRK2 signals NTRK2 fusion.,PMID:29466156
+NTRK_fusion,NTRK3,activated_ectopic,pan_cancer,Same — ectopic NTRK3 signals NTRK3 (most common TRK fusion partner).,PMID:29466156
+ROS1_rearrangement,ROS1,activated_ectopic,LUAD,ROS1 is normally silent post-development; expression signals rearrangement.,PMID:22215748
+RET_fusion,RET,activated,LUAD;THCA;MTC,RET expression is normally low outside neural crest derivatives; elevated RET signals fusion or (in MTC) germline/somatic point mutation.,PMID:22327624
+BCR-ABL1,ABL1,activated,CML;B_ALL,ABL1 mRNA is a surrogate for the BCR-ABL fusion; CML diagnosis relies on fusion detection but expression is consistent with t(9;22).,PMID:15014425
+PML-RARA,RARA,activated,LAML_APL,RARA hyperexpression is part of APL's gene-expression signature; pathognomonic with MPO + CD33 panel.,PMID:17609437
+TFE3_fusion,TFE3,activated,KIRC;SARC_ASPS,Promoter swap drives TFE3 hyperexpression in Xp11 translocation RCC and alveolar soft-part sarcoma.,PMID:11552077
+YAP1-TFE3,CTGF,activated,SARC_EHE,YAP1 fusion activates YAP/TEAD targets including CTGF (CCN2).,PMID:23737213
+YAP1-TFE3,CYR61,activated,SARC_EHE,YAP/TEAD target activated by YAP1 fusion.,PMID:23737213
+YAP1-TFE3,AXL,activated,SARC_EHE,YAP/TEAD target.,PMID:23737213
+SHH_pathway,GLI1,activated,MBL_SHH,SHH-driven medulloblastoma expresses the SHH-pathway panel.,PMID:22134537
+SHH_pathway,GLI2,activated,MBL_SHH,Same.,PMID:22134537
+SHH_pathway,PTCH1,activated,MBL_SHH,Same.,PMID:22134537
+SHH_pathway,HHIP,activated,MBL_SHH,Same.,PMID:22134537
+WNT_pathway,DKK1,activated,MBL_WNT,WNT-driven medulloblastoma expresses the WNT-target panel.,PMID:22134537
+WNT_pathway,AXIN2,activated,MBL_WNT,Same.,PMID:22134537
+WNT_pathway,WIF1,activated,MBL_WNT,Same.,PMID:22134537
+MYC_amp,MYC,activated,MBL_G3;B_ALL;NUTM,MYC amplification shows up as simple hyperexpression. In the NUTM context MYC is downstream of BRD4-NUTM1.,PMID:22134537
+KMT2A_rearrangement,MEIS1,activated,LAML;B_ALL,KMT2A (MLL) rearrangement locks the HOXA9/MEIS1 transcriptional program; MEIS1 expression is a surrogate.,DOI:10.1038/ng765
+KMT2A_rearrangement,HOXA9,activated,LAML;B_ALL,Same.,DOI:10.1038/ng765
+KMT2A_rearrangement,HOXA10,activated,LAML;B_ALL,Same.,DOI:10.1038/ng765

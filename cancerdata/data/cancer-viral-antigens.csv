@@ -1,0 +1,7 @@
+virus,integration_mode,targetable_antigens,associated_cohorts,notes,source
+HPV,integrated,E6;E7,CESC;HNSC_HPVpos;ANSC;VSCC;VAGC;PENSCC,High-risk HPV (16/18/…); E6/E7 are constitutively expressed after integration and are validated TIL/TCR/vaccine targets (E6 degrades p53; E7 inactivates RB),PMID:25823737
+EBV,episomal,LMP1;LMP2A;EBNA1,NPC;DLBC;HL;BL;STAD,Latent episome; targetable antigens depend on the latency program — latency II (LMP1/LMP2A/EBNA1) in NPC and EBV+ HL; latency I (EBNA1) in BL. EBV-specific CTLs give durable responses,PMID:24344220
+HBV,integrated,HBx;HBsAg,LIHC,Clonal HBV integration in HCC retains/expresses HBx and HBsAg (preS/S); HBx is the principal oncogenic transactivator,PMID:22634756
+MCPyV,integrated,LT;sT,NEC_MERKEL,Clonally integrated Merkel-cell polyomavirus with a truncated large T (LT) plus small T (sT); both T antigens are constitutively expressed in virus-positive Merkel cell carcinoma,PMID:18202256
+HHV8,episomal,LANA,SARC_KS,KSHV/HHV8 latent episome tethered to host chromatin by LANA (ORF73); LANA is expressed in essentially all KS spindle cells,PMID:22122438
+HTLV-1,integrated,Tax;HBZ,,"Clonal proviral integration in adult T-cell leukaemia/lymphoma (ATLL); Tax drives early transformation, HBZ is constitutively expressed and maintains it. ATLL is not yet a registry cancer code.",PMID:17384582

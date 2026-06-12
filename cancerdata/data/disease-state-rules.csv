@@ -1,0 +1,9 @@
+rule_id,cancer_code,priority,claims,conditions,narrative
+prad_crpc_with_ne,PRAD,10,AR_axis,axis:AR_signaling=down | retained:AR | collapsed_ge:3=AR_targets | axis:NE_differentiation=up,"**Castrate-resistant pattern**: AR receptor retained while AR-transactivation targets ({collapsed:AR_targets}) are markedly attenuated relative to PRAD/prostate-lineage expectation — compatible with prior ADT exposure and/or current/prior AR-pathway inhibitor exposure, with **emerging neuroendocrine differentiation** (NE markers elevated; workup for NEPC warranted)."
+prad_crpc,PRAD,20,AR_axis,axis:AR_signaling=down | retained:AR | collapsed_ge:3=AR_targets,"**Castrate-resistant pattern**: AR receptor retained while AR-transactivation targets ({collapsed:AR_targets}) are markedly attenuated relative to PRAD/prostate-lineage expectation — compatible with prior ADT exposure and/or current/prior AR-pathway inhibitor exposure; confirm treatment context."
+prad_ar_suppressed,PRAD,30,AR_axis,axis:AR_signaling=down,**AR axis suppressed** — consistent with ADT exposure. Lineage AR was not retained in the sample; insufficient signal for a castrate-resistant call.
+brca_er_suppressed,BRCA,20,ER_axis,axis:ER_signaling=down | collapsed:ESR1,**ER-axis suppressed / ER-low pattern** (ESR1 low; classic ER targets collapsed). This can reflect ER-negative/basal-like biology or endocrine resistance/exposure depending on clinical context.
+brca_her2_amp,BRCA,20,HER2_axis,axis:HER2_signaling=up,**HER2-amplification pattern** (ERBB2 / GRB7 / STARD3 co-elevated).
+pan_emt_hypoxia,pan_cancer,100,EMT_axis,axis:EMT=up | axis:hypoxia=up,EMT and hypoxia programs are both active — aggressive-phenotype pattern.
+pan_emt_only,pan_cancer,110,EMT_axis,axis:EMT=up,EMT program is active (mesenchymal switch).
+pan_ifn,pan_cancer,120,,axis:IFN_response=up,**Active IFN response** — MHC-I / ISG surface fold-changes in the therapy-target tables carry IFN-driven inflation and are not tumor-cell-specific.

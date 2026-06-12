@@ -72,6 +72,18 @@ WHEEL: dict[str, tuple[str, str]] = {
     "extra-tx-mappings": ("gene-id", "supplemental transcript→gene mappings"),
     "cdna-identical-gene-groups": ("gene-id", "cDNA-identical gene groups"),
     "proteoform-collapse-overrides": ("gene-id", "manual proteoform-collapse overrides"),
+    # ontology metadata (R-onto / O5)
+    "cancer-key-genes": ("ontology", "per-type biomarkers + therapy targets"),
+    "cancer-driver-genes": ("ontology", "per-type driver genes"),
+    "cancer-driver-variants": ("ontology", "per-type driver variants"),
+    "cancer-type-genes": ("ontology", "role-stratified per-type genes"),
+    "cancer-viral-antigens": ("ontology", "per-oncovirus targetable antigens"),
+    "disease-state-rules": ("ontology", "narrative disease-state rules"),
+    "narrative-gene-sets": ("ontology", "named narrative gene sets"),
+    "degenerate-subtype-pairs": ("ontology", "expression-degenerate subtype pairs"),
+    "rare-cancer-fusion-rules": ("ontology", "direct fusion rules for rare cancers"),
+    "fusion-surrogate-expression": ("ontology", "expression surrogates for fusions"),
+    "fusion-expression-effects": ("ontology", "downstream-expression rules per fusion"),
 }
 
 #: {name: (category, description)} — heavy artifacts in the release tarball.
@@ -98,19 +110,7 @@ SOURCE: dict[str, tuple[str, str]] = {
 
 #: {name: (category, description)} — cancerdata-domain tables still to port.
 PLANNED: dict[str, tuple[str, str]] = {
-    # ontology metadata (O5)
-    "cancer-key-genes": ("ontology", "per-type biomarkers + therapy targets"),
-    "cancer-driver-genes": ("ontology", "per-type driver genes"),
-    "cancer-driver-variants": ("ontology", "per-type driver variants"),
-    "cancer-type-genes": ("ontology", "role-stratified per-type genes"),
-    "cancer-viral-antigens": ("ontology", "per-oncovirus targetable antigens"),
-    "disease-state-rules": ("ontology", "narrative disease-state rules"),
-    "narrative-gene-sets": ("ontology", "named narrative gene sets"),
-    "degenerate-subtype-pairs": ("ontology", "expression-degenerate subtype pairs"),
-    "rare-cancer-fusion-rules": ("ontology", "direct fusion rules for rare cancers"),
-    "fusion-surrogate-expression": ("ontology", "expression surrogates for fusions"),
-    "fusion-expression-effects": ("ontology", "downstream-expression rules per fusion"),
-    # expression-source metadata
+    # expression-source metadata (R-exprmeta)
     "cancer-expression-source-candidates": ("expression", "candidate expression sources per type"),
     "cancer-frameshift-burden": ("genomics", "per-type frameshift-indel burden"),
 }

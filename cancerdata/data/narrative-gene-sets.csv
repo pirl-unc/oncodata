@@ -1,0 +1,4 @@
+set_name,members,notes
+AR_targets,KLK3;KLK2;NKX3-1;HOXB13;FOLH1;TMPRSS2;SLC45A3;NDRG1;PMEPA1;FKBP5,AR-transactivation output panel (attenuated in castrate-resistant PRAD)
+HER2_amplicon,ERBB2;GRB7;STARD3;PNMT,17q12 HER2-amplification co-expression panel
+NE_markers,CHGA;SYP;ENO2;INSM1;ASCL1;NCAM1,Neuroendocrine-lineage panel

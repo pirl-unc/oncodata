@@ -148,3 +148,39 @@ def protein_family(gene):
             if isinstance(v, str) and v.strip():
                 return v
     return None
+
+
+# ---------- fusion rule / surrogate / effect tables (R-onto) ----------
+
+
+def rare_cancer_fusion_rules_df():
+    """Direct fusion-detection rules for rare cancers (``rule_id``, ``cancer_code``,
+    ``gene_a``, ``gene_b``, ``matching``, ``confidence``, …). Defensive copy."""
+    return get_data("rare-cancer-fusion-rules").copy()
+
+
+def fusion_surrogate_expression_df():
+    """Genes whose expression is a surrogate for a fusion/translocation class
+    (``fusion_class``, ``surrogate_gene``, ``surrogate_role``, ``cancer_code``, …)."""
+    return get_data("fusion-surrogate-expression").copy()
+
+
+def fusion_expression_effect_rules_df():
+    """Downstream-expression rules per fusion (``gene_a``, ``gene_b``,
+    ``anchor_genes``, ``expected_up_genes``, …). Defensive copy."""
+    return get_data("fusion-expression-effects").copy()
+
+
+def fusion_surrogate_genes_for_cancer(cancer_type):
+    """Surrogate gene symbols whose expression flags a fusion in ``cancer_type``."""
+    from .cancer_types import resolve_cancer_type
+
+    code = resolve_cancer_type(cancer_type)
+    df = fusion_surrogate_expression_df()
+    return sorted(
+        {
+            str(s)
+            for s, c in zip(df["surrogate_gene"], df["cancer_code"])
+            if str(c) == code and isinstance(s, str) and s.strip()
+        }
+    )
