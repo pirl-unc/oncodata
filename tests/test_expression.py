@@ -58,3 +58,10 @@ def test_cohort_gene_percentiles_resolves_alias(percentile_cache):
 def test_cohort_gene_percentiles_missing_raises(percentile_cache):
     with pytest.raises(ValueError, match="no percentile vector"):
         expression.cohort_gene_percentiles("BRCA")
+
+
+def test_representatives_provenance_requires_long_format():
+    # Provenance is per-representative; asking for it in the default wide form is
+    # a no-op, so it must fail loudly rather than silently dropping the request.
+    with pytest.raises(ValueError, match="include_provenance=True requires format='long'"):
+        expression.representative_cohort_samples("PRAD", include_provenance=True)

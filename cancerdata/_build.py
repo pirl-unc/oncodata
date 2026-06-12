@@ -22,9 +22,43 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 
+import numpy as np
 import pandas as pd
 
 _ID_COLS = ("Ensembl_Gene_ID", "Symbol")
+
+#: Per-gene cohort percentile breakpoints — dense in the actionable upper tail so
+#: a consumer can place a sample's gene as a percentile rank within the cohort
+#: (matches the shipped ``cancer-reference-expression-percentiles`` schema: 26
+#: ``p{n}`` columns from p0 to p100). Read back by ``expression.cohort_gene_percentiles``.
+PERCENTILE_BREAKPOINTS = (
+    0,
+    1,
+    5,
+    10,
+    15,
+    20,
+    25,
+    30,
+    35,
+    40,
+    45,
+    50,
+    55,
+    60,
+    65,
+    70,
+    75,
+    80,
+    85,
+    90,
+    95,
+    96,
+    97,
+    98,
+    99,
+    100,
+)
 
 #: threshold (within-sample percentile rank) -> output column name.
 #: 0.95 = "in the top 5% of expressed genes in that sample".
@@ -132,3 +166,105 @@ def within_sample_top_fractions(
         out[f"frac_samples_top{pct}pct"] = (ranks >= t).mean(axis=1).to_numpy()
     out["n_samples"] = len(cols)
     return out
+
+
+def cohort_percentile_vectors(
+    df: pd.DataFrame,
+    sample_cols: Iterable[str] | None = None,
+    *,
+    breakpoints: Iterable[int] = PERCENTILE_BREAKPOINTS,
+    store_log1p: bool = True,
+) -> pd.DataFrame:
+    """Per-gene cohort percentile vector (the ``…-percentiles`` artifact).
+
+    For each gene, take its expression across the cohort's samples and reduce that
+    distribution to the ``breakpoints`` percentiles (``p0`` = min … ``p50`` =
+    median … ``p100`` = max). Unlike :func:`within_sample_top_fractions` (the
+    within-sample, across-genes axis), this is the within-cohort, across-samples
+    axis — it lets a consumer place a sample's gene as a percentile rank within
+    the cohort rather than an absolute TPM.
+
+    Computed on whatever rows are passed in — the generator drops technical genes
+    first, so the breakpoints describe the biological clean-TPM view. ``NaN``
+    cells (a gene unmeasured in some samples) are ignored per gene. Stored as
+    ``log1p`` (``store_log1p=True``) in ``float16`` for compactness, exactly the
+    encoding :func:`cancerdata.expression.cohort_gene_percentiles` restores with
+    ``expm1``. Returns one row per gene with ``Ensembl_Gene_ID``, ``Symbol`` and a
+    ``p{n}`` column per breakpoint.
+    """
+    cols = list(sample_cols) if sample_cols is not None else sample_columns(df)
+    if not cols:
+        raise ValueError("no per-sample columns to summarize")
+    bps = list(breakpoints)
+
+    mat = df[cols].to_numpy(dtype=float)
+    if store_log1p:
+        mat = np.log1p(mat)
+    # nanpercentile down the sample axis (axis=1) -> shape (len(bps), n_genes).
+    # all-NaN gene rows yield NaN (np warns); suppress since it's expected.
+    with np.errstate(all="ignore"):
+        q = np.nanpercentile(mat, bps, axis=1)
+
+    out = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": df["Ensembl_Gene_ID"].astype(str).to_numpy(),
+            "Symbol": df["Symbol"].astype(str).to_numpy(),
+        }
+    )
+    for i, bp in enumerate(bps):
+        out[f"p{bp}"] = q[i].astype("float16")
+    return out
+
+
+def cohort_medoids(
+    df: pd.DataFrame,
+    sample_cols: Iterable[str] | None = None,
+    *,
+    k: int = 5,
+    distance_log1p: bool = True,
+) -> pd.DataFrame:
+    """Pick ``k`` representative real per-sample vectors spanning a cohort.
+
+    The packaged cohort references are aggregates; this selects a bounded set of
+    *real* per-sample columns to keep (the ``…-representatives`` artifact). The
+    first pick is the cohort medoid — the sample minimizing total distance to all
+    others (the most central, "typical" tumor). Each subsequent pick is the
+    sample farthest (max–min Euclidean distance) from those already chosen, a
+    deterministic farthest-first traversal that spreads the picks across the
+    within-cohort variation rather than clustering them near the center.
+
+    Distance is computed on ``log1p`` TPM (``distance_log1p=True``) so a few
+    very-high-TPM genes don't dominate the geometry, but the returned values are
+    the **original** TPM (the artifact ships clean TPM; the reader optionally
+    ``log1p``-transforms). Cohorts with ``≤ k`` samples keep all of them, in
+    input order. Returns ``Ensembl_Gene_ID``, ``Symbol`` and the ``k`` selected
+    sample columns (original names), medoid first.
+    """
+    cols = list(sample_cols) if sample_cols is not None else sample_columns(df)
+    if not cols:
+        raise ValueError("no per-sample columns to choose from")
+    base = ["Ensembl_Gene_ID", "Symbol"]
+
+    if len(cols) <= k:
+        return df[base + cols].reset_index(drop=True)
+
+    mat = df[cols].to_numpy(dtype=float).T  # samples × genes
+    if distance_log1p:
+        mat = np.log1p(mat)
+    mat = np.nan_to_num(mat, nan=0.0)
+
+    # Pairwise squared Euclidean via the ||a-b||^2 = ||a||^2 + ||b||^2 - 2a·b
+    # identity (avoids materializing an n×n×g intermediate).
+    gram = mat @ mat.T
+    sq_norms = np.diag(gram)
+    sq = sq_norms[:, None] + sq_norms[None, :] - 2.0 * gram
+    dist = np.sqrt(np.maximum(sq, 0.0))
+
+    selected = [int(np.argmin(dist.sum(axis=1)))]  # central medoid
+    while len(selected) < k:
+        min_to_selected = dist[:, selected].min(axis=1)
+        min_to_selected[selected] = -np.inf  # never re-pick
+        selected.append(int(np.argmax(min_to_selected)))
+
+    keep = [cols[i] for i in selected]
+    return df[base + keep].reset_index(drop=True)

@@ -145,6 +145,10 @@ def representative_cohort_samples(
         )
     if format not in ("wide", "long"):
         raise ValueError("format must be 'wide' or 'long'")
+    if include_provenance and format != "long":
+        # Provenance is per-representative (one row each); it only attaches to the
+        # long form. Fail loudly rather than silently dropping the request.
+        raise ValueError("include_provenance=True requires format='long'")
 
     root = _representatives_root()
     available = set(available_representative_cohorts())
