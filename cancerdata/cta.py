@@ -28,6 +28,7 @@ here. ``restriction`` and ``restriction_confidence`` in the bundled table are th
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 
 import pandas as pd
@@ -39,21 +40,41 @@ from .load_dataset import get_data
 #: ``never_expressed`` flag (low but corroborated testis signal). Unversioned ENSG.
 MANUALLY_EXPRESSED_CTA: frozenset[str] = frozenset({"ENSG00000171405"})  # XAGE5
 
-#: Genes present in a source database but excluded from the CTA universe — core
-#: histones and alpha-tubulins (housekeeping structural genes, not tumor-restricted
-#: antigens). The placental hCG-beta locus CGB8 is **not** excluded: it passes the
-#: HPA reproductive-restriction filter exactly like its siblings CGB1/2/3/5/7 (all
-#: kept), so excluding it alone was an inconsistency (see #20).
-NON_CTA_EXCLUDED_GENE_IDS: frozenset[str] = frozenset(
-    {
-        "ENSG00000274618",  # H4C6
-        "ENSG00000146047",  # H2BC1
-        "ENSG00000276410",  # H2BC3
-        "ENSG00000124610",  # H1-1
-        "ENSG00000198033",  # TUBA3C
-        "ENSG00000152086",  # TUBA3E
-    }
-)
+
+def _alpha_tubulin_symbol(symbol: str) -> bool:
+    """Alpha-tubulin family (``TUBA1A``, ``TUBA3C``, …) — ubiquitous structural
+    housekeeping genes, not tumor-restricted antigens."""
+    return bool(re.match(r"^TUBA\d", str(symbol)))
+
+
+@lru_cache(maxsize=1)
+def _non_cta_excluded_gene_ids() -> frozenset[str]:
+    """Unversioned Ensembl IDs excluded from the CTA universe by a gene-family rule:
+    a candidate that is a **core histone** (member of ``histone-genes.csv``) or an
+    **alpha-tubulin** is a ubiquitous structural housekeeping gene that entered via a
+    source database but is not a tumor-restricted antigen.
+
+    Deriving the set from gene family (rather than a hand-listed set of IDs) keeps it
+    self-maintaining and consistent: it caught H1-6, a core histone that passed the
+    HPA filter exactly like its deny-listed siblings H2BC1/H1-1 but had been left in
+    (the same one-gene inconsistency fixed for CGB8 in #20). The placental hCG-beta
+    locus CGB8 is **not** here — it is a real reproductive-restricted antigen like
+    CGB1/2/3/5/7, not a housekeeping gene.
+    """
+    from .gene_families import gene_family_ids
+
+    df = get_data("cancer-testis-antigens", copy=False)
+    if "Ensembl_Gene_ID" not in df.columns:
+        return frozenset()
+    unversioned = df["Ensembl_Gene_ID"].astype(str).str.split(".").str[0]
+    histones = unversioned.isin(gene_family_ids("histone"))
+    tubulins = df["Symbol"].map(_alpha_tubulin_symbol) if "Symbol" in df.columns else False
+    return frozenset(unversioned[histones | tubulins])
+
+
+#: Backwards-compatible alias: the family-derived exclusion set (see
+#: :func:`_non_cta_excluded_gene_ids`). Computed once at import.
+NON_CTA_EXCLUDED_GENE_IDS: frozenset[str] = _non_cta_excluded_gene_ids()
 
 _PASSES_FILTERS_COLUMN = "passes_filters"
 _LEGACY_FILTERED_COLUMN = "filtered"
