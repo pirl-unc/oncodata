@@ -1,0 +1,52 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+"""CTA regeneration from HPA — parity with the shipped table (#35, Phase C)."""
+
+import io
+from pathlib import Path
+
+import pandas as pd
+import pytest
+
+from cancerdata import cta_regen, reference_data
+
+_CSV = Path(__file__).resolve().parents[1] / "cancerdata" / "data" / "cancer-testis-antigens.csv"
+
+_HPA_READY = reference_data.is_cached("hpa_rna_consensus") and reference_data.is_cached(
+    "hpa_normal_tissue"
+)
+
+
+def test_fraction_deflation_semantics():
+    # All-below-1 nTPM -> deflated total 0 -> 1.0 (restricted by the +1 pseudocount).
+    f = cta_regen._fraction
+    repro = frozenset({"testis"})
+    assert f({"testis": 0.5, "liver": 0.4}, repro, deflate=True) == 1.0
+    assert f({"testis": 0.5, "liver": 0.4}, repro, deflate=False) < 1.0
+    # A real somatic signal lowers the deflated reproductive fraction.
+    val = f({"testis": 10.0, "liver": 10.0}, repro, deflate=True)
+    assert 0.0 < val < 1.0
+
+
+@pytest.mark.skipif(not _HPA_READY, reason="HPA v23 not cached")
+def test_regeneration_reproduces_shipped_table():
+    # Regenerating the 47 HPA columns from HPA v23 must reproduce the shipped,
+    # cancerdata-owned table exactly — proof the regenerator is the source of truth.
+    regen = cta_regen.regenerate_cta_columns(pd.read_csv(_CSV))
+    buf = io.StringIO()
+    regen.to_csv(buf, index=False)
+    from_regen = pd.read_csv(io.StringIO(buf.getvalue()), dtype=str, keep_default_na=False)
+    shipped = pd.read_csv(_CSV, dtype=str, keep_default_na=False)
+    pd.testing.assert_frame_equal(from_regen, shipped)
+
+
+@pytest.mark.skipif(not _HPA_READY, reason="HPA v23 not cached")
+def test_regeneration_preserves_identity_columns():
+    old = pd.read_csv(_CSV)
+    regen = cta_regen.regenerate_cta_columns(old)
+    for col in ("Symbol", "Ensembl_Gene_ID", "Aliases", "source_databases", "biotype"):
+        assert (regen[col].astype(str) == old[col].astype(str)).all()

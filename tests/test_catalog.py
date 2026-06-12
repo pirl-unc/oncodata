@@ -82,6 +82,12 @@ def test_fetch_all_fetches_bundle_once_and_each_hpa(monkeypatch):
         lambda *a, **k: calls.__setitem__("bundle_fetch", calls["bundle_fetch"] + 1),
     )
     monkeypatch.setattr(reference_data, "download", lambda n, *a, **k: calls["hpa"].append(n))
+    # Hermetic regardless of a populated HPA cache: treat every source as absent.
+    monkeypatch.setattr(
+        reference_data,
+        "local_path",
+        lambda n, *a, **k: type("P", (), {"exists": lambda s: False})(),
+    )
 
     fetched = catalog.fetch("all")
     # The tarball is fetched exactly once despite 5 bundle members.
