@@ -476,7 +476,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="list (catalog), status (cache state), fetch (download), path (ensure + print)",
     )
     p_data.add_argument(
-        "name", nargs="?", default=None, help="Dataset name (omit for all on list/status/fetch)"
+        "name",
+        nargs="?",
+        default=None,
+        help="Dataset name; or a fetch target: all / hpa / bundle / source / "
+        "per-sample:<CODE> (omit = all)",
     )
     p_data.add_argument("--force", action="store_true", help="Re-download even if cached")
     p_data.set_defaults(func=_cmd_data)

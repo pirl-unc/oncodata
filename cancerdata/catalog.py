@@ -36,10 +36,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import data_bundle, data_manifest, reference_data
+from . import data_bundle, data_manifest, reference_data, source_matrices
 
 _BUNDLE = "bundle"
 _HPA = "hpa"
+
+#: prefix for addressing one cohort's raw per-sample matrix (``per-sample:LUAD``).
+_PER_SAMPLE = "per-sample:"
 
 #: Human-readable descriptions for the expression-bundle members.
 _BUNDLE_DESCRIPTIONS = {
@@ -96,7 +99,11 @@ def dataset(name: str) -> Dataset:
 
 def path(name: str) -> Path | None:
     """The dataset's on-disk location if present in the cache, else ``None``
-    (never triggers a download)."""
+    (never triggers a download). ``per-sample:<code>`` addresses one cohort's
+    raw per-sample matrix."""
+    if name.startswith(_PER_SAMPLE):
+        code = name[len(_PER_SAMPLE) :]
+        return source_matrices.local_path(code) if source_matrices.is_cached(code) else None
     d = dataset(name)
     if d.kind == _HPA:
         p = reference_data.local_path(name)
@@ -108,8 +115,11 @@ def ensure(name: str) -> Path:
     """Local path to ``name``, downloading if absent. Returns the path.
 
     HPA sources fetch per-file; a bundle member triggers the one-time tarball
-    download (all bundle members arrive together).
+    download (all bundle members arrive together); ``per-sample:<code>`` fetches
+    one cohort's raw matrix.
     """
+    if name.startswith(_PER_SAMPLE):
+        return source_matrices.ensure(name[len(_PER_SAMPLE) :])
     d = dataset(name)
     if d.kind == _HPA:
         return reference_data.ensure(name)
@@ -122,14 +132,40 @@ def ensure(name: str) -> Path:
     return resolved
 
 
-def fetch(name: str = "all", *, force: bool = False) -> list[str]:
-    """Materialize dataset(s), downloading what's missing. ``name="all"`` covers
-    everything (the bundle tarball is fetched once, not once per member).
+def fetch(target: str = "all", *, force: bool = False) -> list[str]:
+    """Materialize data, downloading what's missing. ``target`` selects what:
 
-    Returns the dataset names that were **actually downloaded** — already-cached
-    datasets are skipped (unless ``force``) and not reported.
+    - ``"all"`` — the reference data (expression bundle + every HPA source);
+    - ``"bundle"`` / ``"hpa"`` — just that kind (e.g. ``fetch("hpa")`` for HPA only);
+    - ``"source"`` — every cohort's raw per-sample matrix (~21 GB; opt-in, not in ``"all"``);
+    - ``"per-sample:<code>"`` — one cohort's raw matrix;
+    - a dataset name — just that dataset.
+
+    Returns the names actually downloaded (already-cached skipped unless ``force``).
+    The bundle tarball is fetched at most once.
     """
-    targets = [d.name for d in datasets()] if name == "all" else [dataset(name).name]
+    # one cohort's raw per-sample matrix
+    if target.startswith(_PER_SAMPLE):
+        code = target[len(_PER_SAMPLE) :]
+        already = source_matrices.is_cached(code)
+        source_matrices.fetch(code, force=force)
+        return [target] if force or not already else []
+    # every per-sample matrix (heavy; deliberately not part of "all")
+    if target == "source":
+        out = []
+        for code in source_matrices.available_cohorts():
+            if force or not source_matrices.is_cached(code):
+                source_matrices.fetch(code, force=force)
+                out.append(f"{_PER_SAMPLE}{code}")
+        return out
+
+    if target == "all":
+        targets = [d.name for d in datasets()]
+    elif target in (_BUNDLE, _HPA):
+        targets = [d.name for d in datasets() if d.kind == target]
+    else:
+        targets = [dataset(target).name]
+
     downloaded = []
     # The bundle is one tarball — fetch it a single time if any member is targeted.
     bundle_targets = [n for n in targets if dataset(n).kind == _BUNDLE]
@@ -185,7 +221,8 @@ def inventory() -> list[dict]:
             }
         )
 
-    for name, (cat, desc) in sorted(data_manifest.WHEEL.items()):
+    wheel = {**data_manifest.WHEEL, **data_manifest.CANCERDATA_ORIGINATED}
+    for name, (cat, desc) in sorted(wheel.items()):
         _add(name, "wheel", cat, desc, True)  # ships in the wheel — always present
     for name, (cat, desc) in sorted(data_manifest.BUNDLE.items()):
         member = data_bundle.find(bundle_member[name])
@@ -193,7 +230,9 @@ def inventory() -> list[dict]:
     for name, (cat, desc) in sorted(data_manifest.HPA.items()):
         _add(name, "hpa", cat, desc, reference_data.local_path(name).exists())
     for name, (cat, desc) in sorted(data_manifest.SOURCE.items()):
-        _add(name, "source", cat, desc, False)  # not distributed through cancerdata yet
+        cohorts = source_matrices.available_cohorts()
+        available = any(source_matrices.is_cached(c) for c in cohorts)
+        _add(name, "source", cat, desc, available, len(cohorts))  # per-cohort fetchable
     for name, (cat, desc) in sorted(data_manifest.PLANNED.items()):
         _add(name, "planned", cat, desc, False)  # cancerdata-domain, still to port
     return rows

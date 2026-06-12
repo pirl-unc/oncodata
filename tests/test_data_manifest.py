@@ -67,3 +67,23 @@ def test_bundle_matches_downloadable_paths():
 
 def test_hpa_matches_reference_sources():
     assert set(data_manifest.HPA) == set(reference_data.REFERENCE_SOURCES)
+
+
+def test_cancerdata_originated_tables_ship():
+    # The wheel tables cancerdata generates itself (CTA, proteoform groups, the
+    # source-matrix registry) must actually be present and appear in the inventory.
+    from cancerdata import catalog
+
+    missing = [n for n in data_manifest.CANCERDATA_ORIGINATED if not _wheel_file_exists(n)]
+    assert not missing, f"cancerdata-originated tables not shipped: {missing}"
+    inv = {r["name"] for r in catalog.inventory()}
+    assert set(data_manifest.CANCERDATA_ORIGINATED) <= inv
+
+
+def test_originated_not_in_pirlygenes_classification():
+    # cancerdata-originated tables are NOT pirlygenes files, so must not collide
+    # with the pirlygenes-derived buckets.
+    classified = (
+        set(data_manifest.WHEEL) | set(data_manifest.PLANNED) | set(data_manifest.OUT_OF_SCOPE)
+    )
+    assert set(data_manifest.CANCERDATA_ORIGINATED).isdisjoint(classified)

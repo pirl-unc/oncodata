@@ -121,6 +121,16 @@ SUPERSEDED: dict[str, str] = {
     "cta-protein-groups": "proteoform-groups (byte-identical; pirlygenes' is ≥90% identity)",
 }
 
+#: {name: (category, description)} — cancerdata-ORIGINATED wheel tables: derived or
+#: regenerated here rather than copied from pirlygenes, so they aren't in the
+#: pirlygenes snapshot but DO ship in the wheel and belong in the inventory.
+CANCERDATA_ORIGINATED: dict[str, tuple[str, str]] = {
+    "cancer-testis-antigens": ("cta", "CTA definition (HPA tissue-restriction over candidates)"),
+    "proteoform-groups": ("gene-id", "byte-identical CTA proteoform groups"),
+    "proteoform-groups-genome": ("gene-id", "byte-identical proteoform groups (genome-wide)"),
+    "source-matrices": ("expression", "per-cohort raw-matrix registry (code/source/n_samples)"),
+}
+
 #: pirlygenes data that is NOT cancerdata's domain — target selection / therapy /
 #: surfaceome / analysis gene sets. These stay in tsarina / hitlist.
 OUT_OF_SCOPE: frozenset[str] = frozenset(
