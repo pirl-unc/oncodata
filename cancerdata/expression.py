@@ -34,10 +34,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from . import data_bundle
+from . import data_bundle, source_matrices
 from ._build import WITHIN_SAMPLE_THRESHOLDS as _WITHIN_SAMPLE_THRESHOLD_COLS
 from .cancer_types import cohort_aggregates, resolve_cancer_type
 from .load_dataset import _BUNDLED_DATA_DIR
+from .normalization import clean_tpm
 
 _REPRESENTATIVES_DIR = "cancer-reference-expression-representatives"
 _PERCENTILES_DIR = "cancer-reference-expression-percentiles"
@@ -117,6 +118,56 @@ def available_representative_cohorts() -> list[str]:
 def available_percentile_cohorts() -> list[str]:
     """Cohort codes that ship a per-gene percentile-vector shard (sorted)."""
     return _available_shard_codes(_percentiles_root())
+
+
+_PER_SAMPLE_NORMALIZE = ("tpm_raw", "tpm_clean", "tpm_clean_log1p")
+
+
+def per_sample_expression(
+    cancer_type, *, normalize: str = "tpm_clean", auto_fetch: bool = True
+) -> pd.DataFrame:
+    """Full per-sample expression matrix (genes x **every** sample) for a cohort.
+
+    The packaged references are summaries — per-gene percentile vectors, bounded
+    medoid :func:`representative_cohort_samples`, within-sample top fractions. This
+    returns the raw material behind them: one column per individual sample, so a
+    consumer can ask per-patient questions a summary can't answer ("in what
+    fraction of patients is this gene expressed", greedy antigen co-occurrence
+    coverage, …). It fetches the cohort's per-sample matrix via
+    :mod:`cancerdata.source_matrices` (a per-cohort release asset, tens of MB) and
+    normalizes it.
+
+    ``normalize``:
+      - ``"tpm_clean"`` (default) — two-compartment clean TPM (the comparable
+        biological view the summaries are built on);
+      - ``"tpm_clean_log1p"`` — clean TPM, ``log1p``-transformed;
+      - ``"tpm_raw"`` — the matrix as shipped (raw TPM), no normalization.
+
+    ``auto_fetch=False`` raises instead of downloading if the matrix isn't cached.
+    Returns ``Ensembl_Gene_ID``, ``Symbol`` and one column per sample.
+    """
+    if normalize not in _PER_SAMPLE_NORMALIZE:
+        raise ValueError(f"normalize must be one of {_PER_SAMPLE_NORMALIZE}")
+    code = resolve_cancer_type(cancer_type, strict=False) or cancer_type
+    if auto_fetch:
+        path = source_matrices.ensure(code)
+    else:
+        path = source_matrices.local_path(code)
+        if not path.exists():
+            raise FileNotFoundError(
+                f"per-sample matrix for {code!r} not cached at {path}. "
+                f"Run source_matrices.fetch({code!r}) to download it."
+            )
+    raw = pd.read_parquet(path)
+    base = ["Ensembl_Gene_ID", "Symbol"]
+    samples = [c for c in raw.columns if c not in base]
+    if normalize == "tpm_raw":
+        return raw
+    clean = clean_tpm(raw[samples], gene_table=raw[base])
+    out = pd.concat([raw[base].reset_index(drop=True), clean.reset_index(drop=True)], axis=1)
+    if normalize == "tpm_clean_log1p":
+        out[samples] = np.log1p(out[samples].to_numpy(dtype=float))
+    return out
 
 
 def representative_cohort_samples(

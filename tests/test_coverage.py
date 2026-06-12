@@ -1,0 +1,98 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from cancerdata import coverage
+
+# A controlled 3-gene × 4-patient fixture (threshold 5):
+#   gA expressed in p0,p1   gB in p2   gC in p1 (redundant with gA)   p3 uncovered
+_GENES = ["ENSG_A", "ENSG_B", "ENSG_C"]
+_FIXTURE = pd.DataFrame(
+    {
+        "Ensembl_Gene_ID": _GENES,
+        "Symbol": ["GA", "GB", "GC"],
+        "p0": [10.0, 0.0, 0.0],
+        "p1": [10.0, 0.0, 10.0],
+        "p2": [0.0, 10.0, 0.0],
+        "p3": [0.0, 0.0, 0.0],
+    }
+)
+
+
+@pytest.fixture
+def patched(monkeypatch):
+    monkeypatch.setattr(coverage, "per_sample_expression", lambda *a, **k: _FIXTURE.copy())
+    return _GENES
+
+
+def test_patient_fractions(patched):
+    pf = coverage.cta_patient_fractions("X", threshold_tpm=5, gene_ids=patched)
+    frac = dict(zip(pf["Ensembl_Gene_ID"], pf["fraction_expressing"]))
+    assert frac["ENSG_A"] == 0.5  # p0, p1
+    assert frac["ENSG_B"] == 0.25  # p2
+    assert frac["ENSG_C"] == 0.25  # p1
+    assert (pf["n_patients"] == 4).all()
+    # sorted by prevalence descending
+    assert next(iter(pf["Ensembl_Gene_ID"])) == "ENSG_A"
+
+
+def test_addressable_fraction_is_the_union(patched):
+    # Covered patients = p0,p1,p2 (p3 expresses nothing) -> 3/4. NOT the 0.5+0.25+0.25
+    # sum of per-gene fractions.
+    af = coverage.addressable_fraction("X", threshold_tpm=5, gene_ids=patched)
+    assert af == 0.75
+    # The union is >= the best single gene and <= the naive sum.
+    assert af >= 0.5
+    assert af < 0.5 + 0.25 + 0.25
+
+
+def test_greedy_coverage_is_set_cover(patched):
+    gc = coverage.greedy_coverage("X", threshold_tpm=5, gene_ids=patched)
+    # gA (covers p0,p1) first, then gB (covers p2); gC adds nothing -> excluded.
+    assert list(gc["Symbol"]) == ["GA", "GB"]
+    assert list(gc["marginal_patients"]) == [2, 1]
+    assert gc["cumulative_fraction"].iloc[-1] == 0.75  # == addressable_fraction
+    # cumulative is monotonic non-decreasing
+    assert (gc["cumulative_fraction"].diff().dropna() > 0).all()
+
+
+def test_greedy_respects_max_genes(patched):
+    gc = coverage.greedy_coverage("X", threshold_tpm=5, gene_ids=patched, max_genes=1)
+    assert len(gc) == 1
+    assert gc["cumulative_fraction"].iloc[0] == 0.5
+
+
+def test_empty_panel_is_zero(monkeypatch):
+    monkeypatch.setattr(coverage, "per_sample_expression", lambda *a, **k: _FIXTURE.copy())
+    assert coverage.addressable_fraction("X", gene_ids=[]) == 0.0
+    assert coverage.greedy_coverage("X", gene_ids=[]).empty
+
+
+def test_high_threshold_covers_nobody(patched):
+    # Nothing clears 1000 TPM -> 0 addressable, empty greedy panel.
+    assert coverage.addressable_fraction("X", threshold_tpm=1000, gene_ids=patched) == 0.0
+    assert coverage.greedy_coverage("X", threshold_tpm=1000, gene_ids=patched).empty
+
+
+# ---- real-data parity (skipped unless the source-matrix cache is staged) ----
+
+from cancerdata import source_matrices as _sm  # noqa: E402
+
+_LUAD_READY = _sm.is_cached("LUAD") if "LUAD" in _sm.available_cohorts() else False
+
+
+@pytest.mark.skipif(not _LUAD_READY, reason="LUAD per-sample matrix not staged")
+def test_real_cohort_coverage_is_consistent():
+    af = coverage.addressable_fraction("LUAD", threshold_tpm=10)
+    pf = coverage.cta_patient_fractions("LUAD", threshold_tpm=10)
+    gc = coverage.greedy_coverage("LUAD", threshold_tpm=10)
+    # union >= best single CTA, <= 1, and the greedy curve converges to it.
+    assert pf["fraction_expressing"].max() <= af <= 1.0
+    assert abs(gc["cumulative_fraction"].iloc[-1] - af) < 1e-9
+    assert (np.diff(gc["cumulative_fraction"].to_numpy()) > 0).all()

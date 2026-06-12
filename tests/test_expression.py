@@ -65,3 +65,50 @@ def test_representatives_provenance_requires_long_format():
     # a no-op, so it must fail loudly rather than silently dropping the request.
     with pytest.raises(ValueError, match="include_provenance=True requires format='long'"):
         expression.representative_cohort_samples("PRAD", include_provenance=True)
+
+
+def _raw_matrix(tmp_path):
+    # A tiny raw-TPM per-sample matrix (genes x samples) whose columns sum near 1e6.
+    df = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["ENSG1", "ENSG2", "ENSG3"],
+            "Symbol": ["A", "B", "C"],
+            "s1": [500000.0, 300000.0, 200000.0],
+            "s2": [100000.0, 600000.0, 300000.0],
+        }
+    )
+    path = tmp_path / "PRAD.parquet"
+    df.to_parquet(path, index=False)
+    return path
+
+
+def test_per_sample_expression_normalize_modes(tmp_path, monkeypatch):
+    path = _raw_matrix(tmp_path)
+    monkeypatch.setattr(expression.source_matrices, "ensure", lambda code: path)
+
+    raw = expression.per_sample_expression("PRAD", normalize="tpm_raw")
+    assert list(raw.columns) == ["Ensembl_Gene_ID", "Symbol", "s1", "s2"]
+    assert raw["s1"].sum() == pytest.approx(1e6)
+
+    clean = expression.per_sample_expression("PRAD", normalize="tpm_clean")
+    # No technical/censored genes in this fixture -> the technical compartment is
+    # empty and the biological compartment fills its 750k budget (clean_tpm's
+    # two-compartment contract). A real matrix with technical genes sums to ~1e6.
+    assert clean["s1"].sum() == pytest.approx(750000.0, rel=1e-6)
+    assert list(clean.columns) == ["Ensembl_Gene_ID", "Symbol", "s1", "s2"]
+
+    logged = expression.per_sample_expression("PRAD", normalize="tpm_clean_log1p")
+    assert np.allclose(logged["s1"].to_numpy(), np.log1p(clean["s1"].to_numpy()))
+
+
+def test_per_sample_expression_bad_normalize(tmp_path, monkeypatch):
+    monkeypatch.setattr(expression.source_matrices, "ensure", lambda code: _raw_matrix(tmp_path))
+    with pytest.raises(ValueError, match="normalize must be one of"):
+        expression.per_sample_expression("PRAD", normalize="zscore")
+
+
+def test_per_sample_expression_no_autofetch_raises(monkeypatch, tmp_path):
+    missing = tmp_path / "nope.parquet"
+    monkeypatch.setattr(expression.source_matrices, "local_path", lambda code: missing)
+    with pytest.raises(FileNotFoundError, match="not cached"):
+        expression.per_sample_expression("PRAD", auto_fetch=False)

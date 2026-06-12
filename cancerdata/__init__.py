@@ -55,6 +55,12 @@ from .cancer_types import (
     tissue_of_origin,
     viral_status,
 )
+from .coverage import (
+    addressable_fraction,
+    addressable_fraction_by_cohort,
+    cta_patient_fractions,
+    greedy_coverage,
+)
 from .cta import (
     CTA_evidence,
     CTA_excluded_gene_names,
@@ -73,6 +79,7 @@ from .expression import (
     available_representative_cohorts,
     available_within_sample_cohorts,
     cohort_gene_percentiles,
+    per_sample_expression,
     proteoform_representative_samples,
     representative_cohort_samples,
     within_sample_top_fraction,
@@ -139,6 +146,9 @@ __all__ = [
     # expression sources + per-sample curation
     "ExpressionSource",
     "__version__",
+    # expression (read accessors over the downloadable bundle)
+    "addressable_fraction",
+    "addressable_fraction_by_cohort",
     "available_percentile_cohorts",
     "available_representative_cohorts",
     "available_within_sample_cohorts",
@@ -177,12 +187,12 @@ __all__ = [
     # cohort vocabulary
     "cohort_aggregates",
     "cohort_aggregates_df",
-    # expression (read accessors over the downloadable bundle)
     "cohort_gene_percentiles",
     "cohort_kind",
     "cohort_registry",
     "cohort_registry_df",
     "cta_dataframe",
+    "cta_patient_fractions",
     "expression_source",
     "expression_sources",
     "family_display_name",
@@ -193,6 +203,7 @@ __all__ = [
     "gene_protein_tissues",
     "gene_tissue_ntpm",
     "gene_to_proteoform",
+    "greedy_coverage",
     "hpa_normal_tissue",
     # HPA normal-tissue reference data
     "hpa_rna_consensus",
@@ -200,6 +211,7 @@ __all__ = [
     "is_mixture_cohort",
     "known_cohort_ids",
     "mixture_cohort_codes",
+    "per_sample_expression",
     "protein_family",
     "proteoform_for_gene",
     "proteoform_group_map",
