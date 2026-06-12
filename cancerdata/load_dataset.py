@@ -41,11 +41,26 @@ _CACHED_DATAFRAMES: dict = {}
 # Back-compat alias.
 _DATA_DIR = _BUNDLED_DATA_DIR
 
+#: Clear callbacks for caches DERIVED from get_data results (e.g. processed
+#: lookups in incidence / cta). Each cache-holder registers its ``cache_clear`` via
+#: :func:`_register_derived_cache`; :func:`_clear_cache` drives them so swapping a
+#: bundled fixture invalidates the derived views too — no module needs to know
+#: about another's caches.
+_DERIVED_CACHE_CLEARERS: list = []
+
+
+def _register_derived_cache(clear_fn) -> None:
+    """Register a ``cache_clear``-style callback to run on :func:`_clear_cache`."""
+    _DERIVED_CACHE_CLEARERS.append(clear_fn)
+
 
 def _clear_cache() -> None:
-    """Drop cached frames + dataset-path map. Test hook for swapping fixtures."""
+    """Drop cached frames + dataset-path map + every derived cache. Test hook for
+    swapping fixtures."""
     _CACHED_DATAFRAMES.clear()
     _invalidate_dataset_paths()
+    for clear_fn in _DERIVED_CACHE_CLEARERS:
+        clear_fn()
 
 
 def _data_roots() -> list[Path]:

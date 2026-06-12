@@ -34,7 +34,7 @@ from functools import lru_cache
 import pandas as pd
 
 from .cta_tissues import HPA_EXPRESSION_FLOOR_NTPM
-from .load_dataset import get_data
+from .load_dataset import _register_derived_cache, get_data
 
 
 def _never_expressed_rescue_mask(df: pd.DataFrame) -> pd.Series:
@@ -86,8 +86,11 @@ def _non_cta_excluded_gene_ids() -> frozenset[str]:
     return frozenset(unversioned[histones | tubulins])
 
 
-#: Backwards-compatible alias: the family-derived exclusion set (see
-#: :func:`_non_cta_excluded_gene_ids`). Computed once at import.
+_register_derived_cache(_non_cta_excluded_gene_ids.cache_clear)
+
+#: Backwards-compatible snapshot of the family-derived exclusion set (see
+#: :func:`_non_cta_excluded_gene_ids`). Computed once at import; the live filter in
+#: :func:`_cta_frame` calls the cached function so a fixture swap stays correct.
 NON_CTA_EXCLUDED_GENE_IDS: frozenset[str] = _non_cta_excluded_gene_ids()
 
 _PASSES_FILTERS_COLUMN = "passes_filters"
@@ -157,10 +160,14 @@ def _cta_frame() -> pd.DataFrame:
     """Cached CTA table with the non-CTA excluded genes dropped. Internal,
     read-only — do not mutate; public callers get a copy via cta_dataframe()."""
     df = get_data("cancer-testis-antigens", copy=False)
-    if "Ensembl_Gene_ID" in df.columns and NON_CTA_EXCLUDED_GENE_IDS:
+    excluded = _non_cta_excluded_gene_ids()
+    if "Ensembl_Gene_ID" in df.columns and excluded:
         unversioned = df["Ensembl_Gene_ID"].astype(str).str.split(".").str[0]
-        df = df[~unversioned.isin(NON_CTA_EXCLUDED_GENE_IDS)].reset_index(drop=True)
+        df = df[~unversioned.isin(excluded)].reset_index(drop=True)
     return df
+
+
+_register_derived_cache(_cta_frame.cache_clear)
 
 
 def cta_dataframe() -> pd.DataFrame:

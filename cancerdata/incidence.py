@@ -18,7 +18,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from .cancer_types import cancer_type_registry, resolve_cancer_type
-from .load_dataset import get_data
+from .load_dataset import _register_derived_cache, get_data
 
 _BURDEN_METRICS = (
     "us_incidence_pct",
@@ -94,6 +94,10 @@ def _family_burden_map() -> dict[str, str]:
     the cns-* families, carcinoma-skin)."""
     df = get_data("family-burden-map")
     return dict(zip(df["family"].astype(str), df["burden_category"].astype(str)))
+
+
+_register_derived_cache(_tissue_burden_map.cache_clear)
+_register_derived_cache(_family_burden_map.cache_clear)
 
 
 def burden_category(cancer_type):

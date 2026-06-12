@@ -214,13 +214,17 @@ CANCER_TYPE_NAMES = _CancerTypeNamesView()
 
 
 def _clear_caches():
-    """Reset every registry-backed cache in this module.
+    """Reset every registry-backed cache in this module, plus the load_dataset
+    frame cache and all derived caches (incidence/cta lookups).
 
     Test hook for swapping the registry CSV via a monkey-patched ``get_data``;
     not part of the public surface.
     """
+    from .load_dataset import _clear_cache
+
     CANCER_TYPE_NAMES.clear_cache()
     _registry_frame.cache_clear()
+    _clear_cache()  # frame cache + registered derived caches (burden maps, CTA, …)
 
 
 def resolve_cancer_type(cancer_type, *, strict=True):

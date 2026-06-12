@@ -4,9 +4,33 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
+import pandas as pd
 import pytest
 
 from cancerdata import incidence
+from cancerdata import load_dataset as ld
+
+
+def test_derived_burden_cache_invalidates_on_clear(monkeypatch):
+    # The lru_cached burden maps must be cleared by load_dataset._clear_cache(),
+    # so swapping a bundled fixture is reflected (test-isolation guard).
+    incidence._tissue_burden_map()  # populate the cache
+    real = incidence.get_data
+
+    def fake(name, *a, **k):
+        if name == "tissue-burden-map":
+            return pd.DataFrame(
+                {"primary_tissue": ["unobtanium"], "burden_category": ["xyzzy"], "scope": ["solid"]}
+            )
+        return real(name, *a, **k)
+
+    monkeypatch.setattr(incidence, "get_data", fake)
+    ld._clear_cache()
+    try:
+        assert incidence._tissue_burden_map() == {"unobtanium": "xyzzy"}
+    finally:
+        monkeypatch.undo()
+        ld._clear_cache()  # restore real data for other tests
 
 
 def test_burden_map_nonempty_floats():

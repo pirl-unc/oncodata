@@ -52,7 +52,7 @@ from .cta_tissues import (
     SAFETY_NTPM_THRESHOLD,
     SAFETY_TISSUE_GROUPS,
 )
-from .load_dataset import get_data
+from .load_dataset import _register_derived_cache, get_data
 
 # ── Curated overrides ──────────────────────────────────────────────────────
 
@@ -71,6 +71,9 @@ def cross_reactive_ihc() -> frozenset[str]:
     """
     df = get_data("cta-ihc-unreliable", copy=False)
     return frozenset(df["Ensembl_Gene_ID"].astype(str).str.split(".").str[0])
+
+
+_register_derived_cache(cross_reactive_ihc.cache_clear)
 
 
 #: Reproductive (+thymus) tissues, lowercased, for the protein restriction call.
