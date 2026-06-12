@@ -50,3 +50,16 @@ def test_regeneration_preserves_identity_columns():
     regen = cta_regen.regenerate_cta_columns(old)
     for col in ("Symbol", "Ensembl_Gene_ID", "Aliases", "source_databases", "biotype"):
         assert (regen[col].astype(str) == old[col].astype(str)).all()
+
+
+def test_rna_only_below_floor_confidence_is_capped():
+    # tsarina#114 cap: no gene with no protein and rna_max_ntpm < 2.0 may keep a
+    # HIGH restriction_confidence (near-noise RNA must not earn HIGH).
+    df = pd.read_csv(_CSV, dtype=str, keep_default_na=False)
+    rna_max = pd.to_numeric(df["rna_max_ntpm"], errors="coerce")
+    offenders = df[
+        (df["restriction_confidence"] == "HIGH")
+        & (df["protein_restriction"] == "NO_DATA")
+        & (rna_max < 2.0)
+    ]
+    assert offenders.empty, sorted(offenders["Symbol"])

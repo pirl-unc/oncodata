@@ -32,6 +32,7 @@ from functools import lru_cache
 
 import pandas as pd
 
+from .cta_tissues import HPA_EXPRESSION_FLOOR_NTPM
 from .load_dataset import get_data
 
 #: Borderline-but-real CTAs kept in the expressed set despite an HPA
@@ -102,6 +103,15 @@ def synthesize_restriction(row) -> tuple[str, str]:
         confidence = "MODERATE"
     else:
         confidence = "LOW"
+
+    # Cap HIGH when the only evidence is RNA below the expression floor: the scorer
+    # credits any STRICT RNA equally, so a gene at ~1-2 nTPM (never_expressed, no
+    # protein) would otherwise earn HIGH from near-noise RNA. Genes with protein
+    # evidence are untouched. (HPA-only port of tsarina#114; no MS term here.)
+    if confidence == "HIGH" and not protein_has_data:
+        rna_max = pd.to_numeric(row.get("rna_max_ntpm"), errors="coerce")
+        if pd.notna(rna_max) and rna_max < HPA_EXPRESSION_FLOOR_NTPM:
+            confidence = "MODERATE"
     return tissue, confidence
 
 

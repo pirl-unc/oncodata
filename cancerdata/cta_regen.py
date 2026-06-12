@@ -516,7 +516,16 @@ def regenerate_cta_columns(table: pd.DataFrame) -> pd.DataFrame:
 
     # Protein/IHC first -- the RNA restriction axes and the filters read it.
     _recompute_protein_columns(seed, normal_tissue)
-    _recompute_rna_columns(seed, ntpm_by_gene)
+    missing = _recompute_rna_columns(seed, ntpm_by_gene)
+    if missing:
+        import warnings
+
+        warnings.warn(
+            f"{len(missing)} gene(s) absent from HPA rna_consensus keep their input RNA "
+            f"values (not recomputed): {', '.join(missing[:10])}"
+            + (" …" if len(missing) > 10 else ""),
+            stacklevel=2,
+        )
 
     # Protein restriction axis + per-core-tissue flags.
     seed["protein_restriction"] = seed.apply(_assign_protein_restriction, axis=1)
