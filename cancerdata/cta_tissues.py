@@ -78,10 +78,6 @@ HPA_ADAPTIVE_PROTEIN_RNA_THRESHOLDS: dict[str, float] = {
     "Missing": 0.97,
 }
 
-#: Maximum number of tissues with RNA detected (nTPM >= 1) for the strict
-#: marker-based filter.
-HPA_MARKER_STRICT_MAX_RNA_TISSUES: int = 7
-
 #: RNA expression floor (nTPM) for the ``never_expressed`` flag. A gene with no
 #: HPA protein (IHC) data and a maximum RNA nTPM below this value across all
 #: tissues is flagged ``never_expressed`` -- it passes the reproductive-

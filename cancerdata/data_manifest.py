@@ -133,6 +133,7 @@ CANCERDATA_ORIGINATED: dict[str, tuple[str, str]] = {
     "source-matrices": ("expression", "per-cohort raw-matrix registry (code/source/n_samples)"),
     "tissue-burden-map": ("ontology", "primary_tissue -> anatomic burden category"),
     "family-burden-map": ("ontology", "registry family -> burden category (fallback)"),
+    "cta-ihc-unreliable": ("cta", "CTAs whose HPA IHC is cross-reactive (RNA-only fallback)"),
 }
 
 #: pirlygenes data that is NOT cancerdata's domain — target selection / therapy /

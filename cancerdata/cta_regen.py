@@ -37,6 +37,8 @@ Public entry point: :func:`regenerate_cta_columns`.
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 import pandas as pd
 
 from . import cta as _cta
@@ -50,24 +52,26 @@ from .cta_tissues import (
     SAFETY_NTPM_THRESHOLD,
     SAFETY_TISSUE_GROUPS,
 )
+from .load_dataset import get_data
 
 # ── Curated overrides ──────────────────────────────────────────────────────
 
-#: Genes whose v23 HPA IHC is treated as **unreliable** (forced to "no data"),
-#: so they fall back to the RNA-only restriction call. These are sequence-near-
-#: identical CT/paralog antigens whose shared antibody cross-reacts: the somatic
-#: protein "detected" by HPA is at Low level in tissues where the gene's RNA is
-#: ~0 nTPM (heart/glandular cells), the hallmark of cross-reactivity. Curated
-#: override -- keyed by (unversioned) Ensembl gene ID. Ported from tsarina's
-#: ``scripts/regenerate_table.py``.
-CROSS_REACTIVE_IHC: frozenset[str] = frozenset(
-    {
-        "ENSG00000176746",  # MAGEB6 -- kidney IHC, RNA 0; Enhanced but RNA-discordant
-        "ENSG00000155622",  # XAGE2  -- scattered Low glandular IHC, RNA ~0 (placenta-restricted)
-        "ENSG00000278085",  # CT45A8 -- heart Low IHC, RNA 0; CT45A1 paralog (shared antibody)
-        "ENSG00000270946",  # CT45A9 -- heart Low IHC, RNA 0; CT45A1 paralog (shared antibody)
-    }
-)
+
+@lru_cache(maxsize=1)
+def cross_reactive_ihc() -> frozenset[str]:
+    """Unversioned Ensembl IDs whose v23 HPA IHC is treated as **unreliable**
+    (forced to "no data"), so they fall back to the RNA-only restriction call.
+
+    These are sequence-near-identical CT/paralog antigens whose shared antibody
+    cross-reacts: HPA "detects" Low protein in tissues where the gene's RNA is
+    ~0 nTPM (heart/glandular cells), the hallmark of cross-reactivity. The set is
+    curation knowledge that needs a human, so it lives in an auditable data file
+    (``cta-ihc-unreliable.csv``: gene id, symbol, reason) rather than a hardcoded
+    list. (Ported from tsarina's ``scripts/regenerate_table.py``.)
+    """
+    df = get_data("cta-ihc-unreliable", copy=False)
+    return frozenset(df["Ensembl_Gene_ID"].astype(str).str.split(".").str[0])
+
 
 #: Reproductive (+thymus) tissues, lowercased, for the protein restriction call.
 _PROTEIN_REPRODUCTIVE: frozenset[str] = frozenset(t.lower() for t in ALL_REPRODUCTIVE_TISSUES)
@@ -191,7 +195,7 @@ def _recompute_protein_columns(seed: pd.DataFrame, normal_tissue: pd.DataFrame) 
 
     Faithful port of ``tsarina/scripts/regenerate_table._recompute_protein_columns``:
 
-    * a gene absent from the IHC table, in :data:`CROSS_REACTIVE_IHC`, or
+    * a gene absent from the IHC table, in :func:`cross_reactive_ihc`, or
       detecting protein in no tissue (Level not Low/Medium/High) -> all four
       columns are ``"no data"`` (the original pipeline collapsed "antibody
       present, nothing detected" into ``no data``);
@@ -207,9 +211,10 @@ def _recompute_protein_columns(seed: pd.DataFrame, normal_tissue: pd.DataFrame) 
     det_by_gene = detected.groupby("gid")["tl"].apply(lambda s: sorted(set(s)))
     rel_by_gene = nt.groupby("gid")["Reliability"].first()
 
+    cross_reactive = cross_reactive_ihc()
     for idx, row in seed.iterrows():
         gid = str(row["Ensembl_Gene_ID"]).split(".")[0]
-        det = None if gid in CROSS_REACTIVE_IHC else det_by_gene.get(gid)
+        det = None if gid in cross_reactive else det_by_gene.get(gid)
         if not det:  # absent / cross-reactive IHC, or detected nowhere -> no data
             seed.at[idx, "protein_strict_expression"] = "no data"
             seed.at[idx, "protein_reliability"] = "no data"
