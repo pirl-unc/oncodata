@@ -34,9 +34,19 @@ def test_canonical_ctas_present():
         assert g in expressed
 
 
-def test_manually_rescued_cta_kept():
-    # XAGE5 is HPA never_expressed but manually rescued into the expressed set.
-    assert "ENSG00000171405" in cta.CTA_gene_ids()
+def test_never_expressed_rescue_is_a_uniform_rule():
+    # never_expressed CTAs with MODERATE confidence + STRICT reproductive RNA are
+    # kept in the expressed set by a uniform rule (not a one-gene XAGE5 override).
+    # XAGE5 is rescued, and so are its peers with the same signature.
+    expressed = cta.CTA_gene_ids()
+    assert "ENSG00000171405" in expressed  # XAGE5
+    assert "MAGEA2B" in cta.CTA_gene_names()  # a same-signature peer, also kept
+    # The rescue is exactly the rule, applied to every row.
+    df = cta.cta_dataframe()
+    rescued = df[cta._never_expressed_rescue_mask(df)]
+    never = rescued["never_expressed"].astype(str).str.lower() == "true"
+    kept = set(rescued.loc[never, "Ensembl_Gene_ID"].astype(str).str.split(".").str[0])
+    assert kept and kept <= cta.CTA_gene_ids()
 
 
 def test_non_cta_excluded_genes_dropped():

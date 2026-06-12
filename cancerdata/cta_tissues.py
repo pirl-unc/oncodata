@@ -14,9 +14,9 @@
 
 Ported (HPA-only) from ``tsarina.tissues`` so cancerdata can regenerate the
 bundled ``cancer-testis-antigens.csv`` restriction/filter columns from HPA data
-alone. The MS-related and manual-curation constants are intentionally NOT here:
-``MANUALLY_EXPRESSED_CTA`` and ``NON_CTA_EXCLUDED_GENE_IDS`` already live in
-:mod:`cancerdata.cta`.
+alone. The MS-related constants and the CTA-universe membership rules (the
+gene-family exclusion and the never-expressed rescue) are intentionally NOT
+here — they live in :mod:`cancerdata.cta`.
 
 Three tiers of reproductive tissue sets determine how strictly a gene's
 expression must be confined to qualify as a cancer-testis antigen:

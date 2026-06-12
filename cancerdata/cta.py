@@ -36,9 +36,23 @@ import pandas as pd
 from .cta_tissues import HPA_EXPRESSION_FLOOR_NTPM
 from .load_dataset import get_data
 
-#: Borderline-but-real CTAs kept in the expressed set despite an HPA
-#: ``never_expressed`` flag (low but corroborated testis signal). Unversioned ENSG.
-MANUALLY_EXPRESSED_CTA: frozenset[str] = frozenset({"ENSG00000171405"})  # XAGE5
+
+def _never_expressed_rescue_mask(df: pd.DataFrame) -> pd.Series:
+    """Row mask for ``never_expressed`` CTAs kept in the expressed set anyway.
+
+    A uniform rule, not a per-gene list: a never-expressed gene is rescued when its
+    HPA evidence is ``restriction_confidence == MODERATE`` and
+    ``rna_restriction_level == STRICT`` — i.e. it has reproductive-restricted RNA
+    just below the protein floor, the signature of a borderline-but-real CTA
+    (testis ~1-2 nTPM). This replaces the old one-gene XAGE5 override, which
+    rescued a single gene while ~15 peers with equal/stronger signal were dropped;
+    the rule keeps XAGE5 and all of them on the same principled basis.
+    """
+    if not {"restriction_confidence", "rna_restriction_level"} <= set(df.columns):
+        return pd.Series(False, index=df.index)
+    moderate = df["restriction_confidence"].astype(str).str.upper() == "MODERATE"
+    strict = df["rna_restriction_level"].astype(str).str.upper() == "STRICT"
+    return moderate & strict
 
 
 def _alpha_tubulin_symbol(symbol: str) -> bool:
@@ -185,11 +199,7 @@ def _cta_by_column(
         mask = passes_filters_mask(df)
     if exclude_never_expressed and "never_expressed" in df.columns:
         never = df["never_expressed"].astype(str).str.lower() == "true"
-        if "Ensembl_Gene_ID" in df.columns:
-            rescued = (
-                df["Ensembl_Gene_ID"].astype(str).str.split(".").str[0].isin(MANUALLY_EXPRESSED_CTA)
-            )
-            never = never & ~rescued
+        never = never & ~_never_expressed_rescue_mask(df)
         mask = mask & ~never
     subset = df[mask]
     result: set[str] = set()
