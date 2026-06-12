@@ -252,6 +252,7 @@ def _cmd_plot(args: argparse.Namespace) -> int:
         "apd1-orr-bars": plots.apd1_orr_bars,
         "incidence-vs-mortality": plots.incidence_vs_mortality,
         "cta-expression-heatmap": plots.cta_expression_heatmap,
+        "cta-addressable-burden": plots.cta_addressable_burden,
     }
     try:
         if args.which == "incidence-vs-mortality":
@@ -261,7 +262,7 @@ def _cmd_plot(args: argparse.Namespace) -> int:
         else:
             kwargs = {}
         fns[args.which](save=args.out, **kwargs)
-    except (ValueError, ModuleNotFoundError) as e:
+    except (ValueError, ModuleNotFoundError, NotImplementedError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
     print(f"Wrote {args.out}")
@@ -437,6 +438,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "apd1-orr-bars",
             "incidence-vs-mortality",
             "cta-expression-heatmap",
+            "cta-addressable-burden",
         ],
         help="Which plot to render",
     )
