@@ -151,9 +151,23 @@ def _best_canonical_cds_length(gene) -> int:
     return max(lengths, default=0)
 
 
+def _best_transcript_support(gene) -> int:
+    """Quality of the gene's best transcript as a sortable score (higher better):
+    Ensembl TSL is 1 (best)..5 (worst), inverted to -min(TSL); 0 if no TSL."""
+    levels = []
+    for t in gene.transcripts:
+        try:
+            levels.append(int(getattr(t, "support_level", None)))
+        except (TypeError, ValueError):
+            continue
+    return -min(levels) if levels else 0
+
+
 def pick_best_gene(genes):
-    """Choose one gene when a symbol maps to several: prefer protein-coding, then
-    longer canonical CDS, more coding transcripts, then a stable name tie-break."""
+    """Choose one gene when a symbol maps to several (pirlygenes order): prefer
+    protein-coding, then higher-quality best transcript (lowest TSL), then longer
+    canonical CDS, more coding transcripts, then a stable name tie-break. A symbol
+    resolves to ONE Ensembl gene id — the only key used for joins downstream."""
     if not genes:
         raise ValueError("expected at least one gene")
     if len(genes) == 1:
@@ -162,7 +176,15 @@ def pick_best_gene(genes):
     def sort_key(g):
         coding = 1 if getattr(g, "biotype", "") == "protein_coding" else 0
         num_coding = sum(t.is_protein_coding for t in g.transcripts)
-        return (coding, _best_canonical_cds_length(g), num_coding, len(g.name), g.name)
+        return (
+            coding,
+            _best_transcript_support(g),
+            _best_canonical_cds_length(g),
+            num_coding,
+            -g.name.count("."),
+            len(g.name),
+            g.name,
+        )
 
     return sorted(genes, key=sort_key, reverse=True)[0]
 
