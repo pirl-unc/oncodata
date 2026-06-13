@@ -82,65 +82,145 @@ def _save(fig, save):
     return fig
 
 
+# ---------- shared plot primitives (the centralized rendering layer) ----------
+#
+# Every cancer-type plot reduces to one of three shapes: a per-cancer scatter, a
+# cohort×gene heatmap, or a ranked horizontal bar — all coloured by registry family
+# and saved the same way. The plot functions below are thin: they assemble the data
+# (points / grid / pairs) and hand it to one primitive, so adding a plot is "shape
+# the data, pick a primitive", not "re-derive the matplotlib boilerplate".
+
+
+def _family_legend_handles(plt, fam_color):
+    return [
+        plt.Line2D([], [], marker="o", linestyle="", color=col, label=fam)
+        for fam, col in sorted(fam_color.items())
+    ]
+
+
+def _family_scatter(
+    points, *, xlabel, ylabel, title, logx=False, annotate=True, figsize=(9, 7), save=None
+):
+    """Scatter of ``(code, x, y)`` points coloured by registry family, with optional
+    point annotations + a family legend. The shared per-cancer scatter scaffold."""
+    plt = _plt()
+    codes = [p[0] for p in points]
+    colors, fam_color = _family_colors(codes)
+    fig, ax = plt.subplots(figsize=figsize)
+    for code, x, y in points:
+        ax.scatter(x, y, color=colors[code], s=70, edgecolor="white", linewidth=0.6, zorder=3)
+        if annotate:
+            ax.annotate(
+                format_cancer_code_label(code),
+                (x, y),
+                fontsize=6,
+                xytext=(3, 3),
+                textcoords="offset points",
+            )
+    if logx:
+        ax.set_xscale("log")
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    ax.grid(True, which="both" if logx else "major", alpha=0.3)
+    ax.legend(
+        handles=_family_legend_handles(plt, fam_color),
+        fontsize=6,
+        ncol=2,
+        loc="best",
+        framealpha=0.9,
+    )
+    fig.tight_layout()
+    return _save(fig, save)
+
+
+def _ranked_family_barh(pairs, *, xlabel, title, legend=False, save=None):
+    """Horizontal bars of ``(code, value)`` in the given top-to-bottom order,
+    coloured by registry family. The shared ranked-bar scaffold."""
+    import numpy as np
+
+    plt = _plt()
+    codes = [p[0] for p in pairs]
+    values = [p[1] for p in pairs]
+    colors, fam_color = _family_colors(codes)
+    fig, ax = plt.subplots(figsize=(9, max(4, 0.32 * len(codes))))
+    y = np.arange(len(codes))
+    ax.barh(y, values, color=[colors[c] for c in codes])
+    ax.set_yticks(y)
+    ax.set_yticklabels([format_cancer_code_label(c) for c in codes], fontsize=7)
+    ax.invert_yaxis()  # first pair at the top
+    ax.set_xlabel(xlabel)
+    ax.set_title(title)
+    ax.grid(True, axis="x", alpha=0.3)
+    if legend:
+        handles = [plt.Rectangle((0, 0), 1, 1, color=c) for c in fam_color.values()]
+        ax.legend(handles, list(fam_color), fontsize=6, title="family", loc="lower right")
+    fig.tight_layout()
+    return _save(fig, save)
+
+
+def _cohort_gene_heatmap(grid, *, title, cbar_label, cmap, lognorm=False, floor=0.01, save=None):
+    """Heatmap of a cohorts (rows) × genes (cols) DataFrame — rows labelled by
+    cancer code, columns by gene symbol. The shared cohort×gene heatmap scaffold."""
+    import numpy as np
+
+    plt = _plt()
+    cols = list(grid.columns)
+    rows = list(grid.index)
+    data = grid.to_numpy(dtype=float)
+    norm = None
+    if lognorm:
+        from matplotlib.colors import LogNorm
+
+        data = np.clip(data, floor, None)
+        norm = LogNorm(vmin=floor, vmax=max(1000.0, float(np.nanmax(data))))
+    else:
+        data = np.nan_to_num(data, nan=0.0)
+    fig, ax = plt.subplots(figsize=(max(8, 0.42 * len(cols)), max(6, 0.34 * len(rows))))
+    im = ax.imshow(data, aspect="auto", cmap=cmap, norm=norm)
+    ax.set_xticks(range(len(cols)))
+    ax.set_xticklabels(cols, rotation=90, fontsize=6)
+    ax.set_yticks(range(len(rows)))
+    ax.set_yticklabels([format_cancer_code_label(c) for c in rows], fontsize=6)
+    ax.set_title(title)
+    cbar = fig.colorbar(im, ax=ax, fraction=0.025, pad=0.01)
+    cbar.set_label(cbar_label)
+    fig.tight_layout()
+    return _save(fig, save)
+
+
 def apd1_vs_tmb(*, save=None, annotate=True):
     """Scatter of anti-PD-1 ORR (%) vs median TMB (log x), one point per cancer
     type with a curated value for both, colored by lineage family. The classic
     "more mutations -> more neoantigens -> better checkpoint response" view."""
-    plt = _plt()
     tmb = cancer_tmb()
     orr = cancer_apd1_response()
     codes = sorted(set(tmb) & set(orr))
     if not codes:
         raise ValueError("no cancer types with both a TMB and an anti-PD-1 value")
-    colors, fam_color = _family_colors(codes)
-
-    fig, ax = plt.subplots(figsize=(11, 7))
-    for c in codes:
-        ax.scatter(
-            tmb[c], orr[c], color=colors[c], s=70, edgecolor="white", linewidth=0.6, zorder=3
-        )
-        if annotate:
-            ax.annotate(
-                format_cancer_code_label(c),
-                (tmb[c], orr[c]),
-                fontsize=6,
-                xytext=(3, 3),
-                textcoords="offset points",
-            )
-    ax.set_xscale("log")
-    ax.set_xlabel("Median tumor mutational burden (mut/Mb, log scale)")
-    ax.set_ylabel("Anti-PD-1 monotherapy ORR (%)")
-    ax.set_title(f"Anti-PD-1 response vs TMB ({len(codes)} cancer types)")
-    ax.grid(True, which="both", alpha=0.3)
-    handles = [
-        plt.Line2D([], [], marker="o", linestyle="", color=col, label=fam)
-        for fam, col in sorted(fam_color.items())
-    ]
-    ax.legend(handles=handles, fontsize=6, ncol=2, loc="upper left", framealpha=0.9)
-    fig.tight_layout()
-    return _save(fig, save)
+    return _family_scatter(
+        [(c, tmb[c], orr[c]) for c in codes],
+        xlabel="Median tumor mutational burden (mut/Mb, log scale)",
+        ylabel="Anti-PD-1 monotherapy ORR (%)",
+        title=f"Anti-PD-1 response vs TMB ({len(codes)} cancer types)",
+        logx=True,
+        annotate=annotate,
+        figsize=(11, 7),
+        save=save,
+    )
 
 
 def apd1_orr_bars(*, save=None):
     """Horizontal bar chart of anti-PD-1 ORR by cancer type, sorted ascending,
     colored by lineage family."""
-    plt = _plt()
     orr = cancer_apd1_response()
-    codes = sorted(orr, key=lambda c: orr[c])
-    colors, _fam_color = _family_colors(codes)
-
-    fig, ax = plt.subplots(figsize=(9, max(4, 0.3 * len(codes))))
-    ax.barh(
-        [format_cancer_code_label(c) for c in codes],
-        [orr[c] for c in codes],
-        color=[colors[c] for c in codes],
+    codes = sorted(orr, key=lambda c: orr[c], reverse=True)  # highest at top
+    return _ranked_family_barh(
+        [(c, orr[c]) for c in codes],
+        xlabel="Anti-PD-1 monotherapy ORR (%)",
+        title=f"Anti-PD-1 response by cancer type ({len(codes)} types)",
+        save=save,
     )
-    ax.set_xlabel("Anti-PD-1 monotherapy ORR (%)")
-    ax.set_title(f"Anti-PD-1 response by cancer type ({len(codes)} types)")
-    ax.grid(True, axis="x", alpha=0.3)
-    ax.tick_params(axis="y", labelsize=7)
-    fig.tight_layout()
-    return _save(fig, save)
 
 
 def incidence_vs_mortality(*, region="us", save=None):
@@ -234,9 +314,6 @@ def cta_expression_heatmap(
     on per-sample matrices *before* the percentile summary (percentiles can't be
     summed), which is the proteoform-summed percentile artifact tracked in #13.
     """
-    import numpy as np
-    from matplotlib.colors import LogNorm
-
     if stat not in _STAT_PERCENTILE_COL:
         raise ValueError(f"stat must be one of {sorted(_STAT_PERCENTILE_COL)}")
     if proteoform:
@@ -245,7 +322,6 @@ def cta_expression_heatmap(
             "artifact (per-sample summation before summarizing — percentiles cannot be "
             "summed); tracked in issue #13."
         )
-    plt = _plt()
     if cohorts is None:
         cohorts = available_percentile_cohorts()
     if not cohorts:
@@ -272,26 +348,14 @@ def cta_expression_heatmap(
     top_cohorts = row_score.sort_values(ascending=False).head(n_cohorts).index
     grid = matrix.loc[top_cohorts, top_ctas]
 
-    floor = 0.01
-    data = np.clip(grid.to_numpy(dtype=float), floor, None)
-    fig, ax = plt.subplots(figsize=(max(8, 0.42 * len(top_ctas)), max(6, 0.34 * len(top_cohorts))))
-    im = ax.imshow(
-        data,
-        aspect="auto",
+    return _cohort_gene_heatmap(
+        grid,
+        title=f"CTA expression ({stat} TPM) — top {len(top_cohorts)} cohorts × {len(top_ctas)} CTAs",
+        cbar_label=f"{stat} TPM (log)",
         cmap="magma",
-        norm=LogNorm(vmin=floor, vmax=max(1000.0, float(np.nanmax(data)))),
+        lognorm=True,
+        save=save,
     )
-    ax.set_xticks(range(len(top_ctas)))
-    ax.set_xticklabels(list(top_ctas), rotation=90, fontsize=6)
-    ax.set_yticks(range(len(top_cohorts)))
-    ax.set_yticklabels([format_cancer_code_label(c) for c in top_cohorts], fontsize=6)
-    ax.set_title(
-        f"CTA expression ({stat} TPM) — top {len(top_cohorts)} cohorts × {len(top_ctas)} CTAs"
-    )
-    cbar = fig.colorbar(im, ax=ax, fraction=0.025, pad=0.01)
-    cbar.set_label(f"{stat} TPM (log)")
-    fig.tight_layout()
-    return _save(fig, save)
 
 
 def _cta_prevalence_by_cohort(threshold):
@@ -362,9 +426,6 @@ def cta_addressable_burden(
     ``metric`` selects the incidence basis; ``n`` caps the bars; bars are coloured by
     registry family. Incidence is at burden-category granularity (several subtypes
     share a category), so read the bar as a relative prioritization."""
-    import numpy as np
-
-    plt = _plt()
     prevalence, xlabel = _addressable_prevalence(
         source, threshold=threshold, threshold_tpm=threshold_tpm
     )
@@ -387,22 +448,13 @@ def cta_addressable_burden(
 
     rows.sort(key=lambda r: r[1], reverse=True)
     rows = rows[:n]
-    codes = [r[0] for r in rows]
-    scores = [r[1] for r in rows]
-    color_by_code, fam_color = _family_colors(codes)
-
-    fig, ax = plt.subplots(figsize=(8, max(4, 0.32 * len(codes))))
-    y = np.arange(len(codes))
-    ax.barh(y, scores, color=[color_by_code[c] for c in codes])
-    ax.set_yticks(y)
-    ax.set_yticklabels([format_cancer_code_label(c) for c in codes], fontsize=7)
-    ax.invert_yaxis()
-    ax.set_xlabel(xlabel)
-    ax.set_title(f"CTA-addressable cancer burden — top {len(codes)} cancers")
-    handles = [plt.Rectangle((0, 0), 1, 1, color=c) for c in fam_color.values()]
-    ax.legend(handles, list(fam_color), fontsize=6, title="family", loc="lower right")
-    fig.tight_layout()
-    return _save(fig, save)
+    return _ranked_family_barh(
+        [(r[0], r[1]) for r in rows],
+        xlabel=xlabel,
+        title=f"CTA-addressable cancer burden — top {len(rows)} cancers",
+        legend=True,
+        save=save,
+    )
 
 
 def _cached_per_sample_cohorts():
@@ -436,7 +488,6 @@ def cta_patient_count_heatmap(
 
     if value not in ("fraction", "count"):
         raise ValueError("value must be 'fraction' or 'count'")
-    plt = _plt()
     cohorts = list(cohorts) if cohorts is not None else _cached_per_sample_cohorts()
     if not cohorts:
         raise ValueError(
@@ -460,21 +511,17 @@ def cta_patient_count_heatmap(
     top_cohorts = row_score.sort_values(ascending=False).head(n_cohorts).index
     grid = matrix.loc[top_cohorts, top_ctas].fillna(0.0)
 
-    fig, ax = plt.subplots(figsize=(max(8, 0.42 * len(top_ctas)), max(6, 0.34 * len(top_cohorts))))
-    im = ax.imshow(grid.to_numpy(dtype=float), aspect="auto", cmap="viridis")
-    ax.set_xticks(range(len(top_ctas)))
-    ax.set_xticklabels(list(top_ctas), rotation=90, fontsize=6)
-    ax.set_yticks(range(len(top_cohorts)))
-    ax.set_yticklabels([format_cancer_code_label(c) for c in top_cohorts], fontsize=6)
     unit = "fraction of patients" if value == "fraction" else "patients"
-    ax.set_title(
-        f"CTA per-patient prevalence (> {threshold_tpm:g} TPM) — "
-        f"{len(top_cohorts)} cohorts × {len(top_ctas)} CTAs"
+    return _cohort_gene_heatmap(
+        grid,
+        title=(
+            f"CTA per-patient prevalence (> {threshold_tpm:g} TPM) — "
+            f"{len(top_cohorts)} cohorts × {len(top_ctas)} CTAs"
+        ),
+        cbar_label=unit,
+        cmap="viridis",
+        save=save,
     )
-    cbar = fig.colorbar(im, ax=ax, fraction=0.025, pad=0.01)
-    cbar.set_label(unit)
-    fig.tight_layout()
-    return _save(fig, save)
 
 
 def cta_coverage_curves(
@@ -535,45 +582,28 @@ def apd1_response_signature_scatter(signature="t_cell_inflamed", *, cohorts=None
     coloured by lineage family. Needs the per-sample matrices cached."""
     from .response_signatures import response_signature_direction, signature_score
 
-    plt = _plt()
     direction = response_signature_direction(signature)  # validates the name
     orr = cancer_apd1_response()
     cohorts = list(cohorts) if cohorts is not None else _cached_per_sample_cohorts()
-    rows = []
+    points = []
     for code in cohorts:
         if code not in orr:
             continue
         score = signature_score(code, signature)
         if score == score:  # not NaN
-            rows.append((code, score, float(orr[code])))
-    if not rows:
+            points.append((code, score, float(orr[code])))
+    if not points:
         raise ValueError(
             "no cohort with both a cached per-sample matrix and an aPD1 ORR — fetch "
             "the matrices (source_matrices.fetch) for aPD1 cohorts first."
         )
-    codes = [r[0] for r in rows]
-    colors, fam_color = _family_colors(codes)
-    fig, ax = plt.subplots(figsize=(9, 7))
-    for code, x, y in rows:
-        ax.scatter(x, y, color=colors[code], s=70, edgecolor="white", linewidth=0.6, zorder=3)
-        ax.annotate(
-            format_cancer_code_label(code),
-            (x, y),
-            fontsize=6,
-            xytext=(3, 3),
-            textcoords="offset points",
-        )
-    ax.set_xlabel(f"{signature} signature score (cohort-mean log clean TPM)")
-    ax.set_ylabel("Anti-PD-1 monotherapy ORR (%)")
-    ax.set_title(f"aPD1 response vs {signature} ({direction}-associated) — {len(rows)} cancers")
-    ax.grid(True, alpha=0.3)
-    handles = [
-        plt.Line2D([], [], marker="o", linestyle="", color=col, label=fam)
-        for fam, col in sorted(fam_color.items())
-    ]
-    ax.legend(handles=handles, fontsize=6, ncol=2, loc="best", framealpha=0.9)
-    fig.tight_layout()
-    return _save(fig, save)
+    return _family_scatter(
+        points,
+        xlabel=f"{signature} signature score (cohort-mean log clean TPM)",
+        ylabel="Anti-PD-1 monotherapy ORR (%)",
+        title=f"aPD1 response vs {signature} ({direction}-associated) — {len(points)} cancers",
+        save=save,
+    )
 
 
 def cta_specific_9mer_counts(*, save=None, **kwargs):
