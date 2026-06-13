@@ -132,3 +132,81 @@ def test_is_expression_value_col():
     assert norm.is_expression_value_col("TPM")
     assert not norm.is_expression_value_col("LUAD_TPM_raw")
     assert not norm.is_expression_value_col("Ensembl_Gene_ID")
+
+
+# ---- normalize_expression (technical-RNA zero+renormalize) ----
+
+
+def test_normalize_expression_zeros_technical_and_preserves_total():
+    df = pd.DataFrame(
+        {
+            "Symbol": ["PRAME", "MT-CO1", "RPL13", "MALAT1", "TP53"],
+            "Ensembl_Gene_ID": ["E1", "E2", "E3", "E4", "E5"],
+            "s1_TPM": [
+                100.0,
+                300.0,
+                100.0,
+                200.0,
+                300.0,
+            ],  # sum 1000; technical = MT-CO1+MALAT1=500
+        }
+    )
+    out, stats = norm.normalize_expression(df, value_cols=["s1_TPM"])
+    by = dict(zip(out["Symbol"], out["s1_TPM"]))
+    assert by["MT-CO1"] == 0.0 and by["MALAT1"] == 0.0  # technical zeroed
+    assert out["s1_TPM"].sum() == pytest.approx(1000.0)  # total preserved
+    # RPL13 is kept (ribosomal protein is NOT technical) -> rescaled up
+    assert by["RPL13"] > 100.0
+    assert stats["applied"] is True
+    assert stats["removed_technical_gene_count"] == 2
+
+
+def test_normalize_expression_fixed_fraction_delegates_to_clean_tpm():
+    df = pd.DataFrame(
+        {
+            "Symbol": ["A", "B"],
+            "Ensembl_Gene_ID": ["E1", "E2"],
+            "s1_TPM": [10.0, 30.0],
+        }
+    )
+    out, stats = norm.normalize_expression(
+        df, value_cols=["s1_TPM"], censored_fill="fixed_fraction"
+    )
+    # no technical genes -> biological compartment fills 750k
+    assert out["s1_TPM"].sum() == pytest.approx(750000.0, rel=1e-6)
+    assert stats["mode"] == "fixed_fraction"
+
+
+def test_normalize_long_table_groups_independently():
+    df = pd.DataFrame(
+        {
+            "symbol": ["MT-CO1", "TP53", "MT-CO1", "TP53"],
+            "Ensembl_Gene_ID": ["E2", "E5", "E2", "E5"],
+            "cancer_code": ["LUAD", "LUAD", "SKCM", "SKCM"],
+            "tumor_tpm_median": [400.0, 600.0, 100.0, 900.0],
+        }
+    )
+    out, _ = norm.normalize_technical_rna_long_table(
+        df, group_cols=["cancer_code"], value_cols=["tumor_tpm_median"]
+    )
+    by = {(r.cancer_code, r.symbol): r.tumor_tpm_median for r in out.itertuples()}
+    assert by[("LUAD", "MT-CO1")] == 0.0
+    assert by[("LUAD", "TP53")] == pytest.approx(1000.0)  # 600 rescaled to the 1000 group total
+    assert by[("SKCM", "TP53")] == pytest.approx(1000.0)
+
+
+def test_tpm_to_housekeeping_normalized():
+    from cancerdata import gene_families
+
+    hk = list(gene_families.housekeeping_gene_ids())[:2]
+    df = pd.DataFrame(
+        {
+            "Symbol": ["HK1", "HK2", "GENE"],
+            "Ensembl_Gene_ID": [hk[0], hk[1], "ENSG_X"],
+            "s1_TPM": [100.0, 100.0, 50.0],
+        }
+    )
+    out, stats = norm.tpm_to_housekeeping_normalized(df, value_cols=["s1_TPM"])
+    # geomean of [100,100] (+0.1) ~ 100.1 -> GENE 50 / 100.1 ~ 0.4995
+    assert stats["applied"] is True
+    assert out.loc[out["Symbol"] == "GENE", "s1_TPM"].iloc[0] == pytest.approx(50 / 100.1, rel=1e-3)

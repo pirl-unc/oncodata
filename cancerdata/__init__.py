@@ -114,6 +114,15 @@ from .incidence import (
     cancer_burden_df,
     cancer_code_burden_map,
 )
+from .normalization import (
+    clean_tpm,
+    fpkm_to_tpm,
+    normalize_expression,
+    normalize_technical_rna_columns,
+    normalize_technical_rna_long_table,
+    renormalize_to_million,
+    tpm_to_housekeeping_normalized,
+)
 from .proteoforms import (
     collapse_to_proteoforms,
     gene_to_proteoform,
@@ -189,6 +198,7 @@ __all__ = [
     "cancer_types_with_fusion",
     "canonical_cancer_code",
     "classify_gene_qc",
+    "clean_tpm",
     "cohort_aggregate_members",
     # cohort vocabulary
     "cohort_aggregates",
@@ -205,6 +215,7 @@ __all__ = [
     "expression_sources",
     "family_display_name",
     "format_cancer_code_label",
+    "fpkm_to_tpm",
     "fusion_partners",
     "fusion_status",
     "gene_cell_type_ntpm",
@@ -221,6 +232,9 @@ __all__ = [
     "is_rescue_feature",
     "known_cohort_ids",
     "mixture_cohort_codes",
+    "normalize_expression",
+    "normalize_technical_rna_columns",
+    "normalize_technical_rna_long_table",
     "per_sample_expression",
     "protein_family",
     "proteoform_for_gene",
@@ -229,6 +243,7 @@ __all__ = [
     "proteoform_representative_samples",
     "proteoform_symbol_map",
     "registry_dataframe",
+    "renormalize_to_million",
     "representative_cohort_samples",
     "resolve_cancer_type",
     "sample_counts_by_cancer_code",
@@ -238,6 +253,7 @@ __all__ = [
     "sarcoma_lineage_codes",
     "sources_for_cancer_code",
     "tissue_of_origin",
+    "tpm_to_housekeeping_normalized",
     "viral_status",
     "within_sample_top_fraction",
 ]

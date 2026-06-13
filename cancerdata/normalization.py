@@ -231,3 +231,254 @@ def fpkm_to_tpm(df: pd.DataFrame, *, value_cols=None) -> tuple[pd.DataFrame, dic
     normalization), but a self-documenting entry point for the quantifier→TPM step.
     Returns ``(df, stats)``."""
     return renormalize_to_million(df, value_cols=value_cols)
+
+
+# ---------- technical-RNA normalization (the comparable biology view) ----------
+
+#: QC groups removed by default in the legacy zero-and-renormalize path — the
+#: technical-RNA set (mtDNA / NUMT-like / rRNA-like / polyA-bias lncRNA).
+_TECHNICAL_RNA_GROUPS = frozenset(
+    {"mt_dna", "mt_like_pseudogene", "rrna_like", "polyadenylation_bias_lncrna"}
+)
+
+
+def _technical_mask(df, *, label_col, id_col, remove_groups) -> pd.Series:
+    """Boolean (row-aligned) for rows whose QC group is in ``remove_groups``,
+    classified ENSG-first via :func:`cancerdata.gene_qc.classify_gene_qc`."""
+    from .gene_qc import classify_gene_qc
+
+    labels = df[label_col].fillna("").astype(str).str.strip()
+    if id_col and id_col in df.columns:
+        ids = df[id_col].fillna("").astype(str).str.split(".").str[0].str.strip()
+        groups = [classify_gene_qc(s, ensembl_id=e).group for s, e in zip(labels, ids)]
+    else:
+        groups = [classify_gene_qc(s).group for s in labels]
+    return pd.Series([g in remove_groups for g in groups], index=df.index, dtype=bool)
+
+
+def _zero_and_renormalize(out, idx, value_cols, removable, records) -> bool:
+    """Zero the removable rows in ``value_cols`` over rows ``idx`` and rescale the
+    kept rows so each column's total mass is preserved. Mutates ``out`` in place;
+    records per-column stats; returns whether anything was applied."""
+    idx = list(idx)
+    idx_set = set(idx)
+    grp_removable = removable.loc[idx]
+    applied = False
+    for col in value_cols:
+        vals = pd.to_numeric(out.loc[idx, col], errors="coerce")
+        valid = vals.notna()
+        removable_valid = grp_removable & valid
+        raw_sum = float(vals.sum())
+        removed = float(vals[removable_valid].sum())
+        remaining = raw_sum - removed
+        records[col] = {
+            "input_sum": raw_sum,
+            "removed_tpm": removed,
+            "removed_fraction": removed / raw_sum if raw_sum > 0 else 0.0,
+            "removed_gene_count": int(grp_removable.sum()),
+            "renormalization_factor": (
+                raw_sum / remaining if raw_sum > 0 and remaining > 0 else 1.0
+            ),
+        }
+        if raw_sum <= 0 or removed <= 0:
+            continue
+        remove_idx = [i for i in removable_valid[removable_valid].index if i in idx_set]
+        out.loc[remove_idx, col] = 0.0
+        if remaining <= 0:
+            applied = True
+            continue
+        keep_valid = (~grp_removable) & valid
+        keep_idx = [i for i in keep_valid[keep_valid].index if i in idx_set]
+        out.loc[keep_idx, col] = vals.loc[keep_idx] * (raw_sum / remaining)
+        applied = True
+    return applied
+
+
+def normalize_expression(
+    df,
+    *,
+    label_col: str = "Symbol",
+    id_col: str | None = "Ensembl_Gene_ID",
+    value_cols=None,
+    group_cols=None,
+    censored_fill: str = "zero",
+    technical_fraction: float = 0.25,
+    exclude_ribosomal_proteins: bool = True,
+    remove_groups=_TECHNICAL_RNA_GROUPS,
+) -> tuple[pd.DataFrame, dict]:
+    """Censor technical-RNA features and rescale each column's mass — the comparable
+    biology view used after QC. Returns ``(normalized_df, stats)``.
+
+    ``censored_fill``:
+      - ``"zero"`` (default, legacy) — zero the technical-RNA rows
+        (:func:`cancerdata.gene_qc.classify_gene_qc` group in ``remove_groups``:
+        mtDNA / NUMT-like / rRNA-like / polyA-bias lncRNA) and rescale the kept rows
+        so each column's **original total** is preserved. With ``group_cols``,
+        normalizes within each group independently (e.g. per cohort in a long table).
+      - any other value — apply the two-compartment reference :func:`clean_tpm`
+        (clean_tpm_v4) over the value columns instead (the basis the packaged
+        references ship on); ``technical_fraction`` / ``exclude_ribosomal_proteins``
+        tune it.
+
+    Classification is ENSG-first when ``id_col`` is present, else symbol-only.
+    """
+    if df is None:
+        return None, {"applied": False, "reason": "no table", "columns": {}}
+    if label_col not in df.columns:
+        return df.copy(), {"applied": False, "reason": f"label column {label_col!r} not present"}
+    out = df.copy()
+    if value_cols is None:
+        value_cols = [c for c in out.columns if is_expression_value_col(c)]
+    value_cols = [str(c) for c in value_cols if str(c) in out.columns]
+    if not value_cols:
+        return out, {"applied": False, "reason": "no expression value columns", "columns": {}}
+
+    if censored_fill != "zero":
+        gene_table = pd.DataFrame(
+            {
+                "Ensembl_Gene_ID": out[id_col] if id_col and id_col in out.columns else "",
+                "Symbol": out[label_col],
+            }
+        )
+        clean = clean_tpm(
+            out[value_cols],
+            gene_table=gene_table,
+            exclude_ribosomal_proteins=exclude_ribosomal_proteins,
+            technical_fraction=technical_fraction,
+        )
+        out[value_cols] = clean
+        return out, {
+            "applied": True,
+            "reason": "clean_tpm (two-compartment)",
+            "mode": censored_fill,
+        }
+
+    removable = _technical_mask(
+        out, label_col=label_col, id_col=id_col, remove_groups={str(g) for g in remove_groups}
+    )
+    column_records: dict = {}
+    group_records: dict = {}
+    if group_cols is None:
+        applied = _zero_and_renormalize(out, out.index, value_cols, removable, column_records)
+    else:
+        group_cols = [str(c) for c in group_cols if str(c) in out.columns]
+        if not group_cols:
+            return out, {"applied": False, "reason": "missing grouping columns", "columns": {}}
+        applied = False
+        for key, idx in out.groupby(group_cols, dropna=False).groups.items():
+            key_label = "|".join(str(p) for p in (key if isinstance(key, tuple) else (key,)))
+            group_records[key_label] = {}
+            applied = (
+                _zero_and_renormalize(out, idx, value_cols, removable, group_records[key_label])
+                or applied
+            )
+    return out, {
+        "applied": applied,
+        "reason": "technical RNA zeroed and remaining expression renormalized"
+        if applied
+        else "no removable technical burden",
+        "columns": column_records,
+        "groups": group_records,
+        "value_cols": value_cols,
+        "removed_technical_gene_count": int(removable.sum()),
+    }
+
+
+def normalize_technical_rna_columns(
+    df,
+    *,
+    label_col: str = "Symbol",
+    value_cols=None,
+    censored_fill: str = "zero",
+    technical_fraction: float = 0.25,
+) -> tuple[pd.DataFrame, dict]:
+    """Technical-RNA normalization over a wide gene×sample frame — thin wrapper on
+    :func:`normalize_expression` (no grouping, no noncoding removal)."""
+    return normalize_expression(
+        df,
+        label_col=label_col,
+        value_cols=value_cols,
+        censored_fill=censored_fill,
+        technical_fraction=technical_fraction,
+    )
+
+
+def normalize_technical_rna_long_table(
+    df,
+    *,
+    label_col: str = "symbol",
+    group_cols=("cancer_code", "subtype"),
+    value_cols=("tumor_tpm_median", "tumor_tpm_q1", "tumor_tpm_q3"),
+    censored_fill: str = "zero",
+    technical_fraction: float = 0.25,
+) -> tuple[pd.DataFrame, dict]:
+    """Technical-RNA normalization applied **within each long-table cohort group** —
+    thin wrapper on :func:`normalize_expression` with ``group_cols``."""
+    return normalize_expression(
+        df,
+        label_col=label_col,
+        group_cols=group_cols,
+        value_cols=value_cols,
+        censored_fill=censored_fill,
+        technical_fraction=technical_fraction,
+    )
+
+
+def tpm_to_housekeeping_normalized(
+    df,
+    *,
+    label_col: str = "Symbol",
+    id_col: str | None = "Ensembl_Gene_ID",
+    value_cols=None,
+    panel_ids=None,
+    pseudocount: float = 0.1,
+) -> tuple[pd.DataFrame, dict]:
+    """Divide each expression column by the **geometric mean** of a housekeeping
+    panel, putting expression on a unit-free ratio-to-baseline scale that survives
+    library-prep depth drift in a way TPM doesn't.
+
+    The panel defaults to cancerdata's housekeeping gene set
+    (:func:`cancerdata.gene_families.housekeeping_gene_ids`), matched by Ensembl id.
+    A small ``pseudocount`` makes the geometric mean robust to zeros. Returns
+    ``(normalized_df, stats)`` with per-column denominator + panel coverage."""
+    if df is None:
+        return None, {"applied": False, "reason": "no table", "columns": {}}
+    out = df.copy()
+    if value_cols is None:
+        value_cols = [c for c in out.columns if is_expression_value_col(c)]
+    value_cols = [str(c) for c in value_cols if str(c) in out.columns]
+    if not value_cols:
+        return out, {"applied": False, "reason": "no expression value columns", "columns": {}}
+
+    panel = set(panel_ids) if panel_ids is not None else set(gene_families.housekeeping_gene_ids())
+    if not (id_col and id_col in out.columns):
+        return out, {
+            "applied": False,
+            "reason": "no id column for housekeeping panel",
+            "columns": {},
+        }
+    panel_rows = _unversioned(out[id_col]).isin({str(g).split(".")[0] for g in panel})
+    n_panel = int(panel_rows.sum())
+    if n_panel == 0:
+        return out, {
+            "applied": False,
+            "reason": "no housekeeping panel genes present",
+            "columns": {},
+        }
+
+    columns: dict = {}
+    applied = False
+    for col in value_cols:
+        vals = pd.to_numeric(out.loc[panel_rows, col], errors="coerce").dropna()
+        denom = float(np.exp(np.log(vals.to_numpy() + pseudocount).mean())) if len(vals) else 0.0
+        columns[col] = {"denominator": denom, "panel_genes_present": n_panel}
+        if denom > 0:
+            out[col] = pd.to_numeric(out[col], errors="coerce") / denom
+            applied = True
+    return out, {
+        "applied": applied,
+        "reason": "divided by housekeeping geometric mean" if applied else "panel denominator <= 0",
+        "columns": columns,
+        "value_cols": value_cols,
+        "panel_genes_present": n_panel,
+    }
