@@ -60,6 +60,43 @@ def test_cohort_gene_percentiles_missing_raises(percentile_cache):
         expression.cohort_gene_percentiles("BRCA")
 
 
+@pytest.fixture
+def proteoform_percentile_cache(monkeypatch, tmp_path):
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
+    shard_dir = tmp_path / "cancer-reference-expression-percentiles-proteoform"
+    shard_dir.mkdir(parents=True)
+    # A collapsed shard carries the proteoform identity columns alongside the breakpoints.
+    cols = {
+        "proteoform_key": ["NY-ESO-1", "ENSG00000185686"],
+        "Ensembl_Gene_ID": ["ENSG00000184033", "ENSG00000185686"],
+        "Symbol": ["NY-ESO-1", "PRAME"],
+        "proteoform_members": ["CTAG1A/CTAG1B", "PRAME"],
+    }
+    for bp in _BREAKPOINTS:
+        cols[f"p{bp}"] = np.log1p([float(bp), float(bp) * 2]).astype("float16")
+    pd.DataFrame(cols).to_parquet(shard_dir / "PRAD.parquet", index=False)
+    return tmp_path
+
+
+def test_available_percentile_cohorts_proteoform(proteoform_percentile_cache):
+    # The proteoform variant reads the local shard (auto_fetch=False, no bundle fetch).
+    assert expression.available_percentile_cohorts(proteoform=True) == ["PRAD"]
+
+
+def test_cohort_gene_percentiles_proteoform(proteoform_percentile_cache):
+    df = expression.cohort_gene_percentiles("PRAD", as_tpm=True, proteoform=True)
+    # the proteoform key space: NY-ESO-1 (collapsed) + PRAME (singleton -> ENSG key)
+    assert list(df["proteoform_key"]) == ["NY-ESO-1", "ENSG00000185686"]
+    # breakpoint columns are restored to TPM; the id columns are excluded from them
+    assert df.loc[0, "p95"] == pytest.approx(95.0, rel=1e-2)
+    assert set(df.columns) >= {"proteoform_key", "Ensembl_Gene_ID", "Symbol", "proteoform_members"}
+
+
+def test_cohort_gene_percentiles_proteoform_missing_raises(proteoform_percentile_cache):
+    with pytest.raises(ValueError, match="no proteoform-summed percentile vector"):
+        expression.cohort_gene_percentiles("BRCA", proteoform=True)
+
+
 def test_representatives_provenance_requires_long_format():
     # Provenance is per-representative; asking for it in the default wide form is
     # a no-op, so it must fail loudly rather than silently dropping the request.
@@ -153,3 +190,28 @@ def test_cohort_mean_expression_bad_statistic(monkeypatch):
     monkeypatch.setattr(expression, "per_sample_expression", lambda *a, **k: pd.DataFrame())
     with pytest.raises(ValueError, match="statistic must be"):
         expression.cohort_mean_expression("X", statistic="mode")
+
+
+def test_cohort_mean_expression_proteoform_collapses_first(monkeypatch):
+    # Two identical-protein paralogs are summed per sample BEFORE the across-patient
+    # reduction, so the proteoform mean is over the summed values, not per-member.
+    import cancerdata.proteoforms as pmod
+
+    fixture = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["ENSG_A1", "ENSG_A2", "ENSG_B"],
+            "Symbol": ["A1", "A2", "B"],
+            "s1": [3.0, 5.0, 1.0],
+            "s2": [1.0, 1.0, 9.0],
+        }
+    )
+    monkeypatch.setattr(expression, "per_sample_expression", lambda *a, **k: fixture.copy())
+    monkeypatch.setattr(
+        pmod, "proteoform_group_map", lambda *, scope="cta": {"A1/A2": ["ENSG_A1", "ENSG_A2"]}
+    )
+    out = expression.cohort_mean_expression("X", statistic="mean", proteoform=True)
+    assert "proteoform_key" in out.columns
+    by_key = dict(zip(out["proteoform_key"], out["expression"]))
+    # A1+A2 summed per sample = [8, 2], mean 5.0 (NOT each member's mean of ~2/3)
+    assert by_key["A1/2"] == pytest.approx(5.0)
+    assert by_key["ENSG_B"] == pytest.approx(5.0)  # singleton keyed by ENSG

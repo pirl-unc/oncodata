@@ -58,6 +58,7 @@ from cancerdata._build import cohort_percentile_vectors, sample_columns
 
 _DATA_DIR = Path(__file__).resolve().parents[1] / "cancerdata" / "data"
 OUT_DIR = _DATA_DIR / "cancer-reference-expression-percentiles"
+PROTEOFORM_OUT_DIR = _DATA_DIR / "cancer-reference-expression-percentiles-proteoform"
 
 
 def _load_drop_genes(path: Path | None) -> set[str]:
@@ -66,8 +67,22 @@ def _load_drop_genes(path: Path | None) -> set[str]:
     return {line.strip() for line in path.read_text().splitlines() if line.strip()}
 
 
-def build(input_dir: Path, *, drop_genes: set[str], out_dir: Path = OUT_DIR) -> None:
-    """Build the percentile-vector artifact for each cohort under ``input_dir``."""
+def build(
+    input_dir: Path,
+    *,
+    drop_genes: set[str],
+    out_dir: Path | None = None,
+    proteoform: bool = False,
+) -> None:
+    """Build the percentile-vector artifact for each cohort under ``input_dir``.
+
+    With ``proteoform=True``, each cohort's per-sample matrix is collapsed to the
+    proteoform key space (identical-protein members summed) *before* the percentiles
+    are computed, so the vector is one row per proteoform key. Output lands in a
+    parallel ``…-percentiles-proteoform`` directory.
+    """
+    if out_dir is None:
+        out_dir = PROTEOFORM_OUT_DIR if proteoform else OUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     shards = sorted(input_dir.glob("*.parquet"))
     if not shards:
@@ -82,6 +97,13 @@ def build(input_dir: Path, *, drop_genes: set[str], out_dir: Path = OUT_DIR) -> 
         if not cols:
             print(f"  {code}: no sample columns, skipped", flush=True)
             continue
+        if proteoform:
+            # Collapse identical-protein members per sample first, then rank on the
+            # reduced proteoform key space (one reusable collapse + proteoform_key).
+            from cancerdata.proteoforms import collapse_to_proteoforms
+
+            df = collapse_to_proteoforms(df, sample_cols=cols)
+            cols = sample_columns(df)
         out = cohort_percentile_vectors(df, cols)
         out.to_parquet(out_dir / f"{code}.parquet", index=False, compression="zstd")
         n += 1
@@ -101,8 +123,17 @@ def main(argv=None) -> None:
         default=None,
         help="Optional newline-delimited Ensembl IDs of technical genes to drop",
     )
+    p.add_argument(
+        "--proteoform",
+        action="store_true",
+        help="Collapse identical-protein members before ranking (proteoform key space)",
+    )
     args = p.parse_args(argv)
-    build(args.input, drop_genes=_load_drop_genes(args.drop_genes))
+    build(
+        args.input,
+        drop_genes=_load_drop_genes(args.drop_genes),
+        proteoform=args.proteoform,
+    )
 
 
 if __name__ == "__main__":

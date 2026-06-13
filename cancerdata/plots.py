@@ -366,10 +366,11 @@ def incidence_vs_mortality(*, region="us", save=None):
     return _save(fig, save)
 
 
-def _cta_expression_matrix(stat, cohorts):
-    """cohorts × CTA-gene matrix of the requested ``stat`` TPM (NaN where a cohort
-    lacks a gene). Rows are cohort codes, columns are CTA symbols. Cohorts without
-    a percentile vector (summary-only or unknown codes) are skipped with a warning
+def _cta_expression_matrix(stat, cohorts, *, proteoform=False):
+    """cohorts × CTA matrix of the requested ``stat`` TPM (NaN where a cohort lacks a
+    gene). Rows are cohort codes, columns are CTA symbols. With ``proteoform=True``,
+    reads the proteoform-summed percentile vectors and labels columns by the proteoform
+    symbol (NY-ESO-1, XAGE1A/B). Cohorts without the vector are skipped with a warning
     rather than aborting the whole plot."""
     import warnings
 
@@ -382,17 +383,17 @@ def _cta_expression_matrix(stat, cohorts):
     skipped = []
     for code in cohorts:
         try:
-            df = cohort_gene_percentiles(code, as_tpm=True)
+            df = cohort_gene_percentiles(code, as_tpm=True, proteoform=proteoform)
         except ValueError:
             skipped.append(str(code))
             continue
         ids = df["Ensembl_Gene_ID"].astype(str).str.split(".").str[0]
         mask = ids.isin(cta_ids)
         sub = df.loc[mask]
-        rows[code] = pd.Series(
-            sub[col].to_numpy(),
-            index=ids[mask].map(id_to_name),
-        )
+        # Label columns by the proteoform symbol when collapsed (NY-ESO-1 not CTAG1B),
+        # else the per-gene CTA symbol.
+        labels = sub["Symbol"].to_numpy() if proteoform else ids[mask].map(id_to_name).to_numpy()
+        rows[code] = pd.Series(sub[col].to_numpy(), index=labels)
     if skipped:
         warnings.warn(
             f"skipped {len(skipped)} cohort(s) without a percentile vector: {', '.join(skipped)}",
@@ -425,24 +426,23 @@ def cta_expression_heatmap(
     ``cohorts`` restricts the cohort pool (default: every cohort with a percentile
     vector). Needs the expression bundle present (percentile artifacts).
 
-    ``proteoform=True`` is not yet available: faithful paralog summation must happen
-    on per-sample matrices *before* the percentile summary (percentiles can't be
-    summed), which is the proteoform-summed percentile artifact tracked in #13.
+    ``proteoform=True`` reads the **proteoform-summed** percentile vectors: identical-
+    protein paralogs were summed per sample *before* the percentiles were computed, so
+    a duplicated antigen appears once under its proteoform symbol (NY-ESO-1, XAGE1A/B)
+    rather than as several diluted member rows. Needs the proteoform percentile shards
+    (``generate_cohort_percentiles.py --proteoform``).
     """
     if stat not in _STAT_PERCENTILE_COL:
         raise ValueError(f"stat must be one of {sorted(_STAT_PERCENTILE_COL)}")
-    if proteoform:
-        raise NotImplementedError(
-            "proteoform-summed CTA expression needs the proteoform-summed percentile "
-            "artifact (per-sample summation before summarizing — percentiles cannot be "
-            "summed); tracked in issue #13."
-        )
     if cohorts is None:
-        cohorts = available_percentile_cohorts()
+        cohorts = available_percentile_cohorts(proteoform=proteoform)
     if not cohorts:
-        raise ValueError("no cohorts with a percentile vector — is the expression bundle present?")
+        variant = "proteoform-summed " if proteoform else ""
+        raise ValueError(
+            f"no cohorts with a {variant}percentile vector — is the expression bundle present?"
+        )
 
-    matrix = _cta_expression_matrix(stat, cohorts)
+    matrix = _cta_expression_matrix(stat, cohorts, proteoform=proteoform)
     if matrix.empty or matrix.shape[1] == 0:
         raise ValueError(
             "no CTA expression data for the selected cohorts — none had a percentile "

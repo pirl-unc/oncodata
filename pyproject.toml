@@ -77,8 +77,10 @@ cancerdata = [
 cancerdata = [
     "data/cancer-reference-expression/*",
     "data/cancer-reference-expression-percentiles/*",
+    "data/cancer-reference-expression-percentiles-proteoform/*",
     "data/cancer-reference-expression-representatives/*",
     "data/cancer-reference-expression-within-sample-top5/*",
+    "data/cancer-reference-expression-within-sample-top5-proteoform/*",
     "data/pan-cancer-expression.csv",
     "data/hpa-cell-type-expression.csv",
 ]

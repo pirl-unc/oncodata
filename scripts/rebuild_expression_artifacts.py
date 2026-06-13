@@ -159,9 +159,11 @@ def rebuild(cache: Path, ref: Path, out: Path, *, limit: int | None, validate: b
 
     clean_dir = out / "clean"
     pct_dir = out / "cancer-reference-expression-percentiles"
+    pct_pf_dir = out / "cancer-reference-expression-percentiles-proteoform"
     rep_dir = out / "cancer-reference-expression-representatives"
     ws_dir = out / "cancer-reference-expression-within-sample-top5"
-    for d in (clean_dir, pct_dir, rep_dir, ws_dir):
+    ws_pf_dir = out / "cancer-reference-expression-within-sample-top5-proteoform"
+    for d in (clean_dir, pct_dir, pct_pf_dir, rep_dir, ws_dir, ws_pf_dir):
         d.mkdir(parents=True, exist_ok=True)
 
     provenance: list[dict] = []
@@ -195,6 +197,21 @@ def rebuild(cache: Path, ref: Path, out: Path, *, limit: int | None, validate: b
 
         ws = within_sample_top_fractions(bio_df, samples)
         ws.to_parquet(ws_dir / f"{code}.parquet", index=False, compression="zstd")
+
+        # Proteoform key space: collapse identical-protein members per sample, then
+        # build the same percentile + within-sample summaries on the reduced space so
+        # every downstream read can compare/quantify/plot on one collapsed key space.
+        from cancerdata._build import sample_columns
+        from cancerdata.proteoforms import collapse_to_proteoforms
+
+        bio_pf = collapse_to_proteoforms(bio_df, sample_cols=samples)
+        pf_samples = sample_columns(bio_pf)
+        cohort_percentile_vectors(bio_pf, pf_samples).to_parquet(
+            pct_pf_dir / f"{code}.parquet", index=False, compression="zstd"
+        )
+        within_sample_top_fractions(bio_pf, pf_samples).to_parquet(
+            ws_pf_dir / f"{code}.parquet", index=False, compression="zstd"
+        )
 
         msg = f"  {code}: {len(samples)} samples, {len(pct)} genes"
         if validate:

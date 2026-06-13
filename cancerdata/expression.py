@@ -39,11 +39,13 @@ import pandas as pd
 from . import data_bundle, source_matrices
 from ._build import WITHIN_SAMPLE_THRESHOLDS as _WITHIN_SAMPLE_THRESHOLD_COLS
 from .cancer_types import cohort_aggregates, resolve_cancer_type
+from .expression_engine import ID_COLUMNS
 from .load_dataset import _BUNDLED_DATA_DIR, _register_derived_cache
 from .normalization import clean_tpm
 
 _REPRESENTATIVES_DIR = "cancer-reference-expression-representatives"
 _PERCENTILES_DIR = "cancer-reference-expression-percentiles"
+_PERCENTILES_PROTEOFORM_DIR = "cancer-reference-expression-percentiles-proteoform"
 _WITHIN_SAMPLE_DIR = "cancer-reference-expression-within-sample-top5"
 _WITHIN_SAMPLE_PROTEOFORM_DIR = "cancer-reference-expression-within-sample-top5-proteoform"
 
@@ -108,7 +110,11 @@ def _representatives_root() -> Path:
     return _bundle_subdir(_REPRESENTATIVES_DIR)
 
 
-def _percentiles_root() -> Path:
+def _percentiles_root(*, proteoform: bool = False) -> Path:
+    if proteoform:
+        # The proteoform-summed variant isn't in a released bundle yet, so never
+        # trigger a fetch for it.
+        return _bundle_subdir(_PERCENTILES_PROTEOFORM_DIR, auto_fetch=False)
     return _bundle_subdir(_PERCENTILES_DIR)
 
 
@@ -117,9 +123,11 @@ def available_representative_cohorts() -> list[str]:
     return _available_shard_codes(_representatives_root())
 
 
-def available_percentile_cohorts() -> list[str]:
-    """Cohort codes that ship a per-gene percentile-vector shard (sorted)."""
-    return _available_shard_codes(_percentiles_root())
+def available_percentile_cohorts(*, proteoform: bool = False) -> list[str]:
+    """Cohort codes that ship a percentile-vector shard (sorted). With
+    ``proteoform=True``, the proteoform-summed variant (one vector per proteoform
+    key, identical-protein members collapsed before ranking)."""
+    return _available_shard_codes(_percentiles_root(proteoform=proteoform))
 
 
 _PER_SAMPLE_NORMALIZE = ("tpm_raw", "tpm_clean", "tpm_clean_log1p")
@@ -188,7 +196,12 @@ _register_derived_cache(_load_per_sample_matrix.cache_clear)
 
 
 def cohort_mean_expression(
-    cancer_type, *, normalize: str = "tpm_clean", statistic: str = "mean", auto_fetch: bool = True
+    cancer_type,
+    *,
+    normalize: str = "tpm_clean",
+    statistic: str = "mean",
+    auto_fetch: bool = True,
+    proteoform: bool = False,
 ) -> pd.DataFrame:
     """Per-gene **across-patient summary** of a cohort's expression (one value per
     gene, collapsed over all patients).
@@ -198,15 +211,24 @@ def cohort_mean_expression(
     the percentile vectors and n=5 medoids don't give directly. Reduces
     :func:`per_sample_expression` over the sample axis with ``statistic`` (``"mean"``
     / ``"median"``). ``normalize`` is passed through (clean TPM by default; use
-    ``"tpm_clean_log1p"`` to average in log space). Returns ``Ensembl_Gene_ID``,
-    ``Symbol`` and one ``expression`` column."""
+    ``"tpm_clean_log1p"`` to average in log space).
+
+    With ``proteoform=True``, identical-protein paralogs are summed per sample
+    (:func:`cancerdata.proteoforms.collapse_to_proteoforms`) **before** the
+    across-patient reduction, so the summary is over the reduced proteoform key space
+    (rows carry ``proteoform_key``). Returns ``Ensembl_Gene_ID``, ``Symbol`` (plus the
+    proteoform identity columns when collapsed) and one ``expression`` column."""
     if statistic not in ("mean", "median"):
         raise ValueError("statistic must be 'mean' or 'median'")
     df = per_sample_expression(cancer_type, normalize=normalize, auto_fetch=auto_fetch)
-    base = ["Ensembl_Gene_ID", "Symbol"]
-    samples = [c for c in df.columns if c not in base]
+    if proteoform:
+        from .proteoforms import collapse_to_proteoforms
+
+        df = collapse_to_proteoforms(df)
+    id_cols = [c for c in ID_COLUMNS if c in df.columns]
+    samples = [c for c in df.columns if c not in id_cols]
     reducer = df[samples].mean(axis=1) if statistic == "mean" else df[samples].median(axis=1)
-    out = df[base].copy()
+    out = df[id_cols].copy()
     out["expression"] = reducer.to_numpy()
     return out
 
@@ -292,7 +314,9 @@ def representative_cohort_samples(
     return long
 
 
-def cohort_gene_percentiles(cancer_type, *, as_tpm: bool = True) -> pd.DataFrame:
+def cohort_gene_percentiles(
+    cancer_type, *, as_tpm: bool = True, proteoform: bool = False
+) -> pd.DataFrame:
     """Tail-weighted per-gene percentile vector for one cohort.
 
     Returns one row per gene (``Ensembl_Gene_ID`` + ``Symbol``) with 26
@@ -305,16 +329,22 @@ def cohort_gene_percentiles(cancer_type, *, as_tpm: bool = True) -> pd.DataFrame
     ``expm1``-restores clean-TPM values, ``as_tpm=False`` returns the stored
     log1p values. Raises if the cohort has no per-sample data (summary-only
     cohorts have no vector — see :func:`available_percentile_cohorts`).
+
+    With ``proteoform=True``, reads the proteoform-summed variant: identical-protein
+    members were summed per sample **before** the percentiles were computed, so the
+    vector is one row per proteoform key (``proteoform_key``/``Symbol`` carry the
+    collapsed identity); build it with ``generate_cohort_percentiles.py --proteoform``.
     """
     code = resolve_cancer_type(cancer_type)
-    shard = _percentiles_root() / f"{code}.parquet"
+    shard = _percentiles_root(proteoform=proteoform) / f"{code}.parquet"
     if not shard.exists():
+        variant = "proteoform-summed " if proteoform else ""
         raise ValueError(
-            f"no percentile vector for {code!r} — only cohorts with per-sample "
-            f"data ship one; see available_percentile_cohorts()."
+            f"no {variant}percentile vector for {code!r} — only cohorts with per-sample "
+            f"data ship one; see available_percentile_cohorts(proteoform={proteoform})."
         )
     df = pd.read_parquet(shard)
-    bp_cols = [c for c in df.columns if c not in ("Ensembl_Gene_ID", "Symbol")]
+    bp_cols = [c for c in df.columns if c not in ID_COLUMNS]
     df[bp_cols] = df[bp_cols].astype("float32")
     if as_tpm:
         df[bp_cols] = np.expm1(df[bp_cols])
