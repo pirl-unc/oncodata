@@ -114,8 +114,8 @@ def greedy_coverage(
     ``Ensembl_Gene_ID``, ``Symbol``, ``marginal_patients`` (newly covered),
     ``marginal_fraction``, ``cumulative_patients``, ``cumulative_fraction``. The
     cumulative fraction is the coverage curve; its last value equals
-    :func:`addressable_fraction`. Ties are broken by total prevalence then row order
-    (deterministic)."""
+    :func:`addressable_fraction` once the panel is exhausted (unless ``max_genes``
+    truncates it first). Ties are broken by total prevalence (deterministic)."""
     sub, samples, hits = _hit_matrix(cancer_type, threshold_tpm=threshold_tpm, gene_ids=gene_ids)
     n = len(samples)
     rows: list[dict] = []

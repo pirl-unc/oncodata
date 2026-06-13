@@ -51,9 +51,10 @@ def _source_key(name: str) -> str:
 
 
 def _matrices_by_source(cache: Path) -> dict[str, list[Path]]:
-    """``{source_key -> [matrix paths]}`` for every per-sample matrix in the cache."""
+    """``{source_key -> [matrix paths]}`` for every per-sample matrix in the cache
+    (sorted, so candidate order is deterministic across machines)."""
     out: dict[str, list[Path]] = defaultdict(list)
-    for p in cache.glob("*/derived/*_per_sample_tpm.parquet"):
+    for p in sorted(cache.glob("*/derived/*_per_sample_tpm.parquet")):
         out[_source_key(p.parent.parent.name)].append(p)
     return out
 
@@ -100,6 +101,11 @@ def stage(cache: Path, *, release_dir: Path | None, codes: list[str] | None, lim
 
 
 def _match_code(code: str, candidates: list[Path]) -> Path | None:
+    """The candidate matrix whose filename stem maps to ``code`` (a source dir with
+    several code-matrices, e.g. treehouse). Returns ``None`` if the match isn't
+    unique — the caller reports that as missing rather than staging an arbitrary
+    matrix (silently shipping the wrong cohort would corrupt every analysis)."""
+
     def code_key(name: str) -> str:
         n = name[5:] if name.lower().startswith("tcga_") else name
         return n.replace("_", "").lower()
@@ -108,7 +114,7 @@ def _match_code(code: str, candidates: list[Path]) -> Path | None:
     hits = [
         p for p in candidates if code_key(p.name.replace("_per_sample_tpm.parquet", "")) == want
     ]
-    return hits[0] if len(hits) == 1 else (candidates[0] if candidates else None)
+    return hits[0] if len(hits) == 1 else None
 
 
 def main(argv=None) -> None:
