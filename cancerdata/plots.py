@@ -198,6 +198,110 @@ def _cohort_gene_heatmap(grid, *, title, cbar_label, cmap, lognorm=False, floor=
     return _save(fig, save)
 
 
+# CTA antigen families, by symbol prefix (longest match wins). cancerdata has no
+# curated antigen-family table; this presentational heuristic mirrors pirlygenes and
+# only drives colour grouping in the gene-level CTA plots — never analysis.
+_ANTIGEN_FAMILY_PREFIXES = (
+    ("MAGEA", "MAGE-A"),
+    ("MAGEB", "MAGE-B"),
+    ("MAGEC", "MAGE-C"),
+    ("CSAG", "CSAG"),
+    ("GAGE", "GAGE"),
+    ("XAGE", "XAGE"),
+    ("PAGE", "PAGE"),
+    ("SSX", "SSX"),
+    ("CT45", "CT45"),
+    ("CTAG", "CTAG/NY-ESO"),
+    ("LAGE", "CTAG/NY-ESO"),
+    ("SPANX", "SPANX"),
+    ("PRAME", "PRAME"),
+    ("DPPA2", "DPPA"),
+    ("TFDP3", "TFDP3"),
+)
+
+
+def _antigen_family(symbol) -> str:
+    """CTA antigen family for a gene symbol via longest matching prefix; ``"other"``
+    when nothing matches (e.g. CT83, CTCFL)."""
+    s = str(symbol).upper()
+    best = None
+    for prefix, fam in _ANTIGEN_FAMILY_PREFIXES:
+        if s.startswith(prefix) and (best is None or len(prefix) > len(best[0])):
+            best = (prefix, fam)
+    return best[1] if best else "other"
+
+
+def _antigen_family_colors(symbols):
+    """``({symbol -> color}, {family -> color})`` keyed by antigen family (tab20)."""
+    plt = _plt()
+    fam_by_sym = {s: _antigen_family(s) for s in symbols}
+    families = sorted(set(fam_by_sym.values()))
+    cmap = plt.get_cmap("tab20")
+    fam_color = {f: cmap(i % 20) for i, f in enumerate(families)}
+    return {s: fam_color[f] for s, f in fam_by_sym.items()}, fam_color
+
+
+def _stacked_barh(rows, *, xlabel, title, legend=None, annotate=True, save=None):
+    """Horizontal stacked bars. ``rows`` is ``[(row_label, [(seg_label, value,
+    color), ...]), ...]`` in top-to-bottom order; each row's segments stack along x.
+    ``legend`` is an optional ``{label: color}`` shown as a colour key. Segments wide
+    enough are annotated with their ``seg_label``. The shared stacked-bar scaffold."""
+    plt = _plt()
+    fig, ax = plt.subplots(figsize=(10, max(4, 0.42 * len(rows))))
+    total = max((sum(v for _, v, _ in segs) for _, segs in rows), default=1.0) or 1.0
+    for i, (_, segs) in enumerate(rows):
+        left = 0.0
+        for seg_label, value, color in segs:
+            ax.barh(i, value, left=left, color=color, edgecolor="white", linewidth=0.4)
+            if annotate and value > 0.06 * total:
+                ax.text(
+                    left + value / 2,
+                    i,
+                    seg_label,
+                    ha="center",
+                    va="center",
+                    fontsize=5,
+                    color="white",
+                )
+            left += value
+    ax.set_yticks(range(len(rows)))
+    ax.set_yticklabels([r[0] for r in rows], fontsize=7)
+    ax.invert_yaxis()  # first row at the top
+    ax.set_xlabel(xlabel)
+    ax.set_title(title)
+    ax.grid(True, axis="x", alpha=0.3)
+    if legend:
+        handles = [plt.Rectangle((0, 0), 1, 1, color=c) for c in legend.values()]
+        ax.legend(handles, list(legend), fontsize=6, title="antigen family", loc="lower right")
+    fig.tight_layout()
+    return _save(fig, save)
+
+
+def _grouped_barh(categories, series, *, xlabel, title, save=None):
+    """Grouped (paired) horizontal bars. ``categories`` are the row labels (top-to-
+    bottom); ``series`` is ``[(name, [value per category], color), ...]`` — one bar
+    per series within each category group. The shared grouped-bar scaffold."""
+    import numpy as np
+
+    plt = _plt()
+    n_series = max(1, len(series))
+    base = np.arange(len(categories))
+    height = 0.8 / n_series
+    fig, ax = plt.subplots(figsize=(9, max(4, 0.5 * len(categories))))
+    for k, (name, values, color) in enumerate(series):
+        offset = (k - (n_series - 1) / 2) * height
+        ax.barh(base + offset, values, height=height, label=name, color=color)
+    ax.set_yticks(base)
+    ax.set_yticklabels(categories, fontsize=7)
+    ax.invert_yaxis()
+    ax.set_xlabel(xlabel)
+    ax.set_title(title)
+    ax.grid(True, axis="x", alpha=0.3)
+    ax.legend(fontsize=7, loc="lower right")
+    fig.tight_layout()
+    return _save(fig, save)
+
+
 def apd1_vs_tmb(*, save=None, annotate=True):
     """Scatter of anti-PD-1 ORR (%) vs median TMB (log x), one point per cancer
     type with a curated value for both, colored by lineage family. The classic
@@ -577,6 +681,124 @@ def cta_coverage_curves(
     ax.legend(fontsize=7, loc="lower right")
     fig.tight_layout()
     return _save(fig, save)
+
+
+def cta_coverage_stacked_bars(
+    cancer_types,
+    *,
+    threshold_tpm=10.0,
+    max_genes=12,
+    save=None,
+):
+    """Greedy **coverage plateau** as a stacked bar per cohort — one horizontal bar
+    per cancer type, split into the marginal new-patient fraction each CTA adds in
+    greedy set-cover order (:func:`cancerdata.coverage.greedy_coverage`). The bar's
+    total length is the cohort's addressable share (≥1 CTA panel); each segment shows
+    how much a single antigen contributes, coloured by antigen family.
+
+    Complements :func:`cta_coverage_curves` (cumulative step curve) by showing *which*
+    antigens carry the coverage. ``cancer_types`` is a code or iterable; each needs a
+    cached per-sample matrix. ``max_genes`` caps the segments per cohort."""
+    from .coverage import greedy_coverage
+
+    codes = [cancer_types] if isinstance(cancer_types, str) else list(cancer_types)
+    coverage_by_code = {}
+    for code in codes:
+        gc = greedy_coverage(code, threshold_tpm=threshold_tpm, max_genes=max_genes)
+        if not gc.empty:
+            coverage_by_code[code] = gc
+    if not coverage_by_code:
+        raise ValueError(
+            "no coverage to plot — are the cohorts' per-sample matrices cached, and "
+            "does any CTA clear the threshold?"
+        )
+    all_syms = {str(s) for gc in coverage_by_code.values() for s in gc["Symbol"]}
+    sym_color, fam_color = _antigen_family_colors(all_syms)
+
+    rows = []
+    for code, gc in coverage_by_code.items():
+        covered = float(gc["cumulative_fraction"].iloc[-1])
+        segs = [
+            (str(r.Symbol), float(r.marginal_fraction), sym_color[str(r.Symbol)])
+            for r in gc.itertuples()
+        ]
+        rows.append((f"{format_cancer_code_label(code)}  ({covered:.0%})", segs))
+    return _stacked_barh(
+        rows,
+        xlabel=f"fraction of patients covered (≥1 CTA > {threshold_tpm:g} TPM)",
+        title=f"CTA greedy coverage by antigen — {len(rows)} cohorts",
+        legend=fam_color,
+        save=save,
+    )
+
+
+def burden_category_bars(*, region="us", n=None, save=None):
+    """Grouped horizontal bars of cancer **incidence vs mortality** share per burden
+    category for a region (``"us"``/``"world"``), categories ordered by incidence. The
+    reference view behind :func:`incidence_vs_mortality` — read the gap between a
+    category's two bars as its lethality."""
+    if region not in ("us", "world"):
+        raise ValueError("region must be 'us' or 'world'")
+    plt = _plt()
+    inc = cancer_burden(metric=f"{region}_incidence_pct")
+    mort = cancer_burden(metric=f"{region}_mortality_pct")
+    cats = sorted(set(inc) & set(mort), key=lambda c: inc.get(c, 0.0), reverse=True)
+    if not cats:
+        raise ValueError("no burden category with both an incidence and a mortality share")
+    if n is not None:
+        cats = cats[:n]
+    cmap = plt.get_cmap("tab10")
+    return _grouped_barh(
+        cats,
+        [
+            ("incidence", [inc[c] for c in cats], cmap(0)),
+            ("mortality", [mort[c] for c in cats], cmap(3)),
+        ],
+        xlabel=f"{region.upper()} share of cancer cases / deaths (%)",
+        title=f"Cancer burden by category ({region.upper()}) — incidence vs mortality",
+        save=save,
+    )
+
+
+def cta_burden_vs_response(*, against="apd1", threshold_tpm=10.0, cohorts=None, save=None):
+    """Scatter of a cohort's **mean CTA antigen load** (mean number of CTAs a patient
+    expresses above ``threshold_tpm``, from
+    :func:`cancerdata.coverage.mean_antigens_per_patient`) vs its anti-PD-1 ORR
+    (``against="apd1"``) or median TMB (``against="tmb"``), one point per cancer type,
+    coloured by lineage family.
+
+    The per-patient counterpart to :func:`apd1_response_signature_scatter`: does a
+    cohort's CTA antigen load track checkpoint response / mutational burden? Points are
+    cohorts with BOTH a cached per-sample matrix and the chosen response metric. Needs
+    the per-sample matrices cached."""
+    from .coverage import mean_antigens_per_patient
+
+    if against == "apd1":
+        ymap, ylabel = cancer_apd1_response(), "Anti-PD-1 monotherapy ORR (%)"
+    elif against == "tmb":
+        ymap, ylabel = cancer_tmb(), "Median tumor mutational burden (mut/Mb)"
+    else:
+        raise ValueError("against must be 'apd1' or 'tmb'")
+
+    cohorts = list(cohorts) if cohorts is not None else _cached_per_sample_cohorts()
+    points = []
+    for code in cohorts:
+        if code not in ymap:
+            continue
+        load = mean_antigens_per_patient(code, threshold_tpm=threshold_tpm)
+        points.append((code, load, float(ymap[code])))
+    if not points:
+        raise ValueError(
+            f"no cohort with both a cached per-sample matrix and a {against} value — "
+            "fetch the matrices (source_matrices.fetch) for those cohorts first."
+        )
+    return _family_scatter(
+        points,
+        xlabel=f"mean CTAs expressed per patient (> {threshold_tpm:g} TPM)",
+        ylabel=ylabel,
+        title=f"CTA antigen load vs {against} — {len(points)} cancers",
+        save=save,
+    )
 
 
 def apd1_response_signature_scatter(signature="t_cell_inflamed", *, cohorts=None, save=None):

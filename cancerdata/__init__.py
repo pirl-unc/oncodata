@@ -60,6 +60,8 @@ from .coverage import (
     addressable_fraction_by_cohort,
     cta_patient_fractions,
     greedy_coverage,
+    mean_antigens_per_patient,
+    mean_antigens_per_patient_by_cohort,
 )
 from .cta import (
     CTA_evidence,
@@ -256,6 +258,8 @@ __all__ = [
     "is_mixture_cohort",
     "is_rescue_feature",
     "known_cohort_ids",
+    "mean_antigens_per_patient",
+    "mean_antigens_per_patient_by_cohort",
     "mixture_cohort_codes",
     "normalize_expression",
     "normalize_technical_rna_columns",

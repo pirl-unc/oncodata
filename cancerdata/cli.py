@@ -255,10 +255,13 @@ def _cmd_plot(args: argparse.Namespace) -> int:
         "cta-addressable-burden": plots.cta_addressable_burden,
         "cta-patient-heatmap": plots.cta_patient_count_heatmap,
         "cta-coverage-curves": plots.cta_coverage_curves,
+        "cta-coverage-stacked": plots.cta_coverage_stacked_bars,
+        "cta-burden-vs-response": plots.cta_burden_vs_response,
+        "burden-category-bars": plots.burden_category_bars,
         "apd1-response-signature": plots.apd1_response_signature_scatter,
     }
     try:
-        if args.which == "incidence-vs-mortality":
+        if args.which in ("incidence-vs-mortality", "burden-category-bars"):
             kwargs = {"region": args.region}
         elif args.which == "apd1-response-signature":
             kwargs = {"signature": args.signature}
@@ -268,9 +271,11 @@ def _cmd_plot(args: argparse.Namespace) -> int:
             kwargs = {"source": args.source, "threshold_tpm": args.threshold_tpm}
         elif args.which == "cta-patient-heatmap":
             kwargs = {"threshold_tpm": args.threshold_tpm}
-        elif args.which == "cta-coverage-curves":
+        elif args.which == "cta-burden-vs-response":
+            kwargs = {"against": args.against, "threshold_tpm": args.threshold_tpm}
+        elif args.which in ("cta-coverage-curves", "cta-coverage-stacked"):
             if not args.codes:
-                print("Error: cta-coverage-curves needs --codes", file=sys.stderr)
+                print(f"Error: {args.which} needs --codes", file=sys.stderr)
                 return 1
             kwargs = {
                 "cancer_types": [c.strip() for c in args.codes.split(",")],
@@ -458,6 +463,9 @@ def _build_parser() -> argparse.ArgumentParser:
             "cta-addressable-burden",
             "cta-patient-heatmap",
             "cta-coverage-curves",
+            "cta-coverage-stacked",
+            "cta-burden-vs-response",
+            "burden-category-bars",
             "apd1-response-signature",
         ],
         help="Which plot to render",
@@ -482,6 +490,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default="within_sample",
         choices=["within_sample", "per_sample"],
         help="Prevalence basis for cta-addressable-burden (per_sample needs matrices)",
+    )
+    p_plot.add_argument(
+        "--against",
+        default="apd1",
+        choices=["apd1", "tmb"],
+        help="Response metric for cta-burden-vs-response",
     )
     p_plot.add_argument(
         "--threshold-tpm",

@@ -192,6 +192,50 @@ def greedy_coverage(
     return pd.DataFrame(rows)
 
 
+def mean_antigens_per_patient(
+    cancer_type,
+    *,
+    threshold_tpm: float = DEFAULT_EXPRESSED_TPM,
+    gene_ids: Iterable[str] | None = None,
+    proteoform: bool = True,
+) -> float:
+    """Mean number of panel antigens a patient in the cohort expresses above
+    ``threshold_tpm`` — the per-patient antigen *load* (how many CTAs the average
+    patient presents, not just whether ≥1). Equals the sum over antigens of their
+    per-patient prevalence; identical-protein paralogs count once
+    (``proteoform=True``). 0.0 for an empty cohort/panel."""
+    _, samples, hits = _hit_matrix(
+        cancer_type, threshold_tpm=threshold_tpm, gene_ids=gene_ids, proteoform=proteoform
+    )
+    if not samples or hits.size == 0:
+        return 0.0
+    return float(hits.sum(axis=0).mean())
+
+
+def mean_antigens_per_patient_by_cohort(
+    cohorts: Iterable[str] | None = None,
+    *,
+    threshold_tpm: float = DEFAULT_EXPRESSED_TPM,
+    gene_ids: Iterable[str] | None = None,
+    proteoform: bool = True,
+) -> pd.Series:
+    """``{cohort code -> mean antigens per patient}`` over the cohorts that have a
+    per-sample matrix (default: all cached ones). Mirrors
+    :func:`addressable_fraction_by_cohort`: skips uncached cohorts rather than
+    fetching every one implicitly."""
+    from . import source_matrices
+
+    codes = list(cohorts) if cohorts is not None else source_matrices.available_cohorts()
+    out: dict[str, float] = {}
+    for code in codes:
+        if cohorts is None and not source_matrices.is_cached(code):
+            continue
+        out[str(code)] = mean_antigens_per_patient(
+            code, threshold_tpm=threshold_tpm, gene_ids=gene_ids, proteoform=proteoform
+        )
+    return pd.Series(out, name="mean_antigens_per_patient")
+
+
 def addressable_fraction_by_cohort(
     cohorts: Iterable[str] | None = None,
     *,

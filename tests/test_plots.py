@@ -41,6 +41,17 @@ def test_cli_plot(tmp_path):
     assert out.exists()
 
 
+def test_cli_plot_burden_category_bars(tmp_path):
+    out = tmp_path / "cats.png"
+    assert cli.main(["plot", "burden-category-bars", "--region", "world", "--out", str(out)]) == 0
+    assert out.exists()
+
+
+def test_cli_plot_coverage_stacked_needs_codes(capsys):
+    # The coverage plots require --codes; missing it is a clean error, not a crash.
+    assert cli.main(["plot", "cta-coverage-stacked", "--out", "x.png"]) == 1
+
+
 # ---- CTA expression heatmap (needs the expression bundle / percentile data) ----
 
 _HAS_PERCENTILES = bool(__import__("cancerdata").available_percentile_cohorts())
@@ -230,6 +241,90 @@ def test_cta_coverage_curves_empty_raises(monkeypatch):
     monkeypatch.setattr(coverage, "greedy_coverage", lambda *a, **k: pd.DataFrame())
     with pytest.raises(ValueError, match="no coverage curve"):
         plots.cta_coverage_curves(["LUAD"])
+
+
+def test_antigen_family_grouping():
+    assert plots._antigen_family("MAGEA4") == "MAGE-A"
+    assert plots._antigen_family("MAGEB2") == "MAGE-B"
+    assert plots._antigen_family("CTAG1B") == "CTAG/NY-ESO"
+    assert plots._antigen_family("LAGE1") == "CTAG/NY-ESO"  # same family as CTAG
+    assert plots._antigen_family("SSX2") == "SSX"
+    assert plots._antigen_family("CT83") == "other"
+
+
+def test_cta_coverage_stacked_bars_renders(tmp_path, monkeypatch):
+    import pandas as pd
+
+    from cancerdata import coverage
+
+    def fake_greedy(code, *, threshold_tpm, max_genes):
+        return pd.DataFrame(
+            {
+                "rank": [1, 2, 3],
+                "Ensembl_Gene_ID": ["E1", "E2", "E3"],
+                "Symbol": ["MAGEA4", "CTAG1B", "SSX2"],
+                "marginal_patients": [60, 20, 10],
+                "marginal_fraction": [0.6, 0.2, 0.1],
+                "cumulative_patients": [60, 80, 90],
+                "cumulative_fraction": [0.6, 0.8, 0.9],
+            }
+        )
+
+    monkeypatch.setattr(coverage, "greedy_coverage", fake_greedy)
+    out = tmp_path / "stacked.png"
+    fig = plots.cta_coverage_stacked_bars(["LUAD", "SKCM"], save=str(out))
+    assert out.exists() and out.stat().st_size > 0
+    assert fig is not None
+
+
+def test_cta_coverage_stacked_bars_empty_raises(monkeypatch):
+    import pandas as pd
+
+    from cancerdata import coverage
+
+    monkeypatch.setattr(coverage, "greedy_coverage", lambda *a, **k: pd.DataFrame())
+    with pytest.raises(ValueError, match="no coverage to plot"):
+        plots.cta_coverage_stacked_bars(["LUAD"])
+
+
+def test_burden_category_bars_renders(tmp_path):
+    out = tmp_path / "cats.png"
+    fig = plots.burden_category_bars(region="us", n=8, save=str(out))
+    assert out.exists() and out.stat().st_size > 0
+    assert fig is not None
+
+
+def test_burden_category_bars_bad_region():
+    with pytest.raises(ValueError, match="region must be"):
+        plots.burden_category_bars(region="moon")
+
+
+def test_cta_burden_vs_response_renders(tmp_path, monkeypatch):
+    from cancerdata import coverage
+
+    monkeypatch.setattr(plots, "_cached_per_sample_cohorts", lambda: ["LUAD", "SKCM", "MM"])
+    monkeypatch.setattr(
+        plots, "cancer_apd1_response", lambda: {"LUAD": 19.0, "SKCM": 42.0, "MM": 3.0}
+    )
+    monkeypatch.setattr(
+        coverage,
+        "mean_antigens_per_patient",
+        lambda code, **k: {"LUAD": 1.5, "SKCM": 4.0, "MM": 8.0}[code],
+    )
+    out = tmp_path / "load.png"
+    fig = plots.cta_burden_vs_response(against="apd1", save=str(out))
+    assert out.exists() and fig is not None
+
+
+def test_cta_burden_vs_response_bad_against():
+    with pytest.raises(ValueError, match="against must be"):
+        plots.cta_burden_vs_response(against="nonsense")
+
+
+def test_cta_burden_vs_response_no_data(monkeypatch):
+    monkeypatch.setattr(plots, "_cached_per_sample_cohorts", lambda: [])
+    with pytest.raises(ValueError, match="no cohort with both"):
+        plots.cta_burden_vs_response()
 
 
 def test_apd1_response_signature_scatter_renders(tmp_path, monkeypatch):

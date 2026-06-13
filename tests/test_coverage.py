@@ -62,6 +62,19 @@ def test_greedy_coverage_is_set_cover(patched):
     assert (gc["cumulative_fraction"].diff().dropna() > 0).all()
 
 
+def test_mean_antigens_per_patient(patched):
+    # hits: gA in p0,p1 (2) + gB in p2 (1) + gC in p1 (1) = 4 over 4 patients -> 1.0.
+    # Equals the sum of per-gene prevalences (0.5 + 0.25 + 0.25).
+    load = coverage.mean_antigens_per_patient("X", threshold_tpm=5, gene_ids=patched)
+    assert load == 1.0
+    pf = coverage.cta_patient_fractions("X", threshold_tpm=5, gene_ids=patched)
+    assert load == pytest.approx(pf["fraction_expressing"].sum())
+
+
+def test_mean_antigens_per_patient_empty_panel(patched):
+    assert coverage.mean_antigens_per_patient("X", gene_ids=[]) == 0.0
+
+
 def test_greedy_respects_max_genes(patched):
     gc = coverage.greedy_coverage("X", threshold_tpm=5, gene_ids=patched, max_genes=1)
     assert len(gc) == 1
