@@ -165,6 +165,7 @@ def per_sample_expression(
     (see :func:`cancerdata.proteoforms.expression_level`). The sum is always taken in
     **linear** TPM and the ``log1p`` transform (if any) applied *after*, so the
     proteoform value is ``log1p(Σ member TPM)``, not the meaningless ``Σ log1p``.
+    (``scope`` is ignored when ``proteoform=False``.)
 
     ``auto_fetch=False`` raises instead of downloading if the matrix isn't cached.
     Returns ``Ensembl_Gene_ID``, ``Symbol`` and one column per sample (plus the
