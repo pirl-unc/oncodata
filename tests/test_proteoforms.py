@@ -197,6 +197,14 @@ def test_gene_to_proteoform_id_is_total():
     assert m2["ENSG_Y"] == "ENSG_Y"
 
 
+def test_gene_to_proteoform_id_rejects_mismatched_symbols():
+    # A short `symbols` would zip-truncate and silently drop genes — must raise.
+    from cancerdata.proteoforms import gene_to_proteoform_id
+
+    with pytest.raises(ValueError, match="parallel"):
+        gene_to_proteoform_id(["ENSG_A", "ENSG_B", "ENSG_C"], symbols=["A"])
+
+
 def test_collapse_to_proteoforms_keeps_ensembl_id_real():
     # The reusable collapse entry point: ENSG column stays a real Ensembl id, the
     # antigen identity is in proteoform_id.

@@ -115,12 +115,12 @@ def proteoform_symbol_map(*, scope: str = "cta") -> dict[str, tuple[str, ...]]:
     return out
 
 
-@lru_cache(maxsize=1)
-def _member_to_label() -> dict[str, str]:
+@lru_cache(maxsize=len(_DATASET_BY_SCOPE))
+def _member_to_label(scope: str) -> dict[str, str]:
     """Lookup keyed by BOTH the unversioned gene ID and the uppercased symbol ->
-    proteoform label. The two key spaces don't collide (``ENSG…`` vs symbols), so
-    one flat dict serves both ``proteoform_for_gene`` lookup paths."""
-    df = _proteoform_frame("cta")
+    proteoform label, for one scope. The two key spaces don't collide (``ENSG…`` vs
+    symbols), so one flat dict serves both ``proteoform_for_gene`` lookup paths."""
+    df = _proteoform_frame(scope)
     out: dict[str, str] = {}
     for _, row in df.iterrows():
         label = str(row[_LABEL_COLUMN])
@@ -129,15 +129,12 @@ def _member_to_label() -> dict[str, str]:
     return out
 
 
-def proteoform_for_gene(gene: str) -> str | None:
+def proteoform_for_gene(gene: str, *, scope: str = "cta") -> str | None:
     """Proteoform label for a gene given by Ensembl ID (version-insensitive) or
-    symbol (case-insensitive). ``None`` if the gene isn't in any group."""
-    key = str(gene).split(".")[0]
-    mapping = _member_to_label()
-    label = mapping.get(key)
-    if label is None:
-        label = mapping.get(str(gene).upper())
-    return label
+    symbol (case-insensitive), within ``scope`` (see :func:`proteoform_groups`).
+    ``None`` if the gene isn't in any group in that scope."""
+    mapping = _member_to_label(scope)
+    return mapping.get(str(gene).split(".")[0]) or mapping.get(str(gene).upper())
 
 
 def gene_to_proteoform() -> dict[str, str]:
@@ -162,7 +159,17 @@ def gene_to_proteoform_id(genes, *, symbols=None, scope: str = "cta") -> dict[st
     pf = _proteoform_frame(scope)
     member_map = dict(zip(pf[_GENE_ID_COLUMN].astype(str), pf[_LABEL_COLUMN].astype(str)))
     genes = [str(g).split(".")[0] for g in genes]
-    syms = list(symbols) if symbols is not None else [None] * len(genes)
+    if symbols is None:
+        syms: list = [None] * len(genes)
+    else:
+        syms = list(symbols)
+        if len(syms) != len(genes):
+            # zip() would silently truncate to the shorter and drop genes from the
+            # output entirely — fail loudly instead.
+            raise ValueError(
+                f"symbols has length {len(syms)} but genes has length {len(genes)}; "
+                "they must be parallel"
+            )
     out: dict[str, str] = {}
     for gid, sym in zip(genes, syms):
         out[gid] = member_map.get(gid) or (str(sym) if sym is not None else gid)

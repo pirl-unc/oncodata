@@ -63,11 +63,10 @@ def fake_proteome(monkeypatch, tmp_path):
     monkeypatch.setattr(peptides, "CTA_gene_ids", lambda: ["ENSG_CTA"])
     monkeypatch.setattr(peptides, "CTA_unfiltered_gene_ids", lambda: ["ENSG_CTA"])
     monkeypatch.setattr(peptides, "CTA_gene_id_to_name", lambda: {"ENSG_CTA": "CTAX"})
-    peptides.cta_specific_9mer_counts.cache_clear()
-    peptides.cta_specific_9mer_weights.cache_clear()
+    monkeypatch.setattr(peptides, "_MIN_PROTEOME_GENES", 1)  # tiny fake proteome
+    peptides._COUNTS_CACHE.clear()
     yield
-    peptides.cta_specific_9mer_counts.cache_clear()
-    peptides.cta_specific_9mer_weights.cache_clear()
+    peptides._COUNTS_CACHE.clear()
 
 
 def test_specific_9mer_counts_subtracts_background(fake_proteome):
@@ -78,13 +77,34 @@ def test_specific_9mer_counts_subtracts_background(fake_proteome):
     assert row["n_specific_9mers"] == 3  # CCC also in background -> excluded
 
 
-def test_specific_9mer_counts_caches(fake_proteome, tmp_path):
+def test_specific_9mer_counts_caches_with_fingerprint(fake_proteome, tmp_path):
     peptides.cta_specific_9mer_counts(k=3)
-    assert (tmp_path / "cta_specific_3mers_r999.csv").exists()
+    # filename is keyed by release AND a CTA-set fingerprint
+    cached = list(tmp_path.glob("cta_specific_3mers_r999_*.csv"))
+    assert len(cached) == 1
 
 
-def test_specific_9mer_weights(fake_proteome):
-    assert peptides.cta_specific_9mer_weights(k=3) == {"CTAX": 3}
+def test_specific_9mer_counts_returns_fresh_copy(fake_proteome):
+    a = peptides.cta_specific_9mer_counts(k=3)
+    a.loc[0, "n_specific_9mers"] = -999  # mutating the result must not corrupt the cache
+    b = peptides.cta_specific_9mer_counts(k=3)
+    assert b.loc[0, "n_specific_9mers"] == 3
+
+
+def test_specific_9mer_counts_refresh_rebuilds(fake_proteome, tmp_path):
+    peptides.cta_specific_9mer_counts(k=3)
+    # corrupt the on-disk cache; refresh=True must drop it and rebuild correctly
+    (next(tmp_path.glob("cta_specific_3mers_r999_*.csv"))).write_text("garbage\n")
+    peptides._COUNTS_CACHE.clear()
+    df = peptides.cta_specific_9mer_counts(k=3, refresh=True)
+    assert int(df.loc[0, "n_specific_9mers"]) == 3
+
+
+def test_specific_9mer_weights_keyed_by_ensembl_id_by_default(fake_proteome):
+    assert peptides.cta_specific_9mer_weights(k=3) == {"ENSG_CTA": 3}
+    assert peptides.cta_specific_9mer_weights(k=3, by="symbol") == {"CTAX": 3}
+    with pytest.raises(ValueError, match="by must be"):
+        peptides.cta_specific_9mer_weights(k=3, by="nonsense")
 
 
 def test_specific_9mer_load_joins_on_ensembl_id_not_symbol(fake_proteome, monkeypatch):

@@ -51,8 +51,13 @@ def _panel_ids(gene_ids: Iterable[str] | None) -> set[str]:
     return {str(g).split(".")[0] for g in ids}
 
 
+#: Identity columns a (possibly proteoform-collapsed) antigen frame may carry;
+#: everything else is a per-sample expression column.
+_ANTIGEN_ID_COLS = ("Ensembl_Gene_ID", "Symbol", "proteoform_id")
+
+
 def _hit_matrix(cancer_type, *, threshold_tpm: float, gene_ids, proteoform: bool = True):
-    """``(panel rows of the matrix, sample columns, gene×sample boolean hit matrix)``
+    """``(panel rows, sample columns, gene×sample boolean hit matrix, id columns)``
     where a hit is clean TPM >= ``threshold_tpm`` for one antigen in one patient.
 
     With ``proteoform=True`` (default), identical-protein paralogs in the panel
@@ -69,10 +74,10 @@ def _hit_matrix(cancer_type, *, threshold_tpm: float, gene_ids, proteoform: bool
         from .proteoforms import collapse_to_proteoforms
 
         sub = collapse_to_proteoforms(sub).reset_index(drop=True)
-    id_cols = [c for c in ("Ensembl_Gene_ID", "Symbol", "proteoform_id") if c in sub.columns]
+    id_cols = [c for c in _ANTIGEN_ID_COLS if c in sub.columns]
     samples = [c for c in sub.columns if c not in id_cols]
     hits = sub[samples].to_numpy(dtype=float) >= float(threshold_tpm)
-    return sub, samples, hits
+    return sub, samples, hits, id_cols
 
 
 def cta_patient_fractions(
@@ -89,11 +94,10 @@ def cta_patient_fractions(
     ``n_patients_expressing``, ``n_patients`` — sorted by prevalence. The default
     gene panel is the expressed CTA set; identical-protein paralogs are summed to
     one antigen (``proteoform=True``)."""
-    sub, samples, hits = _hit_matrix(
+    sub, samples, hits, id_cols = _hit_matrix(
         cancer_type, threshold_tpm=threshold_tpm, gene_ids=gene_ids, proteoform=proteoform
     )
     n = len(samples)
-    id_cols = [c for c in ("Ensembl_Gene_ID", "Symbol", "proteoform_id") if c in sub.columns]
     out = sub[id_cols].copy()
     counts = hits.sum(axis=1)
     out["n_patients_expressing"] = counts
@@ -114,7 +118,7 @@ def addressable_fraction(
     patients, which the per-gene fractions can't be summed into). Identical-protein
     paralogs are summed to one antigen (``proteoform=True``). 0.0 for an empty
     cohort/panel."""
-    _, samples, hits = _hit_matrix(
+    _, samples, hits, _ = _hit_matrix(
         cancer_type, threshold_tpm=threshold_tpm, gene_ids=gene_ids, proteoform=proteoform
     )
     if not samples or hits.size == 0:
@@ -141,7 +145,7 @@ def greedy_coverage(
     cumulative fraction is the coverage curve; its last value equals
     :func:`addressable_fraction` once the panel is exhausted (unless ``max_genes``
     truncates it first). Ties are broken by total prevalence (deterministic)."""
-    sub, samples, hits = _hit_matrix(
+    sub, samples, hits, _ = _hit_matrix(
         cancer_type, threshold_tpm=threshold_tpm, gene_ids=gene_ids, proteoform=proteoform
     )
     n = len(samples)
@@ -165,13 +169,14 @@ def greedy_coverage(
     limit = max_genes if max_genes is not None else len(sub)
 
     while remaining and len(rows) < limit:
-        best_g, best_new = None, 0
-        for g in remaining:
+        # Pick the gene covering the most still-uncovered patients; ties by total
+        # prevalence, then by smallest row index — fully deterministic (sorted scan +
+        # strict tuple comparison), independent of set-iteration order.
+        best_g, best_new, best_prev = None, 0, -1
+        for g in sorted(remaining):
             new = int(np.count_nonzero(hits[g] & ~covered))
-            if new > best_new or (
-                new == best_new and best_g is not None and total_prev[g] > total_prev[best_g]
-            ):
-                best_g, best_new = g, new
+            if (new, total_prev[g]) > (best_new, best_prev):
+                best_g, best_new, best_prev = g, new, int(total_prev[g])
         if best_g is None or best_new == 0:
             break  # no remaining gene covers a new patient
         covered |= hits[best_g]
@@ -204,12 +209,32 @@ def mean_antigens_per_patient(
     patient presents, not just whether ≥1). Equals the sum over antigens of their
     per-patient prevalence; identical-protein paralogs count once
     (``proteoform=True``). 0.0 for an empty cohort/panel."""
-    _, samples, hits = _hit_matrix(
+    _, samples, hits, _ = _hit_matrix(
         cancer_type, threshold_tpm=threshold_tpm, gene_ids=gene_ids, proteoform=proteoform
     )
     if not samples or hits.size == 0:
         return 0.0
     return float(hits.sum(axis=0).mean())
+
+
+def _scalar_by_cohort(
+    scalar_fn, name, cohorts, *, threshold_tpm, gene_ids, proteoform
+) -> pd.Series:
+    """Map a per-cohort scalar coverage function over cohorts → ``Series``. When
+    ``cohorts`` is ``None`` every cohort with a *cached* per-sample matrix is used
+    (uncached ones are skipped, never fetched implicitly); an explicit ``cohorts``
+    list is taken as-is."""
+    from . import source_matrices
+
+    codes = list(cohorts) if cohorts is not None else source_matrices.available_cohorts()
+    out: dict[str, float] = {}
+    for code in codes:
+        if cohorts is None and not source_matrices.is_cached(code):
+            continue
+        out[str(code)] = scalar_fn(
+            code, threshold_tpm=threshold_tpm, gene_ids=gene_ids, proteoform=proteoform
+        )
+    return pd.Series(out, name=name)
 
 
 def mean_antigens_per_patient_by_cohort(
@@ -220,20 +245,16 @@ def mean_antigens_per_patient_by_cohort(
     proteoform: bool = True,
 ) -> pd.Series:
     """``{cohort code -> mean antigens per patient}`` over the cohorts that have a
-    per-sample matrix (default: all cached ones). Mirrors
-    :func:`addressable_fraction_by_cohort`: skips uncached cohorts rather than
-    fetching every one implicitly."""
-    from . import source_matrices
-
-    codes = list(cohorts) if cohorts is not None else source_matrices.available_cohorts()
-    out: dict[str, float] = {}
-    for code in codes:
-        if cohorts is None and not source_matrices.is_cached(code):
-            continue
-        out[str(code)] = mean_antigens_per_patient(
-            code, threshold_tpm=threshold_tpm, gene_ids=gene_ids, proteoform=proteoform
-        )
-    return pd.Series(out, name="mean_antigens_per_patient")
+    cached per-sample matrix (default: all cached ones); uncached cohorts are skipped
+    rather than fetched."""
+    return _scalar_by_cohort(
+        mean_antigens_per_patient,
+        "mean_antigens_per_patient",
+        cohorts,
+        threshold_tpm=threshold_tpm,
+        gene_ids=gene_ids,
+        proteoform=proteoform,
+    )
 
 
 def addressable_fraction_by_cohort(
@@ -243,20 +264,17 @@ def addressable_fraction_by_cohort(
     gene_ids: Iterable[str] | None = None,
     proteoform: bool = True,
 ) -> pd.Series:
-    """``{cohort code -> addressable fraction}`` over the cohorts that have a
-    per-sample matrix (default: all of them). Skips cohorts whose matrix isn't
-    available rather than fetching every one implicitly."""
-    from . import source_matrices
-
-    codes = list(cohorts) if cohorts is not None else source_matrices.available_cohorts()
-    out: dict[str, float] = {}
-    for code in codes:
-        if cohorts is None and not source_matrices.is_cached(code):
-            continue
-        out[str(code)] = addressable_fraction(
-            code, threshold_tpm=threshold_tpm, gene_ids=gene_ids, proteoform=proteoform
-        )
-    return pd.Series(out, name="addressable_fraction")
+    """``{cohort code -> addressable fraction}`` over the cohorts that have a cached
+    per-sample matrix (default: all cached ones); uncached cohorts are skipped rather
+    than fetched."""
+    return _scalar_by_cohort(
+        addressable_fraction,
+        "addressable_fraction",
+        cohorts,
+        threshold_tpm=threshold_tpm,
+        gene_ids=gene_ids,
+        proteoform=proteoform,
+    )
 
 
 def cta_id_to_name() -> dict[str, str]:

@@ -33,7 +33,7 @@ protein sequences (``pyensembl install --release N --species homo_sapiens``).
 
 from __future__ import annotations
 
-from functools import lru_cache
+import hashlib
 from pathlib import Path
 
 import pandas as pd
@@ -43,6 +43,15 @@ from .genome import find_gene_id_by_name, genomes, strip_version
 
 #: 9 = the canonical MHC-I epitope length.
 DEFAULT_K: int = 9
+
+#: A complete human proteome resolves ~19–20k protein-coding genes. Far fewer means
+#: the cDNA/protein FASTA is missing or partial — refuse to build (and cache) a
+#: degenerate background that would inflate every CTA's "specific" count.
+_MIN_PROTEOME_GENES: int = 10_000
+
+#: In-process memo of the per-CTA counts table, keyed by (k, release, CTA-set
+#: fingerprint). Holds the canonical frame; public accessors return a copy.
+_COUNTS_CACHE: dict[tuple[int, int, str], pd.DataFrame] = {}
 
 
 def _derived_cache_dir() -> Path:
@@ -94,25 +103,26 @@ def _longest_protein_per_gene(genome, k: int) -> dict[str, str]:
     return longest
 
 
-@lru_cache(maxsize=4)
-def cta_specific_9mer_counts(*, k: int = DEFAULT_K, refresh: bool = False) -> pd.DataFrame:
-    """Per filtered CTA, its distinct-9-mer count and how many are CTA-specific.
+def _cta_set_fingerprint() -> str:
+    """Short hash of the filtered + unfiltered CTA id sets — the inputs that define
+    the output rows and the background. Embedded in the cache key so a curation edit
+    (a CTA added/removed) invalidates a stale cache *within* the same Ensembl release,
+    not only across releases."""
+    payload = "F:" + ",".join(sorted(strip_version(g) for g in CTA_gene_ids()))
+    payload += "|U:" + ",".join(sorted(strip_version(g) for g in CTA_unfiltered_gene_ids()))
+    return hashlib.sha1(payload.encode()).hexdigest()[:10]
 
-    Columns: ``Ensembl_Gene_ID`` (unversioned), ``Symbol``, ``n_9mers`` (distinct
-    9-mers in its longest protein), ``n_specific_9mers`` (those absent from every
-    non-CTA protein). Cached to a per-release CSV under the cancerdata cache; pass
-    ``refresh=True`` to rebuild. Raises if no usable Ensembl release is installed."""
-    genome = _usable_genome()
-    if genome is None:
-        raise RuntimeError(
-            "no usable human Ensembl release with protein sequences installed — run "
-            "`pyensembl install --release 111 --species homo_sapiens`"
-        )
-    cache = _derived_cache_dir() / f"cta_specific_{k}mers_r{genome.release}.csv"
-    if cache.exists() and not refresh:
-        return pd.read_csv(cache)
 
+def _build_counts(genome, k: int) -> pd.DataFrame:
+    """Compute the per-CTA specific-9-mer table from one genome (no caching)."""
     longest = _longest_protein_per_gene(genome, k)
+    if len(longest) < _MIN_PROTEOME_GENES:
+        raise RuntimeError(
+            f"only {len(longest)} protein sequences resolved from Ensembl release "
+            f"{genome.release} — the protein FASTA looks incomplete, so the CTA-specific "
+            "background would be wrong. Reinstall with "
+            f"`pyensembl install --release {genome.release} --species homo_sapiens`."
+        )
     cta_filtered = {strip_version(g) for g in CTA_gene_ids()}
     cta_universe = {strip_version(g) for g in CTA_unfiltered_gene_ids()}
 
@@ -135,19 +145,56 @@ def cta_specific_9mer_counts(*, k: int = DEFAULT_K, refresh: bool = False) -> pd
                 "n_specific_9mers": sum(1 for x in km if x not in background),
             }
         )
-    df = pd.DataFrame(rows, columns=["Ensembl_Gene_ID", "Symbol", "n_9mers", "n_specific_9mers"])
-    df.to_csv(cache, index=False)
-    return df
+    return pd.DataFrame(rows, columns=["Ensembl_Gene_ID", "Symbol", "n_9mers", "n_specific_9mers"])
 
 
-@lru_cache(maxsize=1)
-def cta_specific_9mer_weights(*, k: int = DEFAULT_K) -> dict[str, int]:
-    """``{CTA symbol -> n_specific_9mers}`` from :func:`cta_specific_9mer_counts`.
+def cta_specific_9mer_counts(*, k: int = DEFAULT_K, refresh: bool = False) -> pd.DataFrame:
+    """Per filtered CTA, its distinct-9-mer count and how many are CTA-specific.
 
-    Identical-protein paralogs (proteoforms) share a sequence, hence an identical
-    specific-9-mer count, so the per-symbol weight is the proteoform's weight."""
+    Columns: ``Ensembl_Gene_ID`` (unversioned), ``Symbol``, ``n_9mers`` (distinct
+    9-mers in its longest protein), ``n_specific_9mers`` (those absent from every
+    non-CTA protein). Cached to a CSV keyed by Ensembl release **and** a fingerprint
+    of the CTA gene set, then memoized in-process; each call returns a fresh copy.
+    Pass ``refresh=True`` to drop both caches and rebuild. Raises if no usable Ensembl
+    release is installed or its proteome looks incomplete."""
+    genome = _usable_genome()
+    if genome is None:
+        raise RuntimeError(
+            "no usable human Ensembl release with protein sequences installed — run "
+            "`pyensembl install --release 111 --species homo_sapiens`"
+        )
+    fp = _cta_set_fingerprint()
+    key = (k, genome.release, fp)
+    cache = _derived_cache_dir() / f"cta_specific_{k}mers_r{genome.release}_{fp}.csv"
+    if refresh:
+        _COUNTS_CACHE.pop(key, None)
+        cache.unlink(missing_ok=True)
+    if key not in _COUNTS_CACHE:
+        if cache.exists():
+            _COUNTS_CACHE[key] = pd.read_csv(cache)
+        else:
+            df = _build_counts(genome, k)
+            df.to_csv(cache, index=False)
+            _COUNTS_CACHE[key] = df
+    return _COUNTS_CACHE[key].copy()
+
+
+def cta_specific_9mer_weights(*, k: int = DEFAULT_K, by: str = "ensembl_gene_id") -> dict[str, int]:
+    """``{key -> n_specific_9mers}`` from :func:`cta_specific_9mer_counts`.
+
+    ``by="ensembl_gene_id"`` (default) keys by unversioned Ensembl gene id — the safe
+    join key, since a proteoform-collapsed row's ``Symbol`` is a slash-joined label
+    that no per-gene symbol key matches (see :func:`cta_specific_9mer_load`).
+    ``by="symbol"`` keys by gene symbol for display. Identical-protein paralogs share
+    a sequence, hence one count, so a canonical member's id carries the group's weight."""
     df = cta_specific_9mer_counts(k=k)
-    return {str(s): int(n) for s, n in zip(df["Symbol"], df["n_specific_9mers"])}
+    if by == "ensembl_gene_id":
+        keys = df["Ensembl_Gene_ID"]
+    elif by == "symbol":
+        keys = df["Symbol"]
+    else:
+        raise ValueError("by must be 'ensembl_gene_id' or 'symbol'")
+    return {str(key): int(n) for key, n in zip(keys, df["n_specific_9mers"])}
 
 
 def cta_specific_9mer_load(
@@ -172,10 +219,7 @@ def cta_specific_9mer_load(
     pf = cta_patient_fractions(cancer_type, threshold_tpm=threshold_tpm)
     if pf.empty:
         return 0.0
-    df = cta_specific_9mer_counts(k=k)
-    weight_by_id = {
-        strip_version(g): int(n) for g, n in zip(df["Ensembl_Gene_ID"], df["n_specific_9mers"])
-    }
+    weight_by_id = cta_specific_9mer_weights(k=k, by="ensembl_gene_id")
     w = pf["Ensembl_Gene_ID"].astype(str).map(lambda g: weight_by_id.get(strip_version(g), 0))
     return float((pf["fraction_expressing"] * w).sum())
 
