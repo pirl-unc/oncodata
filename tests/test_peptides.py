@@ -100,49 +100,53 @@ def test_specific_9mer_counts_refresh_rebuilds(fake_proteome, tmp_path):
     assert int(df.loc[0, "n_specific_9mers"]) == 3
 
 
-def test_specific_9mer_weights_keyed_by_ensembl_id_by_default(fake_proteome):
+def test_specific_9mer_weights_keyed_by_proteoform_key_by_default(fake_proteome):
+    # Default key is the proteoform_key; for the singleton ENSG_CTA that is its ENSG.
     assert peptides.cta_specific_9mer_weights(k=3) == {"ENSG_CTA": 3}
+    assert peptides.cta_specific_9mer_weights(k=3, by="ensembl_gene_id") == {"ENSG_CTA": 3}
     assert peptides.cta_specific_9mer_weights(k=3, by="symbol") == {"CTAX": 3}
     with pytest.raises(ValueError, match="by must be"):
         peptides.cta_specific_9mer_weights(k=3, by="nonsense")
 
 
-def test_weight_propagates_to_unexpressed_canonical_member(monkeypatch):
-    # A proteoform's canonical id is min(member ids); that member can be unexpressed
-    # and absent from the per-gene counts table. The group's weight must still reach
-    # it (members share a sequence -> one count), else the load silently drops it.
-    import cancerdata.proteoforms as pmod
+def test_weight_by_proteoform_key_covers_group_via_any_member(monkeypatch):
+    # A real CGB3/5/8 group whose canonical min-ENSG (CGB3) is unexpressed: the counts
+    # table has only the expressed member (CGB8), yet keying by proteoform_key gives the
+    # group its weight — no canonical-member ambiguity.
+    import pandas as pd
 
-    monkeypatch.setattr(
-        peptides,
-        "cta_specific_9mer_weights",
-        lambda *, k, by="ensembl_gene_id": {"ENSG_EXPRESSED": 7},  # only the expressed member
+    fake_counts = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["ENSG00000213030"],  # CGB8 (expressed member of CGB3/5/8)
+            "Symbol": ["CGB8"],
+            "n_9mers": [40],
+            "n_specific_9mers": [31],
+        }
     )
     monkeypatch.setattr(
-        pmod, "proteoform_group_map", lambda *, scope="cta": {"A/B": ("ENSG_AAA", "ENSG_EXPRESSED")}
+        peptides, "cta_specific_9mer_counts", lambda *, k=peptides.DEFAULT_K: fake_counts
     )
-    wbi = peptides._weight_by_gene_id(k=3)
-    # canonical = min(members) = ENSG_AAA, absent from the counts table, now carries 7
-    assert wbi["ENSG_AAA"] == 7
-    assert wbi["ENSG_EXPRESSED"] == 7
+    weights = peptides.cta_specific_9mer_weights(by="proteoform_key")
+    assert weights == {"CGB3/5/8": 31}
 
 
-def test_specific_9mer_load_joins_on_ensembl_id_not_symbol(fake_proteome, monkeypatch):
-    # A collapsed proteoform's Symbol is the slash-joined label, which never matches
-    # the per-gene weight table — the load must join on the canonical-member ENSG.
+def test_specific_9mer_load_joins_on_proteoform_key(fake_proteome, monkeypatch):
+    # The load joins on proteoform_key (the uniform key), NOT Symbol/ENSG: a stub whose
+    # Symbol/ENSG don't match the weight key still resolves via proteoform_key.
     from cancerdata import coverage
 
     def fake_fractions(code, *, threshold_tpm):
         return pd.DataFrame(
             {
-                "Ensembl_Gene_ID": ["ENSG_CTA"],  # canonical member id
-                "Symbol": ["CTAX/CTAY"],  # slash-joined proteoform label
+                "proteoform_key": ["ENSG_CTA"],  # the weight key (singleton -> ENSG)
+                "Ensembl_Gene_ID": ["ENSG_CTA"],
+                "Symbol": ["SOMETHING_ELSE"],  # deliberately not the join key
                 "fraction_expressing": [0.5],
             }
         )
 
     monkeypatch.setattr(coverage, "cta_patient_fractions", fake_fractions)
-    # load = fraction (0.5) * n_specific_9mers (3) = 1.5; would be 0.0 on a Symbol join.
+    # load = fraction (0.5) * n_specific_9mers (3) = 1.5
     assert peptides.cta_specific_9mer_load("X", threshold_tpm=5, k=3) == pytest.approx(1.5)
 
 

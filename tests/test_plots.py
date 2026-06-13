@@ -220,6 +220,7 @@ def test_cta_patient_count_heatmap_renders(tmp_path, monkeypatch):
         base = {"LUAD": [0.7, 0.3, 0.1], "SKCM": [0.9, 0.2, 0.5]}[code]
         return pd.DataFrame(
             {
+                "proteoform_key": ["E1", "E2", "E3"],
                 "Ensembl_Gene_ID": ["E1", "E2", "E3"],
                 "Symbol": ["GA", "GB", "GC"],
                 "fraction_expressing": base,
@@ -243,7 +244,8 @@ def test_cta_patient_count_heatmap_no_cohorts(monkeypatch):
 
 
 def test_cta_patient_count_heatmap_duplicate_symbols(tmp_path, monkeypatch):
-    # Paralog CTAs sharing a Symbol must not crash the cohort×CTA frame alignment.
+    # Distinct proteoforms that happen to share a display Symbol must not crash the
+    # cohort×CTA frame alignment — keying is on the unique proteoform_key.
     import pandas as pd
 
     from cancerdata import coverage
@@ -251,8 +253,9 @@ def test_cta_patient_count_heatmap_duplicate_symbols(tmp_path, monkeypatch):
     def fake_fractions(code, *, threshold_tpm):
         return pd.DataFrame(
             {
+                "proteoform_key": ["K1", "K2", "K3"],  # unique keys
                 "Ensembl_Gene_ID": ["E1", "E2", "E3"],
-                "Symbol": ["GA", "GA", "GB"],  # GA duplicated (two paralogs)
+                "Symbol": ["GA", "GA", "GB"],  # GA duplicated as a display label
                 "fraction_expressing": [0.7, 0.3, 0.1],
                 "n_patients_expressing": [70, 30, 10],
                 "n_patients": [100, 100, 100],
