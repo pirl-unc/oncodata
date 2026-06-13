@@ -134,9 +134,15 @@ _PER_SAMPLE_NORMALIZE = ("tpm_raw", "tpm_clean", "tpm_clean_log1p")
 
 
 def per_sample_expression(
-    cancer_type, *, normalize: str = "tpm_clean", auto_fetch: bool = True
+    cancer_type,
+    *,
+    normalize: str = "tpm_clean",
+    auto_fetch: bool = True,
+    proteoform: bool = False,
+    scope: str = "cta",
 ) -> pd.DataFrame:
-    """Full per-sample expression matrix (genes x **every** sample) for a cohort.
+    """Full per-sample expression matrix (genes x **every** sample) for a cohort —
+    the raw **TPM values** at gene level (default) or proteoform level.
 
     The packaged references are summaries — per-gene percentile vectors, bounded
     medoid :func:`representative_cohort_samples`, within-sample top fractions. This
@@ -153,8 +159,17 @@ def per_sample_expression(
       - ``"tpm_clean_log1p"`` — clean TPM, ``log1p``-transformed;
       - ``"tpm_raw"`` — the matrix as shipped (raw TPM), no normalization.
 
+    With ``proteoform=True``, identical-protein paralogs are **summed per sample** to
+    proteoform level (:func:`cancerdata.proteoforms.collapse_to_proteoforms`, ``scope``
+    = ``"cta"``/``"genome"``) — a **proteoform-level** frame carrying ``proteoform_key``
+    (see :func:`cancerdata.proteoforms.expression_level`). The sum is always taken in
+    **linear** TPM and the ``log1p`` transform (if any) applied *after*, so the
+    proteoform value is ``log1p(Σ member TPM)``, not the meaningless ``Σ log1p``.
+    (``scope`` is ignored when ``proteoform=False``.)
+
     ``auto_fetch=False`` raises instead of downloading if the matrix isn't cached.
-    Returns ``Ensembl_Gene_ID``, ``Symbol`` and one column per sample.
+    Returns ``Ensembl_Gene_ID``, ``Symbol`` and one column per sample (plus the
+    proteoform identity columns when collapsed).
     """
     if normalize not in _PER_SAMPLE_NORMALIZE:
         raise ValueError(f"normalize must be one of {_PER_SAMPLE_NORMALIZE}")
@@ -172,7 +187,18 @@ def per_sample_expression(
     # coverage / 9-mer call; memoize it (keyed on the matrix path + its mtime +
     # normalize) and hand callers a fresh copy so the shared frame can't be mutated.
     # The mtime in the key self-invalidates the cache if the matrix is re-fetched.
-    return _load_per_sample_matrix(str(path), os.path.getmtime(path), normalize).copy()
+    mtime = os.path.getmtime(path)
+    if not proteoform:
+        return _load_per_sample_matrix(str(path), mtime, normalize).copy()
+    # Proteoform level: sum members in LINEAR TPM, then apply the requested transform.
+    from .proteoforms import collapse_to_proteoforms
+
+    linear = "tpm_raw" if normalize == "tpm_raw" else "tpm_clean"
+    out = collapse_to_proteoforms(_load_per_sample_matrix(str(path), mtime, linear), scope=scope)
+    if normalize == "tpm_clean_log1p":
+        samples = [c for c in out.columns if c not in ID_COLUMNS]
+        out[samples] = np.log1p(out[samples].to_numpy(dtype=float))
+    return out
 
 
 @lru_cache(maxsize=2)
@@ -224,11 +250,13 @@ def cohort_mean_expression(
     columns when collapsed) and one ``expression`` column."""
     if statistic not in ("mean", "median"):
         raise ValueError("statistic must be 'mean' or 'median'")
-    df = per_sample_expression(cancer_type, normalize=normalize, auto_fetch=auto_fetch)
-    if proteoform:
-        from .proteoforms import collapse_to_proteoforms
-
-        df = collapse_to_proteoforms(df, scope=scope)
+    df = per_sample_expression(
+        cancer_type,
+        normalize=normalize,
+        auto_fetch=auto_fetch,
+        proteoform=proteoform,
+        scope=scope,
+    )
     id_cols = [c for c in ID_COLUMNS if c in df.columns]
     samples = [c for c in df.columns if c not in id_cols]
     reducer = df[samples].mean(axis=1) if statistic == "mean" else df[samples].median(axis=1)

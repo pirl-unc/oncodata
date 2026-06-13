@@ -138,6 +138,41 @@ def test_per_sample_expression_normalize_modes(tmp_path, monkeypatch):
     assert np.allclose(logged["s1"].to_numpy(), np.log1p(clean["s1"].to_numpy()))
 
 
+def test_per_sample_expression_gene_and_proteoform_levels(tmp_path, monkeypatch):
+    # ENSG1+ENSG2 are an identical-protein group; per_sample_expression(proteoform=True)
+    # sums them per sample. Gene-level and proteoform-level are both available.
+    import cancerdata.proteoforms as pmod
+
+    path = _raw_matrix(tmp_path)
+    monkeypatch.setattr(expression.source_matrices, "ensure", lambda code: path)
+    monkeypatch.setattr(
+        pmod, "proteoform_group_map", lambda *, scope="cta": {"A/B": ("ENSG1", "ENSG2")}
+    )
+
+    gene = expression.per_sample_expression("PRAD", normalize="tpm_raw")
+    assert pmod.expression_level(gene) == "gene" and len(gene) == 3
+
+    pf = expression.per_sample_expression("PRAD", normalize="tpm_raw", proteoform=True)
+    assert pmod.expression_level(pf) == "proteoform" and len(pf) == 2  # group merged
+    # A/B summed per sample: s1 = 500000 + 300000 = 800000
+    a_row = pf[pf["proteoform_key"] == "A/B"]
+    assert a_row["s1"].iloc[0] == pytest.approx(800000.0)
+
+
+def test_per_sample_expression_proteoform_log_sums_in_linear_space(tmp_path, monkeypatch):
+    # log1p + proteoform must sum members in LINEAR TPM then log1p — NOT sum the logs.
+    import cancerdata.proteoforms as pmod
+
+    path = _raw_matrix(tmp_path)
+    monkeypatch.setattr(expression.source_matrices, "ensure", lambda code: path)
+    monkeypatch.setattr(
+        pmod, "proteoform_group_map", lambda *, scope="cta": {"A/B": ("ENSG1", "ENSG2")}
+    )
+    lin = expression.per_sample_expression("PRAD", normalize="tpm_clean", proteoform=True)
+    log = expression.per_sample_expression("PRAD", normalize="tpm_clean_log1p", proteoform=True)
+    assert np.allclose(log["s1"].to_numpy(), np.log1p(lin["s1"].to_numpy(dtype=float)))
+
+
 def test_per_sample_expression_memoizes_and_copies(tmp_path, monkeypatch):
     path = _raw_matrix(tmp_path)
     monkeypatch.setattr(expression.source_matrices, "ensure", lambda code: path)
@@ -186,25 +221,30 @@ def test_cohort_mean_expression(monkeypatch):
     assert dict(zip(median["Symbol"], median["expression"])) == {"A": 20.0, "B": 2.0}
 
 
-def test_cohort_mean_expression_scope_threads_to_collapse(monkeypatch):
-    # proteoform scope="genome" must reach collapse_to_proteoforms (the universal
-    # all-genes key space), not just the CTA subset.
-    import cancerdata.proteoforms as pmod
+def test_cohort_mean_expression_threads_proteoform_and_scope(monkeypatch):
+    # cohort_mean delegates the collapse to per_sample_expression — it must pass
+    # proteoform= and scope= through.
+    from cancerdata import expression_level
 
     seen = {}
 
-    def spy_group_map(*, scope="cta"):
-        seen["scope"] = scope
-        return {}  # no groups -> every gene a singleton (proteoform_key = its ENSG)
+    def fake_per_sample(code, *, normalize, auto_fetch, proteoform, scope):
+        seen.update(proteoform=proteoform, scope=scope)
+        return pd.DataFrame(
+            {
+                "proteoform_key": ["E1"],
+                "Ensembl_Gene_ID": ["E1"],
+                "Symbol": ["A"],
+                "proteoform_members": ["A"],
+                "s1": [1.0],
+                "s2": [3.0],
+            }
+        )
 
-    monkeypatch.setattr(pmod, "proteoform_group_map", spy_group_map)
-    fixture = pd.DataFrame(
-        {"Ensembl_Gene_ID": ["E1", "E2"], "Symbol": ["A", "B"], "s1": [1.0, 2.0], "s2": [3.0, 4.0]}
-    )
-    monkeypatch.setattr(expression, "per_sample_expression", lambda *a, **k: fixture.copy())
+    monkeypatch.setattr(expression, "per_sample_expression", fake_per_sample)
     out = expression.cohort_mean_expression("X", proteoform=True, scope="genome")
-    assert seen["scope"] == "genome"
-    assert pmod.expression_level(out) == "proteoform"
+    assert seen == {"proteoform": True, "scope": "genome"}
+    assert expression_level(out) == "proteoform"  # proteoform_key carried through
 
 
 def test_cohort_mean_expression_bad_statistic(monkeypatch):
@@ -213,26 +253,22 @@ def test_cohort_mean_expression_bad_statistic(monkeypatch):
         expression.cohort_mean_expression("X", statistic="mode")
 
 
-def test_cohort_mean_expression_proteoform_collapses_first(monkeypatch):
-    # Two identical-protein paralogs are summed per sample BEFORE the across-patient
-    # reduction, so the proteoform mean is over the summed values, not per-member.
-    import cancerdata.proteoforms as pmod
-
-    fixture = pd.DataFrame(
+def test_cohort_mean_expression_reduces_proteoform_frame(monkeypatch):
+    # Given a proteoform-level per-sample frame (members already summed), cohort_mean
+    # reduces over patients keeping the proteoform key space.
+    collapsed = pd.DataFrame(
         {
-            "Ensembl_Gene_ID": ["ENSG_A1", "ENSG_A2", "ENSG_B"],
-            "Symbol": ["A1", "A2", "B"],
-            "s1": [3.0, 5.0, 1.0],
-            "s2": [1.0, 1.0, 9.0],
+            "proteoform_key": ["A1/2", "ENSG_B"],
+            "Ensembl_Gene_ID": ["ENSG_A1", "ENSG_B"],
+            "Symbol": ["A1/2", "B"],
+            "proteoform_members": ["A1/A2", "B"],
+            "s1": [8.0, 1.0],  # A1+A2 already summed per sample
+            "s2": [2.0, 9.0],
         }
     )
-    monkeypatch.setattr(expression, "per_sample_expression", lambda *a, **k: fixture.copy())
-    monkeypatch.setattr(
-        pmod, "proteoform_group_map", lambda *, scope="cta": {"A1/A2": ["ENSG_A1", "ENSG_A2"]}
-    )
+    monkeypatch.setattr(expression, "per_sample_expression", lambda *a, **k: collapsed.copy())
     out = expression.cohort_mean_expression("X", statistic="mean", proteoform=True)
     assert "proteoform_key" in out.columns
     by_key = dict(zip(out["proteoform_key"], out["expression"]))
-    # A1+A2 summed per sample = [8, 2], mean 5.0 (NOT each member's mean of ~2/3)
-    assert by_key["A1/2"] == pytest.approx(5.0)
-    assert by_key["ENSG_B"] == pytest.approx(5.0)  # singleton keyed by ENSG
+    assert by_key["A1/2"] == pytest.approx(5.0)  # (8 + 2) / 2
+    assert by_key["ENSG_B"] == pytest.approx(5.0)  # (1 + 9) / 2, singleton keyed by ENSG
