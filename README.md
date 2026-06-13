@@ -87,6 +87,9 @@ cd.within_sample_top_fraction("PRAD")     # per-gene frac of samples top-5% (wit
   package, but resolution needs a downloaded human release once:
   `pyensembl install --release 111 --species homo_sapiens` (the accessors return
   `None` until then).
+- **Peptides** — `cta_specific_9mer_counts`, `cta_specific_9mer_load` (per-cohort
+  mean per-patient CTA-specific 9-mer load): 9-mers found in a CTA protein but in no
+  non-CTA protein, enumerated from the reference proteome and cached per release.
 - **Plots** (`pip install cancerdata[plots]`) — `cancerdata.plots.apd1_vs_tmb`,
   `apd1_orr_bars`, `incidence_vs_mortality`, and the CTA/coverage figures.
 

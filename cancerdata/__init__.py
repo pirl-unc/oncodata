@@ -135,6 +135,11 @@ from .normalization import (
     renormalize_to_million,
     tpm_to_housekeeping_normalized,
 )
+from .peptides import (
+    cta_specific_9mer_counts,
+    cta_specific_9mer_load,
+    cta_specific_9mer_weights,
+)
 from .proteoforms import (
     collapse_to_proteoforms,
     gene_to_proteoform,
@@ -234,6 +239,9 @@ __all__ = [
     "collapse_to_proteoforms",
     "cta_dataframe",
     "cta_patient_fractions",
+    "cta_specific_9mer_counts",
+    "cta_specific_9mer_load",
+    "cta_specific_9mer_weights",
     "expression_source",
     "expression_sources",
     "family_display_name",

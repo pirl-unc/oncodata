@@ -838,25 +838,46 @@ def apd1_response_signature_scatter(signature="t_cell_inflamed", *, cohorts=None
     )
 
 
-def cta_specific_9mer_counts(*, save=None, **kwargs):
-    """**Scaffold** — CTA-specific 9-mer (peptide) counts per cancer type.
+def cta_specific_9mer_load(*, against="tmb", threshold_tpm=10.0, cohorts=None, save=None):
+    """Scatter of a cohort's **mean per-patient CTA-specific 9-mer load**
+    (:func:`cancerdata.peptides.cta_specific_9mer_load`) vs its median TMB
+    (``against="tmb"``) or anti-PD-1 ORR (``against="apd1"``), one point per cancer
+    type, coloured by lineage family.
 
-    The faithful plot counts, per cancer type, the unique 9-mer peptides derived
-    from CTAs expressed in that cohort — a measure of the CTA-specific neoepitope
-    source breadth. It needs two inputs cancerdata does not ship:
+    The 9-mer load is, for the average patient, the total CTA-specific 9-mers across
+    the CTAs they express above ``threshold_tpm`` — a per-patient measure of
+    tumor-restricted neoepitope source breadth. CTA-specific 9-mers come from the
+    reference proteome (the longest protein per gene, background-subtracted against
+    all non-CTA proteins); see :mod:`cancerdata.peptides`.
 
-    1. the **proteome** (translated CTA protein sequences) to enumerate 9-mers —
-       a ``pyensembl``/reference-proteome dependency that is out of cancerdata's
-       pandas-only base-layer scope, and
-    2. the **per-sample expression matrices** to decide which CTAs are expressed
-       per patient (the shipped percentile/within-sample summaries can't recover
-       per-sample peptide sets).
+    Points are cohorts with BOTH a cached per-sample matrix and the chosen metric.
+    Needs the per-sample matrices cached and a downloaded Ensembl release with protein
+    sequences (the first call builds + caches the per-CTA 9-mer table)."""
+    from .peptides import cta_specific_9mer_load as _load
 
-    This is intentionally the heaviest plot and is tracked as its own follow-up
-    (#15); it is not wired to shipped data. Raising keeps the API surface explicit
-    rather than returning a misleading partial figure."""
-    raise NotImplementedError(
-        "cta_specific_9mer_counts needs a reference proteome (9-mer enumeration, e.g. "
-        "via pyensembl) and the per-sample expression matrices — neither is in "
-        "cancerdata's shipped, pandas-only base layer. Tracked as a follow-up in #15."
+    if against == "tmb":
+        xmap, ylabel2 = cancer_tmb(), "Median tumor mutational burden (mut/Mb)"
+    elif against == "apd1":
+        xmap, ylabel2 = cancer_apd1_response(), "Anti-PD-1 monotherapy ORR (%)"
+    else:
+        raise ValueError("against must be 'tmb' or 'apd1'")
+
+    cohorts = list(cohorts) if cohorts is not None else _cached_per_sample_cohorts()
+    points = []
+    for code in cohorts:
+        if code not in xmap:
+            continue
+        load = _load(code, threshold_tpm=threshold_tpm)
+        points.append((code, load, float(xmap[code])))
+    if not points:
+        raise ValueError(
+            f"no cohort with both a cached per-sample matrix and a {against} value — "
+            "fetch the matrices (source_matrices.fetch) for those cohorts first."
+        )
+    return _family_scatter(
+        points,
+        xlabel=f"mean CTA-specific 9-mers per patient (> {threshold_tpm:g} TPM)",
+        ylabel=ylabel2,
+        title=f"CTA-specific 9-mer load vs {against} — {len(points)} cancers",
+        save=save,
     )

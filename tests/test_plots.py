@@ -124,9 +124,30 @@ def test_cta_addressable_burden_no_mapped_cohorts(monkeypatch):
         plots.cta_addressable_burden()
 
 
-def test_cta_specific_9mer_counts_not_implemented():
-    with pytest.raises(NotImplementedError, match="#15"):
-        plots.cta_specific_9mer_counts()
+def test_cta_specific_9mer_load_renders(tmp_path, monkeypatch):
+    from cancerdata import peptides
+
+    monkeypatch.setattr(plots, "_cached_per_sample_cohorts", lambda: ["LUAD", "SKCM", "MM"])
+    monkeypatch.setattr(plots, "cancer_tmb", lambda: {"LUAD": 6.9, "SKCM": 13.0, "MM": 1.5})
+    monkeypatch.setattr(
+        peptides,
+        "cta_specific_9mer_load",
+        lambda code, **k: {"LUAD": 120.0, "SKCM": 540.0, "MM": 60.0}[code],
+    )
+    out = tmp_path / "9mer.png"
+    fig = plots.cta_specific_9mer_load(against="tmb", save=str(out))
+    assert out.exists() and fig is not None
+
+
+def test_cta_specific_9mer_load_bad_against():
+    with pytest.raises(ValueError, match="against must be"):
+        plots.cta_specific_9mer_load(against="nonsense")
+
+
+def test_cta_specific_9mer_load_no_data(monkeypatch):
+    monkeypatch.setattr(plots, "_cached_per_sample_cohorts", lambda: [])
+    with pytest.raises(ValueError, match="no cohort with both"):
+        plots.cta_specific_9mer_load()
 
 
 # ---- per-patient plots (consume the per-sample matrices via coverage.py) ----
