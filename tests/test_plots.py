@@ -173,6 +173,30 @@ def test_cta_patient_count_heatmap_no_cohorts(monkeypatch):
         plots.cta_patient_count_heatmap()
 
 
+def test_cta_patient_count_heatmap_duplicate_symbols(tmp_path, monkeypatch):
+    # Paralog CTAs sharing a Symbol must not crash the cohort×CTA frame alignment.
+    import pandas as pd
+
+    from cancerdata import coverage
+
+    def fake_fractions(code, *, threshold_tpm):
+        return pd.DataFrame(
+            {
+                "Ensembl_Gene_ID": ["E1", "E2", "E3"],
+                "Symbol": ["GA", "GA", "GB"],  # GA duplicated (two paralogs)
+                "fraction_expressing": [0.7, 0.3, 0.1],
+                "n_patients_expressing": [70, 30, 10],
+                "n_patients": [100, 100, 100],
+            }
+        )
+
+    monkeypatch.setattr(plots, "_cached_per_sample_cohorts", lambda: ["LUAD", "SKCM"])
+    monkeypatch.setattr(coverage, "cta_patient_fractions", fake_fractions)
+    out = tmp_path / "dup.png"
+    fig = plots.cta_patient_count_heatmap(save=str(out))  # must not raise
+    assert out.exists() and fig is not None
+
+
 def test_cta_coverage_curves_renders(tmp_path, monkeypatch):
     import pandas as pd
 

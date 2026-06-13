@@ -447,9 +447,11 @@ def cta_patient_count_heatmap(
     rows = {}
     for code in cohorts:
         pf = cta_patient_fractions(code, threshold_tpm=threshold_tpm)
-        rows[code] = pd.Series(pf[col].to_numpy(), index=pf["Symbol"])
+        # Collapse identical-protein paralogs sharing a Symbol to one column (max
+        # prevalence) so the per-cohort index is unique — pd.DataFrame can't align
+        # Series on a duplicated index.
+        rows[code] = pf.groupby("Symbol")[col].max()
     matrix = pd.DataFrame(rows).T  # cohorts × CTA symbols
-    matrix = matrix.loc[:, ~matrix.columns.duplicated()]
     if matrix.empty or matrix.shape[1] == 0:
         raise ValueError("no CTA expressed above the threshold in the selected cohorts")
 
