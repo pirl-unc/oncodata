@@ -157,6 +157,8 @@ def greedy_coverage(
                 "marginal_fraction",
                 "cumulative_patients",
                 "cumulative_fraction",
+                "proteoform_key",
+                "proteoform_members",
             ]
         )
 
