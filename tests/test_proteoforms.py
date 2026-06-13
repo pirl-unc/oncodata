@@ -85,13 +85,15 @@ def test_sum_proteoform_tpm_collapses_members_and_passes_through():
         }
     )
     out = sum_proteoform_tpm(df, {"SSX4/SSX4B": ("ENSG00000268009", "ENSG00000269791")})
-    by_symbol = out.set_index("Symbol")
-    assert by_symbol.loc["SSX4/SSX4B", "s1"] == 8.0
-    assert by_symbol.loc["SSX4/SSX4B", "s2"] == 1.0
-    assert by_symbol.loc["SSX4/SSX4B", "Ensembl_Gene_ID"] == "SSX4/SSX4B"
-    # PRAME passes through unchanged, keeping its original id.
-    assert by_symbol.loc["PRAME", "s1"] == 100.0
-    assert by_symbol.loc["PRAME", "Ensembl_Gene_ID"] == "ENSG00000185686"
+    by_pf = out.set_index("proteoform_id")
+    assert by_pf.loc["SSX4/SSX4B", "s1"] == 8.0
+    assert by_pf.loc["SSX4/SSX4B", "s2"] == 1.0
+    # ENSG stays a REAL Ensembl id (the canonical = smallest member), not the label.
+    assert by_pf.loc["SSX4/SSX4B", "Ensembl_Gene_ID"] == "ENSG00000268009"
+    assert by_pf.loc["SSX4/SSX4B", "Symbol"] == "SSX4/SSX4B"
+    # PRAME passes through: singleton class -> proteoform_id is its symbol, ENSG kept.
+    assert by_pf.loc["PRAME", "s1"] == 100.0
+    assert by_pf.loc["PRAME", "Ensembl_Gene_ID"] == "ENSG00000185686"
     # One collapsed row + one passthrough row.
     assert len(out) == 2
 
@@ -175,3 +177,44 @@ def test_proteoform_representative_samples_sums_members(representatives_cache):
     assert by_symbol.loc["SSX4/SSX4B", "rep_0"] == 10.0
     assert by_symbol.loc["SSX4/SSX4B", "rep_1"] == 4.0
     assert by_symbol.loc["PRAME", "rep_0"] == 50.0
+
+
+def test_gene_to_proteoform_id_is_total():
+    # Every gene maps to a class: grouped -> label, singleton -> symbol (or ENSG).
+    from cancerdata.proteoforms import gene_to_proteoform_id
+
+    genes = ["ENSG00000268009", "ENSG00000269791", "ENSG00000185686", "ENSG_X"]
+    symbols = ["SSX4", "SSX4B", "PRAME", "MYGENE"]
+    # patch the registry frame to a known group so the test is hermetic-ish:
+    m = gene_to_proteoform_id(genes, symbols=symbols)
+    assert set(m) == set(genes)  # total
+    # PRAME is a singleton (not in a multi-member CTA group) -> its own symbol
+    assert m["ENSG00000185686"] == "PRAME"
+    # a gene absent from the registry with a symbol -> the symbol
+    assert m["ENSG_X"] == "MYGENE"
+    # a gene with no symbol given -> falls back to its ensembl id
+    m2 = gene_to_proteoform_id(["ENSG_Y"])
+    assert m2["ENSG_Y"] == "ENSG_Y"
+
+
+def test_collapse_to_proteoforms_keeps_ensembl_id_real():
+    # The reusable collapse entry point: ENSG column stays a real Ensembl id, the
+    # antigen identity is in proteoform_id.
+    from cancerdata.proteoforms import collapse_to_proteoforms, proteoform_group_map
+
+    gmap = proteoform_group_map()
+    # pick a real CTA group to exercise the collapse
+    label, members = next(iter(gmap.items()))
+    df = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": list(members),
+            "Symbol": [f"m{i}" for i in range(len(members))],
+            "s1": [10.0] * len(members),
+        }
+    )
+    out = collapse_to_proteoforms(df, sample_cols=["s1"])
+    assert "proteoform_id" in out.columns
+    assert len(out) == 1
+    assert out.iloc[0]["proteoform_id"] == label
+    assert out.iloc[0]["Ensembl_Gene_ID"] == min(members)  # canonical member
+    assert out.iloc[0]["s1"] == 10.0 * len(members)  # summed

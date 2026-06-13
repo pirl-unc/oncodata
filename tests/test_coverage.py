@@ -98,7 +98,9 @@ def test_proteoform_paralogs_are_summed(monkeypatch):
     # the source symbol it re-resolves on each call.
     import cancerdata.proteoforms as pmod
 
-    monkeypatch.setattr(pmod, "proteoform_group_map", lambda: {"A1/A2": ["ENSG_A1", "ENSG_A2"]})
+    monkeypatch.setattr(
+        pmod, "proteoform_group_map", lambda *, scope="cta": {"A1/A2": ["ENSG_A1", "ENSG_A2"]}
+    )
 
     pf_sum = coverage.cta_patient_fractions("X", threshold_tpm=10, proteoform=True)
     # A1/A2 collapsed to one row, expressed in p0 (summed 12 > 10) -> fraction 0.5

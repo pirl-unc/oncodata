@@ -60,7 +60,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from cancerdata._build import sample_columns, sum_proteoform_tpm, within_sample_top_fractions
+from cancerdata._build import sample_columns, within_sample_top_fractions
 
 _DATA_DIR = Path(__file__).resolve().parents[1] / "cancerdata" / "data"
 OUT_DIR = _DATA_DIR / "cancer-reference-expression-within-sample-top5"
@@ -90,11 +90,6 @@ def build(
     """
     if out_dir is None:
         out_dir = PROTEOFORM_OUT_DIR if proteoform else OUT_DIR
-    group_map = None
-    if proteoform:
-        from cancerdata.proteoforms import proteoform_group_map
-
-        group_map = proteoform_group_map()
     out_dir.mkdir(parents=True, exist_ok=True)
     shards = sorted(input_dir.glob("*.parquet"))
     if not shards:
@@ -109,10 +104,12 @@ def build(
         if not cols:
             print(f"  {code}: no sample columns, skipped", flush=True)
             continue
-        if group_map is not None:
-            # Sum identical-protein members per sample first, then rank within
-            # the collapsed gene/proteoform axis.
-            df = sum_proteoform_tpm(df, group_map, cols)
+        if proteoform:
+            # Sum identical-protein members per sample first, then rank within the
+            # collapsed antigen axis (one reusable collapse + proteoform_id identity).
+            from cancerdata.proteoforms import collapse_to_proteoforms
+
+            df = collapse_to_proteoforms(df, sample_cols=cols)
             cols = sample_columns(df)
         out = within_sample_top_fractions(df, cols)
         out.to_parquet(out_dir / f"{code}.parquet", index=False, compression="zstd")

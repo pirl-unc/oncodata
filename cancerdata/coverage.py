@@ -65,13 +65,12 @@ def _hit_matrix(cancer_type, *, threshold_tpm: float, gene_ids, proteoform: bool
     unversioned = df["Ensembl_Gene_ID"].astype(str).str.split(".").str[0]
     panel = _panel_ids(gene_ids)
     sub = df[unversioned.isin(panel)].reset_index(drop=True)
-    samples = [c for c in df.columns if c not in _BASE]
     if proteoform and len(sub):
-        from ._build import sum_proteoform_tpm
-        from .proteoforms import proteoform_group_map
+        from .proteoforms import collapse_to_proteoforms
 
-        sub = sum_proteoform_tpm(sub, proteoform_group_map(), samples).reset_index(drop=True)
-        samples = [c for c in sub.columns if c not in _BASE]
+        sub = collapse_to_proteoforms(sub).reset_index(drop=True)
+    id_cols = [c for c in ("Ensembl_Gene_ID", "Symbol", "proteoform_id") if c in sub.columns]
+    samples = [c for c in sub.columns if c not in id_cols]
     hits = sub[samples].to_numpy(dtype=float) >= float(threshold_tpm)
     return sub, samples, hits
 
@@ -84,15 +83,18 @@ def cta_patient_fractions(
     proteoform: bool = True,
 ) -> pd.DataFrame:
     """Per antigen, the fraction of a cohort's patients expressing it above
-    ``threshold_tpm`` (clean TPM). Returns ``Ensembl_Gene_ID``, ``Symbol``,
-    ``fraction_expressing``, ``n_patients_expressing``, ``n_patients`` — sorted by
-    prevalence. The default gene panel is the expressed CTA set; identical-protein
-    paralogs are summed to one antigen (``proteoform=True``)."""
+    ``threshold_tpm`` (clean TPM). Returns ``Ensembl_Gene_ID`` (a real ENSG — the
+    canonical member for a collapsed proteoform), ``Symbol``, ``proteoform_id`` (the
+    antigen identity, present when ``proteoform=True``), ``fraction_expressing``,
+    ``n_patients_expressing``, ``n_patients`` — sorted by prevalence. The default
+    gene panel is the expressed CTA set; identical-protein paralogs are summed to
+    one antigen (``proteoform=True``)."""
     sub, samples, hits = _hit_matrix(
         cancer_type, threshold_tpm=threshold_tpm, gene_ids=gene_ids, proteoform=proteoform
     )
     n = len(samples)
-    out = sub[_BASE].copy()
+    id_cols = [c for c in ("Ensembl_Gene_ID", "Symbol", "proteoform_id") if c in sub.columns]
+    out = sub[id_cols].copy()
     counts = hits.sum(axis=1)
     out["n_patients_expressing"] = counts
     out["fraction_expressing"] = counts / n if n else 0.0
@@ -175,17 +177,18 @@ def greedy_coverage(
         covered |= hits[best_g]
         remaining.discard(best_g)
         cum = int(covered.sum())
-        rows.append(
-            {
-                "rank": len(rows) + 1,
-                "Ensembl_Gene_ID": str(sub.at[best_g, "Ensembl_Gene_ID"]),
-                "Symbol": str(sub.at[best_g, "Symbol"]),
-                "marginal_patients": best_new,
-                "marginal_fraction": best_new / n,
-                "cumulative_patients": cum,
-                "cumulative_fraction": cum / n,
-            }
-        )
+        row = {
+            "rank": len(rows) + 1,
+            "Ensembl_Gene_ID": str(sub.at[best_g, "Ensembl_Gene_ID"]),
+            "Symbol": str(sub.at[best_g, "Symbol"]),
+            "marginal_patients": best_new,
+            "marginal_fraction": best_new / n,
+            "cumulative_patients": cum,
+            "cumulative_fraction": cum / n,
+        }
+        if "proteoform_id" in sub.columns:
+            row["proteoform_id"] = str(sub.at[best_g, "proteoform_id"])
+        rows.append(row)
     return pd.DataFrame(rows)
 
 

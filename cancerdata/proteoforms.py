@@ -141,6 +141,47 @@ def proteoform_for_gene(gene: str) -> str | None:
 
 
 def gene_to_proteoform() -> dict[str, str]:
-    """``{member gene ID: proteoform label}`` (Ensembl IDs only)."""
+    """``{member gene ID: proteoform label}`` (Ensembl IDs only) — multi-member
+    groups only. For a **total** map (every gene → its class, singletons included)
+    use :func:`gene_to_proteoform_id`."""
     df = _proteoform_frame("cta")
     return dict(zip(df[_GENE_ID_COLUMN].astype(str), df[_LABEL_COLUMN].astype(str)))
+
+
+def gene_to_proteoform_id(genes, *, symbols=None, scope: str = "cta") -> dict[str, str]:
+    """Total ``{gene → proteoform_id}`` over the given genes: every gene maps to
+    exactly one proteoform equivalence class.
+
+    A gene in a multi-member group maps to the group's ``proteoform_id`` (the
+    slash-joined label); a gene in no group is its **own** singleton class, mapping
+    to its symbol (if ``symbols`` is given, aligned to ``genes``) else its
+    unversioned Ensembl id. This is the join key for proteoform-level analyses —
+    unlike :func:`gene_to_proteoform`, it is defined for **every** gene, so callers
+    never need an ad-hoc "is it grouped?" branch. ``genes``/``symbols`` are parallel
+    iterables of Ensembl ids / symbols."""
+    pf = _proteoform_frame(scope)
+    member_map = dict(zip(pf[_GENE_ID_COLUMN].astype(str), pf[_LABEL_COLUMN].astype(str)))
+    genes = [str(g).split(".")[0] for g in genes]
+    syms = list(symbols) if symbols is not None else [None] * len(genes)
+    out: dict[str, str] = {}
+    for gid, sym in zip(genes, syms):
+        out[gid] = member_map.get(gid) or (str(sym) if sym is not None else gid)
+    return out
+
+
+def collapse_to_proteoforms(
+    df: pd.DataFrame, *, scope: str = "cta", sample_cols=None
+) -> pd.DataFrame:
+    """Collapse a genes×samples expression frame to proteoform level — the single
+    reusable entry point for proteoform summation.
+
+    Identical-protein members in ``scope`` are summed per sample into one antigen
+    row (see :func:`cancerdata._build.sum_proteoform_tpm`). The output keeps
+    ``Ensembl_Gene_ID`` as a real **canonical-member** ENSG (never the label) and
+    adds a total ``proteoform_id`` column (the class identity). Use this instead of
+    calling ``sum_proteoform_tpm`` + ``proteoform_group_map`` directly, so coverage,
+    the medoid/within-sample generators, and any future consumer share one
+    collapse + one identity scheme."""
+    from ._build import sum_proteoform_tpm
+
+    return sum_proteoform_tpm(df, proteoform_group_map(scope=scope), sample_cols)

@@ -391,11 +391,10 @@ def proteoform_representative_samples(
     :func:`cancerdata._build.sum_proteoform_tpm` core can run inside the offline
     percentile/within-sample generators to ship proteoform-summed artifacts.
     """
-    from ._build import sum_proteoform_tpm
-    from .proteoforms import proteoform_group_map
+    from .proteoforms import collapse_to_proteoforms
 
     wide = representative_cohort_samples(cancer_types, k=k, normalize="tpm_clean", format="wide")
     sample_cols = [c for c in wide.columns if c not in ("Ensembl_Gene_ID", "Symbol")]
     if wide.empty or not sample_cols:
         return wide
-    return sum_proteoform_tpm(wide, proteoform_group_map(), sample_cols)
+    return collapse_to_proteoforms(wide, sample_cols=sample_cols)
