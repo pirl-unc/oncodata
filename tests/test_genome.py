@@ -4,22 +4,15 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-import importlib.util
-
 import pandas as pd
 import pytest
 
-# Gated on the optional [genome] extra + an installed human Ensembl release.
-_HAS_PYENSEMBL = importlib.util.find_spec("pyensembl") is not None
-if _HAS_PYENSEMBL:
-    from cancerdata import genome as gx
+from cancerdata import genome as gx
 
-    _HAS_RELEASE = bool(gx.genomes())
-else:
-    _HAS_RELEASE = False
-
+# pyensembl is a core dependency, but resolution still needs a downloaded human
+# Ensembl release; skip when none is installed.
 pytestmark = pytest.mark.skipif(
-    not _HAS_RELEASE, reason="pyensembl + a human Ensembl release not installed"
+    not gx.genomes(), reason="no human Ensembl release installed (pyensembl install ...)"
 )
 
 

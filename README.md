@@ -81,8 +81,14 @@ cd.within_sample_top_fraction("PRAD")     # per-gene frac of samples top-5% (wit
   `hpa_single_cell`, and per-gene lookups (`gene_tissue_ntpm`,
   `gene_protein_tissues`, `gene_cell_type_ntpm`) over HPA v23, fetched on demand
   (`cancerdata sources fetch`).
+- **Genome reference** — `canonical_gene_id_and_name`, `find_gene_id_by_name`,
+  `find_gene_name_from_ensembl_{gene,transcript}_id`, `aggregate_gene_expression`
+  (pyensembl-backed symbol ↔ Ensembl-ID resolution). pyensembl ships with the
+  package, but resolution needs a downloaded human release once:
+  `pyensembl install --release 111 --species homo_sapiens` (the accessors return
+  `None` until then).
 - **Plots** (`pip install cancerdata[plots]`) — `cancerdata.plots.apd1_vs_tmb`,
-  `apd1_orr_bars`, `incidence_vs_mortality`.
+  `apd1_orr_bars`, `incidence_vs_mortality`, and the CTA/coverage figures.
 
 ## CLI
 

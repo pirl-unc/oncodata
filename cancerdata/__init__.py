@@ -101,6 +101,15 @@ from .fusions import (
     protein_family,
 )
 from .gene_qc import GeneQcClass, classify_gene_qc, is_rescue_feature
+from .genome import (
+    aggregate_gene_expression,
+    canonical_gene_id_and_name,
+    canonical_gene_ids_and_names,
+    find_gene_id_by_name,
+    find_gene_name_from_ensembl_gene_id,
+    find_gene_name_from_ensembl_transcript_id,
+    genomes,
+)
 from .hpa import (
     gene_cell_type_ntpm,
     gene_protein_tissues,
@@ -171,6 +180,7 @@ __all__ = [
     # expression (read accessors over the downloadable bundle)
     "addressable_fraction",
     "addressable_fraction_by_cohort",
+    "aggregate_gene_expression",
     "aggregate_transcripts_to_genes",
     "available_percentile_cohorts",
     "available_representative_cohorts",
@@ -206,6 +216,8 @@ __all__ = [
     "cancer_types_in_family",
     "cancer_types_with_fusion",
     "canonical_cancer_code",
+    "canonical_gene_id_and_name",
+    "canonical_gene_ids_and_names",
     "classify_gene_qc",
     "clean_tpm",
     "cohort_aggregate_members",
@@ -223,6 +235,9 @@ __all__ = [
     "expression_source",
     "expression_sources",
     "family_display_name",
+    "find_gene_id_by_name",
+    "find_gene_name_from_ensembl_gene_id",
+    "find_gene_name_from_ensembl_transcript_id",
     "format_cancer_code_label",
     "fpkm_to_tpm",
     "fusion_partners",
@@ -232,6 +247,7 @@ __all__ = [
     "gene_tissue_ntpm",
     "gene_to_proteoform",
     "gene_to_proteoform_id",
+    "genomes",
     "greedy_coverage",
     "hpa_normal_tissue",
     # HPA normal-tissue reference data

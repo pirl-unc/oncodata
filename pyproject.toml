@@ -31,14 +31,12 @@ dependencies = [
     "numpy",
     "pyarrow",
     "PyYAML",
+    "pyensembl",
 ]
 
 [project.optional-dependencies]
 plots = [
     "matplotlib",
-]
-genome = [
-    "pyensembl",
 ]
 dev = [
     "pytest",

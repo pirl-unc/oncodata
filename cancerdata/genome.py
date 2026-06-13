@@ -12,16 +12,15 @@
 
 """Ensembl-reference gene/transcript resolution (the ``pyensembl``-backed layer).
 
-This is the genome-reference resolver that the pandas-only ID layer
+This is the genome-reference resolver that the curated pandas ID layer
 (:mod:`cancerdata.gene_ids`, curated CSV aliases) can't do: mapping an *arbitrary*
 Ensembl transcript or gene ID to a gene, and a symbol to its canonical Ensembl gene
 ID, against the installed Ensembl release(s).
 
-It needs ``pyensembl`` and a downloaded human Ensembl release, so it is an **optional
-extra** (``pip install cancerdata[genome]`` + ``pyensembl install --release N
---species homo_sapiens``) — importing this module without pyensembl raises a clear
-error. The base package stays pandas-only; only this module and the full
-:func:`aggregate_gene_expression` need the genome.
+``pyensembl`` is a core dependency, but it still needs a **downloaded** human Ensembl
+release at runtime (``pyensembl install --release N --species homo_sapiens``); with no
+release installed, :func:`genomes` is empty and the resolvers return ``None`` rather
+than raising.
 
 Resolution order for a symbol mirrors pirlygenes: each installed release (newest
 first) by name + curated display aliases, then the bundled NCBI symbol-synonym
@@ -33,13 +32,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-try:
-    from pyensembl.shell import collect_all_installed_ensembl_releases
-except ImportError as e:  # pragma: no cover - exercised only without the extra
-    raise ImportError(
-        "cancerdata.genome needs pyensembl — install with `pip install cancerdata[genome]` "
-        "and download a release: `pyensembl install --release 111 --species homo_sapiens`"
-    ) from e
+from pyensembl.shell import collect_all_installed_ensembl_releases
 
 from .gene_ids import resolve_symbol
 
