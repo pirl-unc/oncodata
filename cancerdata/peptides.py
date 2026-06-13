@@ -160,14 +160,23 @@ def cta_specific_9mer_load(
     By linearity this equals ``Σ over antigens (fraction_expressing ×
     n_specific_9mers)``, so it is built directly on
     :func:`cancerdata.coverage.cta_patient_fractions` (proteoform-summed) — no second
-    pass over the per-sample matrix. Needs the cohort's per-sample matrix cached."""
+    pass over the per-sample matrix. Needs the cohort's per-sample matrix cached.
+
+    The join is on the **canonical-member Ensembl gene id**, not ``Symbol``: a
+    collapsed proteoform's ``Symbol`` is the slash-joined label (``CTAG1A/CTAG1B``),
+    which would never match the per-gene weight table — but identical-protein members
+    share a sequence (hence one specific-9-mer count), so the canonical member's id
+    carries the proteoform's weight."""
     from .coverage import cta_patient_fractions
 
     pf = cta_patient_fractions(cancer_type, threshold_tpm=threshold_tpm)
     if pf.empty:
         return 0.0
-    weights = cta_specific_9mer_weights(k=k)
-    w = pf["Symbol"].astype(str).map(lambda s: weights.get(s, 0))
+    df = cta_specific_9mer_counts(k=k)
+    weight_by_id = {
+        strip_version(g): int(n) for g, n in zip(df["Ensembl_Gene_ID"], df["n_specific_9mers"])
+    }
+    w = pf["Ensembl_Gene_ID"].astype(str).map(lambda g: weight_by_id.get(strip_version(g), 0))
     return float((pf["fraction_expressing"] * w).sum())
 
 

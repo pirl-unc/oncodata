@@ -87,20 +87,22 @@ def test_specific_9mer_weights(fake_proteome):
     assert peptides.cta_specific_9mer_weights(k=3) == {"CTAX": 3}
 
 
-def test_specific_9mer_load_is_weighted_prevalence(fake_proteome, monkeypatch):
+def test_specific_9mer_load_joins_on_ensembl_id_not_symbol(fake_proteome, monkeypatch):
+    # A collapsed proteoform's Symbol is the slash-joined label, which never matches
+    # the per-gene weight table — the load must join on the canonical-member ENSG.
     from cancerdata import coverage
 
     def fake_fractions(code, *, threshold_tpm):
         return pd.DataFrame(
             {
-                "Ensembl_Gene_ID": ["ENSG_CTA"],
-                "Symbol": ["CTAX"],
+                "Ensembl_Gene_ID": ["ENSG_CTA"],  # canonical member id
+                "Symbol": ["CTAX/CTAY"],  # slash-joined proteoform label
                 "fraction_expressing": [0.5],
             }
         )
 
     monkeypatch.setattr(coverage, "cta_patient_fractions", fake_fractions)
-    # load = fraction (0.5) * n_specific_9mers (3) = 1.5
+    # load = fraction (0.5) * n_specific_9mers (3) = 1.5; would be 0.0 on a Symbol join.
     assert peptides.cta_specific_9mer_load("X", threshold_tpm=5, k=3) == pytest.approx(1.5)
 
 
