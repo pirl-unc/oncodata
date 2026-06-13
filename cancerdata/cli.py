@@ -257,6 +257,7 @@ def _cmd_plot(args: argparse.Namespace) -> int:
         "cta-coverage-curves": plots.cta_coverage_curves,
         "cta-coverage-stacked": plots.cta_coverage_stacked_bars,
         "cta-burden-vs-response": plots.cta_burden_vs_response,
+        "cta-specific-9mer-load": plots.cta_specific_9mer_load,
         "burden-category-bars": plots.burden_category_bars,
         "apd1-response-signature": plots.apd1_response_signature_scatter,
     }
@@ -271,7 +272,7 @@ def _cmd_plot(args: argparse.Namespace) -> int:
             kwargs = {"source": args.source, "threshold_tpm": args.threshold_tpm}
         elif args.which == "cta-patient-heatmap":
             kwargs = {"threshold_tpm": args.threshold_tpm}
-        elif args.which == "cta-burden-vs-response":
+        elif args.which in ("cta-burden-vs-response", "cta-specific-9mer-load"):
             kwargs = {"against": args.against, "threshold_tpm": args.threshold_tpm}
         elif args.which in ("cta-coverage-curves", "cta-coverage-stacked"):
             if not args.codes:
@@ -465,6 +466,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "cta-coverage-curves",
             "cta-coverage-stacked",
             "cta-burden-vs-response",
+            "cta-specific-9mer-load",
             "burden-category-bars",
             "apd1-response-signature",
         ],

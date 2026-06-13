@@ -1,0 +1,111 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+import pandas as pd
+import pytest
+
+from cancerdata import peptides
+
+
+class _FakeTr:
+    def __init__(self, gene_id, biotype, protein_sequence):
+        self.gene_id = gene_id
+        self.biotype = biotype
+        self.protein_sequence = protein_sequence
+
+
+class _FakeGenome:
+    release = 999
+
+    def __init__(self, transcripts):
+        self._trs = transcripts
+
+    def transcripts(self):
+        return self._trs
+
+
+def test_kmers():
+    assert peptides._kmers("AAACCC", 3) == {"AAA", "AAC", "ACC", "CCC"}
+    assert peptides._kmers("AB", 3) == set()  # shorter than k
+
+
+def test_longest_protein_per_gene_keeps_longest():
+    genome = _FakeGenome(
+        [
+            _FakeTr("G1", "protein_coding", "AAAA"),
+            _FakeTr("G1", "protein_coding", "AAAAAA"),  # longer -> wins
+            _FakeTr("G1", "lncRNA", "ZZZZZZZZ"),  # non-coding -> ignored
+            _FakeTr("G2", "protein_coding", "CC"),  # shorter than k -> dropped
+            _FakeTr("G3", "protein_coding", "MKLP*"),  # stop codon stripped
+        ]
+    )
+    longest = peptides._longest_protein_per_gene(genome, 3)
+    assert longest["G1"] == "AAAAAA"
+    assert "G2" not in longest
+    assert longest["G3"] == "MKLP"
+
+
+@pytest.fixture
+def fake_proteome(monkeypatch, tmp_path):
+    # CTA protein "AAACCC" (3-mers: AAA,AAC,ACC,CCC); background "CCCDDD" shares CCC.
+    genome = _FakeGenome(
+        [
+            _FakeTr("ENSG_CTA", "protein_coding", "AAACCC"),
+            _FakeTr("ENSG_BG", "protein_coding", "CCCDDD"),
+            _FakeTr("ENSG_NC", "lncRNA", "EEEEEE"),
+        ]
+    )
+    monkeypatch.setattr(peptides, "_usable_genome", lambda: genome)
+    monkeypatch.setattr(peptides, "_derived_cache_dir", lambda: tmp_path)
+    monkeypatch.setattr(peptides, "CTA_gene_ids", lambda: ["ENSG_CTA"])
+    monkeypatch.setattr(peptides, "CTA_unfiltered_gene_ids", lambda: ["ENSG_CTA"])
+    monkeypatch.setattr(peptides, "CTA_gene_id_to_name", lambda: {"ENSG_CTA": "CTAX"})
+    peptides.cta_specific_9mer_counts.cache_clear()
+    peptides.cta_specific_9mer_weights.cache_clear()
+    yield
+    peptides.cta_specific_9mer_counts.cache_clear()
+    peptides.cta_specific_9mer_weights.cache_clear()
+
+
+def test_specific_9mer_counts_subtracts_background(fake_proteome):
+    df = peptides.cta_specific_9mer_counts(k=3)
+    assert list(df["Symbol"]) == ["CTAX"]
+    row = df.iloc[0]
+    assert row["n_9mers"] == 4  # AAA, AAC, ACC, CCC
+    assert row["n_specific_9mers"] == 3  # CCC also in background -> excluded
+
+
+def test_specific_9mer_counts_caches(fake_proteome, tmp_path):
+    peptides.cta_specific_9mer_counts(k=3)
+    assert (tmp_path / "cta_specific_3mers_r999.csv").exists()
+
+
+def test_specific_9mer_weights(fake_proteome):
+    assert peptides.cta_specific_9mer_weights(k=3) == {"CTAX": 3}
+
+
+def test_specific_9mer_load_is_weighted_prevalence(fake_proteome, monkeypatch):
+    from cancerdata import coverage
+
+    def fake_fractions(code, *, threshold_tpm):
+        return pd.DataFrame(
+            {
+                "Ensembl_Gene_ID": ["ENSG_CTA"],
+                "Symbol": ["CTAX"],
+                "fraction_expressing": [0.5],
+            }
+        )
+
+    monkeypatch.setattr(coverage, "cta_patient_fractions", fake_fractions)
+    # load = fraction (0.5) * n_specific_9mers (3) = 1.5
+    assert peptides.cta_specific_9mer_load("X", threshold_tpm=5, k=3) == pytest.approx(1.5)
+
+
+def test_specific_9mer_load_empty_cohort(fake_proteome, monkeypatch):
+    from cancerdata import coverage
+
+    monkeypatch.setattr(coverage, "cta_patient_fractions", lambda code, **k: pd.DataFrame())
+    assert peptides.cta_specific_9mer_load("X", k=3) == 0.0
