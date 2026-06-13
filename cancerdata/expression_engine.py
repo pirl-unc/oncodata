@@ -36,10 +36,10 @@ import pandas as pd
 #: per-sample / per-representative value column. One definition shared by every
 #: "value columns = all columns except the id columns" consumer (the build
 #: generators, the normalization helpers, the coverage hit-matrix) so a
-#: proteoform-collapsed frame's ``proteoform_id`` label is never mistaken for a
-#: sample. (The *named*-TPM rule for curated frames is :func:`is_expression_value_col`,
-#: a deliberately distinct concept.)
-ID_COLUMNS = ("Ensembl_Gene_ID", "Symbol", "proteoform_members")
+#: proteoform-collapsed frame's identity columns (``proteoform_key`` / ``Symbol`` /
+#: ``proteoform_members``) are never mistaken for samples. (The *named*-TPM rule for
+#: curated frames is :func:`is_expression_value_col`, a deliberately distinct concept.)
+ID_COLUMNS = ("proteoform_key", "Ensembl_Gene_ID", "Symbol", "proteoform_members")
 
 _DEFAULT_TX_COLUMN_CANDIDATES = (
     "transcript",

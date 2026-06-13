@@ -148,18 +148,25 @@ def sum_proteoform_tpm(
     work["_out_symbol"] = group_sym.where(in_group, work["Symbol"].astype(str))
     # proteoform_members = the sorted slash-joined members (provenance) / own symbol.
     work["_out_members"] = label.where(in_group, work["Symbol"].astype(str))
+    # proteoform_key = THE reduced identity: the gene's own ENSG when it uniquely
+    # owns its protein (1:1, singleton), the proteoform symbol when ENSGs were summed
+    # away (group). The member ENSGs never appear here.
+    work["_out_key"] = work["_out_symbol"].where(in_group, work["_out_id"])
 
     grouped = work.groupby("_key", sort=False)
-    ids = grouped[["_out_id", "_out_symbol", "_out_members"]].first()
+    ids = grouped[["_out_key", "_out_id", "_out_symbol", "_out_members"]].first()
     sums = grouped[cols].sum(min_count=1)
     agg = ids.join(sums).rename(
         columns={
+            "_out_key": "proteoform_key",
             "_out_id": "Ensembl_Gene_ID",
             "_out_symbol": "Symbol",
             "_out_members": "proteoform_members",
         }
     )
-    return agg.reset_index(drop=True)[["Ensembl_Gene_ID", "Symbol", "proteoform_members", *cols]]
+    return agg.reset_index(drop=True)[
+        ["proteoform_key", "Ensembl_Gene_ID", "Symbol", "proteoform_members", *cols]
+    ]
 
 
 def within_sample_top_fractions(
@@ -194,8 +201,12 @@ def within_sample_top_fractions(
             "Symbol": df["Symbol"].astype(str).to_numpy(),
         }
     )
-    if "proteoform_members" in df.columns:  # carry proteoform provenance through (collapsed input)
-        out["proteoform_members"] = df["proteoform_members"].astype(str).to_numpy()
+    for _idcol in (
+        "proteoform_key",
+        "proteoform_members",
+    ):  # carry proteoform identity (collapsed input)
+        if _idcol in df.columns:
+            out[_idcol] = df[_idcol].astype(str).to_numpy()
     for t in thresholds:
         pct = round((1.0 - t) * 100)
         out[f"frac_samples_top{pct}pct"] = (ranks >= t).mean(axis=1).to_numpy()
@@ -246,8 +257,12 @@ def cohort_percentile_vectors(
             "Symbol": df["Symbol"].astype(str).to_numpy(),
         }
     )
-    if "proteoform_members" in df.columns:  # carry proteoform provenance through (collapsed input)
-        out["proteoform_members"] = df["proteoform_members"].astype(str).to_numpy()
+    for _idcol in (
+        "proteoform_key",
+        "proteoform_members",
+    ):  # carry proteoform identity (collapsed input)
+        if _idcol in df.columns:
+            out[_idcol] = df[_idcol].astype(str).to_numpy()
     for i, bp in enumerate(bps):
         out[f"p{bp}"] = q[i].astype("float16")
     return out

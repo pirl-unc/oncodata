@@ -19,6 +19,26 @@ such loci, so each gene's individual TPM under-counts the protein; the
 biologically meaningful unit is the *proteoform* — the sum of TPM across member
 genes.
 
+THE PROTEOFORM KEY SPACE
+========================
+After collapse (:func:`collapse_to_proteoforms`), expression is keyed by **one**
+identity per protein — :func:`proteoform_key` — built by a single rule used
+consistently everywhere a frame is compared / quantified / plotted:
+
+  - a gene that **uniquely** encodes its protein keys to its own **unversioned
+    Ensembl gene id** (``ENSG00000185686``) — the clean 1:1 gene→protein case;
+  - an identical-protein **group** keys to a **proteoform symbol** — the curated
+    alias (``NY-ESO-1``) or, failing that, the prefix-contracted member symbols
+    (``XAGE1A/XAGE1B`` → ``XAGE1A/B``, ``CGB3/CGB5/CGB8`` → ``CGB3/5/8``). The member
+    ENSGs are summed away and **never appear as keys**.
+
+The two alphabets are disjoint (``ENSG…`` vs symbols), so the key space is
+unambiguous, and the collapse strictly **reduces** the key count (members merge).
+A collapsed frame carries: ``proteoform_key`` (the identity above), ``Symbol``
+(display — the proteoform symbol / the gene symbol), ``Ensembl_Gene_ID`` (the
+canonical-member ENSG, a real id for joining to per-gene Ensembl references), and
+``proteoform_members`` (the sorted slash-joined member symbols, provenance only).
+
 This module is the read surface over the curated registry
 (``proteoform-groups.csv``, derived offline by
 ``scripts/generate_proteoform_groups.py`` from pyensembl protein sequences). It
@@ -26,11 +46,10 @@ owns *which genes sum together*; the per-sample TPM summation itself lives in
 :func:`cancerdata.expression.proteoform_representative_samples` (runtime, over the
 shipped medoid samples) and :func:`cancerdata._build.sum_proteoform_tpm` (the
 pure build-time core, ready for the offline percentile/within-sample generators
-to apply before ranking when proteoform-summed artifacts are added to the
-bundle).
+to apply before ranking when proteoform-summed artifacts are added to the bundle).
 
-Group label convention matches the downstream target-selection layer: the
-slash-joined, sorted member symbols (``"SSX4/SSX4B"``).
+The registry's ``proteoform_id`` column is the sorted slash-joined member symbols
+(``"SSX4/SSX4B"``) — what surfaces as ``proteoform_members`` after a collapse.
 """
 
 from __future__ import annotations
@@ -59,12 +78,15 @@ _PROTEOFORM_ALIASES = {
 def _contract_members(members_label: str) -> str:
     """Compact a sorted slash-joined members label by factoring out the common symbol
     prefix: ``XAGE1A/XAGE1B`` → ``XAGE1A/B``, ``CGB3/CGB5/CGB8`` → ``CGB3/5/8``,
-    ``SSX4/SSX4B`` → ``SSX4/B``. No shared prefix → unchanged."""
-    parts = members_label.split("/")
+    ``SSX4/SSX4B`` → ``SSX4/B``. No shared prefix → unchanged. Duplicate member
+    symbols (genome-scope X/Y paralogs sharing a symbol, e.g. ``AKAP17A/AKAP17A``) are
+    de-duplicated, so the result never carries a trailing or empty ``/`` segment."""
+    parts = list(dict.fromkeys(members_label.split("/")))  # de-dup, order-preserving
     if len(parts) < 2:
-        return members_label
+        return parts[0] if parts else members_label
     prefix = os.path.commonprefix(parts)
-    return parts[0] + "".join("/" + p[len(prefix) :] for p in parts[1:])
+    suffixes = [p[len(prefix) :] for p in parts[1:]]
+    return parts[0] + "".join("/" + s for s in suffixes if s)
 
 
 def proteoform_aliases() -> dict[str, str]:
@@ -183,6 +205,23 @@ def proteoform_members_for_gene(gene: str, *, scope: str = "cta") -> tuple[str, 
     return proteoform_symbol_map(scope=scope).get(label) if label is not None else None
 
 
+def proteoform_key(gene: str, *, scope: str = "cta") -> str:
+    """The **proteoform key** for a gene — the one identity used to compare, quantify
+    and plot across the codebase:
+
+      - a gene that **uniquely** owns its protein (no identical-protein paralog) keys
+        to its own **unversioned Ensembl gene id** (``ENSG…``);
+      - a gene in an identical-protein **group** keys to the group's **proteoform
+        symbol** (``NY-ESO-1`` / ``XAGE1A/B``) — the member ENSGs are summed away and
+        never appear as keys.
+
+    The two key alphabets are disjoint (``ENSG…`` vs symbols), so the key space is
+    unambiguous. Pass an Ensembl gene id for the ENSG-keyed singleton result; a symbol
+    input keys to itself when ungrouped."""
+    sym = proteoform_for_gene(gene, scope=scope)
+    return sym if sym is not None else unversioned(gene)
+
+
 def gene_to_proteoform() -> dict[str, str]:
     """``{member gene ID: proteoform label}`` (Ensembl IDs only) — multi-member
     groups only. For a **total** map (every gene → its class, singletons included)
@@ -191,37 +230,19 @@ def gene_to_proteoform() -> dict[str, str]:
     return dict(zip(df[_GENE_ID_COLUMN].astype(str), df[_LABEL_COLUMN].astype(str)))
 
 
-def gene_to_proteoform_id(genes, *, symbols=None, scope: str = "cta") -> dict[str, str]:
-    """Total ``{gene → proteoform symbol}`` over the given genes: every gene maps to
-    exactly one proteoform equivalence class.
-
-    A gene in a multi-member group maps to the group's **proteoform symbol** (the
-    curated alias ``NY-ESO-1`` or the prefix-contracted members ``XAGE1A/B``); a gene
-    in no group is its **own** singleton class, mapping to its symbol (if ``symbols``
-    is given, aligned to ``genes``) else its unversioned Ensembl id. Total over every
-    gene, so callers never need an ad-hoc "is it grouped?" branch. ``genes``/``symbols``
-    are parallel iterables of Ensembl ids / symbols."""
+def gene_to_proteoform_id(genes, *, scope: str = "cta") -> dict[str, str]:
+    """Total ``{Ensembl gene id → proteoform key}`` over the given genes — the batch
+    form of :func:`proteoform_key`. Every gene maps to exactly one key: its own
+    **unversioned ENSG** if it uniquely owns its protein, the group's **proteoform
+    symbol** (``NY-ESO-1`` / ``XAGE1A/B``) if its ENSG was summed into a group. Total,
+    so callers never need an ad-hoc "is it grouped?" branch."""
     pf = _proteoform_frame(scope)
     member_map = dict(zip(pf[_GENE_ID_COLUMN].astype(str), pf[_LABEL_COLUMN].astype(str)))
-    genes = [unversioned(g) for g in genes]
-    if symbols is None:
-        syms: list = [None] * len(genes)
-    else:
-        syms = list(symbols)
-        if len(syms) != len(genes):
-            # zip() would silently truncate to the shorter and drop genes from the
-            # output entirely — fail loudly instead.
-            raise ValueError(
-                f"symbols has length {len(syms)} but genes has length {len(genes)}; "
-                "they must be parallel"
-            )
     out: dict[str, str] = {}
-    for gid, sym in zip(genes, syms):
+    for g in genes:
+        gid = unversioned(g)
         label = member_map.get(gid)
-        if label is not None:
-            out[gid] = proteoform_symbol(label)
-        else:
-            out[gid] = str(sym) if sym is not None else gid
+        out[gid] = proteoform_symbol(label) if label is not None else gid
     return out
 
 
@@ -233,12 +254,15 @@ def collapse_to_proteoforms(
     before comparing/quantifying/plotting so everything shares one reduced key space.
 
     Identical-protein members in ``scope`` are summed per sample into one row, so the
-    key count **decreases** (the members disappear). The output:
+    key count **decreases** (the members disappear). The output (see the module
+    docstring's "key space"):
 
+      - ``proteoform_key`` — THE identity: the gene's own ENSG when it uniquely owns
+        its protein, the proteoform symbol (``NY-ESO-1`` / ``XAGE1A/B``) for a group;
       - ``Ensembl_Gene_ID`` — the group's canonical-member ENSG (``min``), a real
         joinable Ensembl id; the gene's own ENSG for a singleton (the 1:1 case);
-      - ``Symbol`` — the single proteoform symbol: the curated alias (``NY-ESO-1``) or
-        the prefix-contracted members (``XAGE1A/B``); the gene's symbol for a singleton;
+      - ``Symbol`` — display: the proteoform symbol for a group, the gene's symbol for
+        a singleton;
       - ``proteoform_members`` — the sorted slash-joined member symbols
         (``CTAG1A/CTAG1B``), provenance only; the gene's symbol for a singleton.
 

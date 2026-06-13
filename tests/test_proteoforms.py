@@ -94,7 +94,11 @@ def test_collapse_decreases_key_count_no_duplicate_keys():
     out = collapse_to_proteoforms(df, sample_cols=["s1"])
     assert len(out) < len(df)  # fewer keys after collapse
     assert len(out) == 2  # one proteoform + PRAME
-    assert out["Symbol"].is_unique and out["Ensembl_Gene_ID"].is_unique
+    assert out["proteoform_key"].is_unique and out["Ensembl_Gene_ID"].is_unique
+    # The PRAME singleton keys by its ENSG; the group keys by its proteoform symbol.
+    keys = set(out["proteoform_key"])
+    assert extra in keys  # 1:1 gene -> ENSG
+    assert any(not k.startswith("ENSG") for k in keys)  # group -> a symbol
 
 
 def test_proteoform_for_gene_by_id_symbol_and_version():
@@ -227,26 +231,31 @@ def test_gene_to_proteoform_id_is_total():
     # Every gene maps to a class: grouped -> label, singleton -> symbol (or ENSG).
     from cancerdata.proteoforms import gene_to_proteoform_id
 
-    genes = ["ENSG00000268009", "ENSG00000269791", "ENSG00000185686", "ENSG_X"]
-    symbols = ["SSX4", "SSX4B", "PRAME", "MYGENE"]
-    # patch the registry frame to a known group so the test is hermetic-ish:
-    m = gene_to_proteoform_id(genes, symbols=symbols)
+    genes = ["ENSG00000268009", "ENSG00000269791", "ENSG00000185686"]
+    m = gene_to_proteoform_id(genes)
     assert set(m) == set(genes)  # total
-    # PRAME is a singleton (not in a multi-member CTA group) -> its own symbol
-    assert m["ENSG00000185686"] == "PRAME"
-    # a gene absent from the registry with a symbol -> the symbol
-    assert m["ENSG_X"] == "MYGENE"
-    # a gene with no symbol given -> falls back to its ensembl id
-    m2 = gene_to_proteoform_id(["ENSG_Y"])
-    assert m2["ENSG_Y"] == "ENSG_Y"
+    # The grouped SSX4 / SSX4B map to the proteoform symbol (the reduced key).
+    assert m["ENSG00000268009"] == "SSX4/B"
+    assert m["ENSG00000269791"] == "SSX4/B"
+    # PRAME uniquely owns its protein -> its own ENSG is the key (the 1:1 case).
+    assert m["ENSG00000185686"] == "ENSG00000185686"
 
 
-def test_gene_to_proteoform_id_rejects_mismatched_symbols():
-    # A short `symbols` would zip-truncate and silently drop genes — must raise.
-    from cancerdata.proteoforms import gene_to_proteoform_id
+def test_proteoform_key_ensg_for_unique_symbol_for_group():
+    from cancerdata.proteoforms import proteoform_key
 
-    with pytest.raises(ValueError, match="parallel"):
-        gene_to_proteoform_id(["ENSG_A", "ENSG_B", "ENSG_C"], symbols=["A"])
+    # Group member -> proteoform symbol; unique gene -> its own ENSG.
+    assert proteoform_key("ENSG00000184033") == "NY-ESO-1"  # CTAG1B (aliased group)
+    assert proteoform_key("ENSG00000268009") == "SSX4/B"  # SSX4 (contracted group)
+    assert proteoform_key("ENSG00000185686") == "ENSG00000185686"  # PRAME, unique -> ENSG
+    assert proteoform_key("ENSG00000268009.4") == "SSX4/B"  # version-insensitive
+
+
+def test_contract_members_dedupes_identical_symbols():
+    # Genome-scope X/Y paralogs can share a symbol (AKAP17A/AKAP17A): the contraction
+    # must not leave a trailing slash.
+    assert _contract_members("AKAP17A/AKAP17A") == "AKAP17A"
+    assert _contract_members("CD99/CD99") == "CD99"
 
 
 def test_collapse_to_proteoforms_keeps_ensembl_id_real():
