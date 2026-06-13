@@ -136,24 +136,37 @@ def find_gene_name_from_ensembl_transcript_id(transcript_id: str) -> str | None:
 
 
 def _best_canonical_cds_length(gene) -> int:
-    lengths = [
-        len(t.coding_sequence)
-        for t in gene.transcripts
-        if t.is_protein_coding and t.contains_start_codon
-    ]
+    lengths = []
+    for t in gene.transcripts:
+        if not (t.is_protein_coding and t.contains_start_codon):
+            continue
+        # A protein-coding transcript can still lack an assembled coding sequence when
+        # only the GTF is installed (no cDNA FASTA) — len(None) would crash resolution.
+        cds = getattr(t, "coding_sequence", None)
+        if cds is not None:
+            lengths.append(len(cds))
     return max(lengths, default=0)
+
+
+#: Score for a gene whose transcripts carry no TSL information at all. Ensembl TSL is
+#: 1 (best)..5 (worst); -min(TSL) lands in [-5, -1], so a sortable score strictly
+#: below -5 makes "no support info" rank *below* even a TSL-5 transcript (rather than
+#: above a clean TSL-1 one, which `0` did — a real mis-ranking in pick_best_gene).
+_NO_TSL_SCORE = -6
 
 
 def _best_transcript_support(gene) -> int:
     """Quality of the gene's best transcript as a sortable score (higher better):
-    Ensembl TSL is 1 (best)..5 (worst), inverted to -min(TSL); 0 if no TSL."""
+    Ensembl TSL is 1 (best)..5 (worst), inverted to ``-min(TSL)``; transcripts with
+    no/NA TSL are skipped, and a gene with *no* TSL info scores :data:`_NO_TSL_SCORE`
+    (worst), so an un-assessed gene never outranks an assessed one."""
     levels = []
     for t in gene.transcripts:
         try:
             levels.append(int(getattr(t, "support_level", None)))
         except (TypeError, ValueError):
             continue
-    return -min(levels) if levels else 0
+    return -min(levels) if levels else _NO_TSL_SCORE
 
 
 def pick_best_gene(genes):
