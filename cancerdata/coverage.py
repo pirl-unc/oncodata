@@ -51,14 +51,27 @@ def _panel_ids(gene_ids: Iterable[str] | None) -> set[str]:
     return {str(g).split(".")[0] for g in ids}
 
 
-def _hit_matrix(cancer_type, *, threshold_tpm: float, gene_ids):
+def _hit_matrix(cancer_type, *, threshold_tpm: float, gene_ids, proteoform: bool = True):
     """``(panel rows of the matrix, sample columns, gene×sample boolean hit matrix)``
-    where a hit is clean TPM >= ``threshold_tpm`` for one gene in one patient."""
+    where a hit is clean TPM >= ``threshold_tpm`` for one antigen in one patient.
+
+    With ``proteoform=True`` (default), identical-protein paralogs in the panel
+    (CTAG1A+CTAG1B = NY-ESO-1, XAGE1A+XAGE1B, …) are **summed per patient** into one
+    antigen row before thresholding — the biologically correct unit for antigen
+    coverage: RNA-seq reads multi-map between the loci (so per-gene TPM under-counts
+    the proteoform), and a TCR/vaccine targets the shared protein once. With
+    ``proteoform=False`` each gene is kept separate."""
     df = per_sample_expression(cancer_type, normalize="tpm_clean")
     unversioned = df["Ensembl_Gene_ID"].astype(str).str.split(".").str[0]
     panel = _panel_ids(gene_ids)
     sub = df[unversioned.isin(panel)].reset_index(drop=True)
     samples = [c for c in df.columns if c not in _BASE]
+    if proteoform and len(sub):
+        from ._build import sum_proteoform_tpm
+        from .proteoforms import proteoform_group_map
+
+        sub = sum_proteoform_tpm(sub, proteoform_group_map(), samples).reset_index(drop=True)
+        samples = [c for c in sub.columns if c not in _BASE]
     hits = sub[samples].to_numpy(dtype=float) >= float(threshold_tpm)
     return sub, samples, hits
 
@@ -68,12 +81,16 @@ def cta_patient_fractions(
     *,
     threshold_tpm: float = DEFAULT_EXPRESSED_TPM,
     gene_ids: Iterable[str] | None = None,
+    proteoform: bool = True,
 ) -> pd.DataFrame:
-    """Per gene, the fraction of a cohort's patients expressing it above
+    """Per antigen, the fraction of a cohort's patients expressing it above
     ``threshold_tpm`` (clean TPM). Returns ``Ensembl_Gene_ID``, ``Symbol``,
     ``fraction_expressing``, ``n_patients_expressing``, ``n_patients`` — sorted by
-    prevalence. The default gene panel is the expressed CTA set."""
-    sub, samples, hits = _hit_matrix(cancer_type, threshold_tpm=threshold_tpm, gene_ids=gene_ids)
+    prevalence. The default gene panel is the expressed CTA set; identical-protein
+    paralogs are summed to one antigen (``proteoform=True``)."""
+    sub, samples, hits = _hit_matrix(
+        cancer_type, threshold_tpm=threshold_tpm, gene_ids=gene_ids, proteoform=proteoform
+    )
     n = len(samples)
     out = sub[_BASE].copy()
     counts = hits.sum(axis=1)
@@ -88,12 +105,16 @@ def addressable_fraction(
     *,
     threshold_tpm: float = DEFAULT_EXPRESSED_TPM,
     gene_ids: Iterable[str] | None = None,
+    proteoform: bool = True,
 ) -> float:
-    """Fraction of a cohort's patients expressing **at least one** gene in the panel
-    above ``threshold_tpm`` — the faithful "addressable" share (the union across
-    patients, which the per-gene fractions can't be summed into). 0.0 for an empty
+    """Fraction of a cohort's patients expressing **at least one** antigen in the
+    panel above ``threshold_tpm`` — the faithful "addressable" share (the union across
+    patients, which the per-gene fractions can't be summed into). Identical-protein
+    paralogs are summed to one antigen (``proteoform=True``). 0.0 for an empty
     cohort/panel."""
-    _, samples, hits = _hit_matrix(cancer_type, threshold_tpm=threshold_tpm, gene_ids=gene_ids)
+    _, samples, hits = _hit_matrix(
+        cancer_type, threshold_tpm=threshold_tpm, gene_ids=gene_ids, proteoform=proteoform
+    )
     if not samples or hits.size == 0:
         return 0.0
     return float(hits.any(axis=0).mean())
@@ -105,18 +126,22 @@ def greedy_coverage(
     threshold_tpm: float = DEFAULT_EXPRESSED_TPM,
     gene_ids: Iterable[str] | None = None,
     max_genes: int | None = None,
+    proteoform: bool = True,
 ) -> pd.DataFrame:
-    """Greedy set-cover panel: at each step add the gene covering the most patients
-    not yet covered by the chosen panel, until every coverable patient is covered
-    (or ``max_genes`` is reached).
+    """Greedy set-cover panel: at each step add the antigen covering the most
+    patients not yet covered by the chosen panel, until every coverable patient is
+    covered (or ``max_genes`` is reached). Identical-protein paralogs are summed to
+    one antigen (``proteoform=True``), so e.g. CTAG1A/CTAG1B counts once.
 
-    Returns one row per chosen gene, in selection order: ``rank``,
+    Returns one row per chosen antigen, in selection order: ``rank``,
     ``Ensembl_Gene_ID``, ``Symbol``, ``marginal_patients`` (newly covered),
     ``marginal_fraction``, ``cumulative_patients``, ``cumulative_fraction``. The
     cumulative fraction is the coverage curve; its last value equals
     :func:`addressable_fraction` once the panel is exhausted (unless ``max_genes``
     truncates it first). Ties are broken by total prevalence (deterministic)."""
-    sub, samples, hits = _hit_matrix(cancer_type, threshold_tpm=threshold_tpm, gene_ids=gene_ids)
+    sub, samples, hits = _hit_matrix(
+        cancer_type, threshold_tpm=threshold_tpm, gene_ids=gene_ids, proteoform=proteoform
+    )
     n = len(samples)
     rows: list[dict] = []
     if n == 0 or hits.size == 0:
@@ -169,6 +194,7 @@ def addressable_fraction_by_cohort(
     *,
     threshold_tpm: float = DEFAULT_EXPRESSED_TPM,
     gene_ids: Iterable[str] | None = None,
+    proteoform: bool = True,
 ) -> pd.Series:
     """``{cohort code -> addressable fraction}`` over the cohorts that have a
     per-sample matrix (default: all of them). Skips cohorts whose matrix isn't
@@ -180,7 +206,9 @@ def addressable_fraction_by_cohort(
     for code in codes:
         if cohorts is None and not source_matrices.is_cached(code):
             continue
-        out[str(code)] = addressable_fraction(code, threshold_tpm=threshold_tpm, gene_ids=gene_ids)
+        out[str(code)] = addressable_fraction(
+            code, threshold_tpm=threshold_tpm, gene_ids=gene_ids, proteoform=proteoform
+        )
     return pd.Series(out, name="addressable_fraction")
 
 

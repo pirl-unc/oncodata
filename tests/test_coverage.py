@@ -80,6 +80,35 @@ def test_high_threshold_covers_nobody(patched):
     assert coverage.greedy_coverage("X", threshold_tpm=1000, gene_ids=patched).empty
 
 
+def test_proteoform_paralogs_are_summed(monkeypatch):
+    # Two identical-protein paralogs (gA1/gA2) each below threshold in a patient but
+    # summing above it: proteoform=True must collapse them to one antigen and catch
+    # the patient; proteoform=False keeps them split and misses it.
+    fixture = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["ENSG_A1", "ENSG_A2", "ENSG_B"],
+            "Symbol": ["A1", "A2", "B"],
+            "p0": [6.0, 6.0, 0.0],  # A1+A2 = 12 (>10); each alone 6 (<10)
+            "p1": [0.0, 0.0, 20.0],
+        }
+    )
+    monkeypatch.setattr(coverage, "per_sample_expression", lambda *a, **k: fixture.copy())
+    monkeypatch.setattr(coverage, "_panel_ids", lambda gene_ids: {"ENSG_A1", "ENSG_A2", "ENSG_B"})
+    # _hit_matrix lazily does `from .proteoforms import proteoform_group_map`, so patch
+    # the source symbol it re-resolves on each call.
+    import cancerdata.proteoforms as pmod
+
+    monkeypatch.setattr(pmod, "proteoform_group_map", lambda: {"A1/A2": ["ENSG_A1", "ENSG_A2"]})
+
+    pf_sum = coverage.cta_patient_fractions("X", threshold_tpm=10, proteoform=True)
+    # A1/A2 collapsed to one row, expressed in p0 (summed 12 > 10) -> fraction 0.5
+    a_row = pf_sum[pf_sum["Symbol"] == "A1/A2"]
+    assert len(a_row) == 1 and a_row["fraction_expressing"].iloc[0] == 0.5
+    # per-gene view: neither A1 nor A2 clears 10 alone -> 0 in p0
+    pf_split = coverage.cta_patient_fractions("X", threshold_tpm=10, proteoform=False)
+    assert pf_split[pf_split["Symbol"] == "A1"]["fraction_expressing"].iloc[0] == 0.0
+
+
 # ---- real-data parity (skipped unless the source-matrix cache is staged) ----
 
 from cancerdata import source_matrices as _sm  # noqa: E402
