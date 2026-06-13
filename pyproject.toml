@@ -37,6 +37,9 @@ dependencies = [
 plots = [
     "matplotlib",
 ]
+genome = [
+    "pyensembl",
+]
 dev = [
     "pytest",
     "pytest-cov",
