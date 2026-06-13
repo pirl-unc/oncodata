@@ -114,7 +114,9 @@ from .incidence import (
     cancer_code_burden_map,
 )
 from .proteoforms import (
+    collapse_to_proteoforms,
     gene_to_proteoform,
+    gene_to_proteoform_id,
     proteoform_for_gene,
     proteoform_group_map,
     proteoform_groups,
@@ -193,6 +195,7 @@ __all__ = [
     "cohort_mean_expression",
     "cohort_registry",
     "cohort_registry_df",
+    "collapse_to_proteoforms",
     "cta_dataframe",
     "cta_patient_fractions",
     "expression_source",
@@ -205,6 +208,7 @@ __all__ = [
     "gene_protein_tissues",
     "gene_tissue_ntpm",
     "gene_to_proteoform",
+    "gene_to_proteoform_id",
     "greedy_coverage",
     "hpa_normal_tissue",
     # HPA normal-tissue reference data
