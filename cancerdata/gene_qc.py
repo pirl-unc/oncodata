@@ -153,7 +153,9 @@ def classify_gene_qc(symbol: str | None = None, *, ensembl_id: str | None = None
     """
     family = None
     if ensembl_id:
-        family = _ensembl_id_to_family().get(str(ensembl_id).split(".")[0])
+        from .gene_ids import unversioned
+
+        family = _ensembl_id_to_family().get(unversioned(ensembl_id))
 
     raw = str(symbol or "").strip()
     upper = raw.upper()

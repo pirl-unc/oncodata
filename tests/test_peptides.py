@@ -107,6 +107,26 @@ def test_specific_9mer_weights_keyed_by_ensembl_id_by_default(fake_proteome):
         peptides.cta_specific_9mer_weights(k=3, by="nonsense")
 
 
+def test_weight_propagates_to_unexpressed_canonical_member(monkeypatch):
+    # A proteoform's canonical id is min(member ids); that member can be unexpressed
+    # and absent from the per-gene counts table. The group's weight must still reach
+    # it (members share a sequence -> one count), else the load silently drops it.
+    import cancerdata.proteoforms as pmod
+
+    monkeypatch.setattr(
+        peptides,
+        "cta_specific_9mer_weights",
+        lambda *, k, by="ensembl_gene_id": {"ENSG_EXPRESSED": 7},  # only the expressed member
+    )
+    monkeypatch.setattr(
+        pmod, "proteoform_group_map", lambda *, scope="cta": {"A/B": ("ENSG_AAA", "ENSG_EXPRESSED")}
+    )
+    wbi = peptides._weight_by_gene_id(k=3)
+    # canonical = min(members) = ENSG_AAA, absent from the counts table, now carries 7
+    assert wbi["ENSG_AAA"] == 7
+    assert wbi["ENSG_EXPRESSED"] == 7
+
+
 def test_specific_9mer_load_joins_on_ensembl_id_not_symbol(fake_proteome, monkeypatch):
     # A collapsed proteoform's Symbol is the slash-joined label, which never matches
     # the per-gene weight table — the load must join on the canonical-member ENSG.

@@ -197,6 +197,30 @@ def cta_specific_9mer_weights(*, k: int = DEFAULT_K, by: str = "ensembl_gene_id"
     return {str(key): int(n) for key, n in zip(keys, df["n_specific_9mers"])}
 
 
+def _weight_by_gene_id(*, k: int = DEFAULT_K, scope: str = "cta") -> dict[str, int]:
+    """``{unversioned member gene id -> n_specific_9mers}`` covering **every** member
+    of each proteoform group, not just the ones in the counts table.
+
+    The counts table only has rows for the expressed/filtered CTA set, so a group's
+    weight lives under whichever member(s) are expressed. But a collapsed proteoform's
+    canonical id (``min`` member, :func:`cancerdata._build.sum_proteoform_tpm`) may be
+    an *un*expressed sibling absent from that table — joining on it alone silently
+    drops the group's weight (CGB3/CGB5/CGB8, CT45A2/CT45A8/CT45A9, …). Identical-
+    protein members share a sequence, hence one count, so we propagate each group's
+    weight to all its member ids; the canonical id then always resolves."""
+    from .proteoforms import proteoform_group_map
+
+    per_gene = cta_specific_9mer_weights(k=k, by="ensembl_gene_id")
+    out = dict(per_gene)
+    for members in proteoform_group_map(scope=scope).values():
+        ids = [strip_version(m) for m in members]
+        group_weight = max((per_gene.get(i, 0) for i in ids), default=0)
+        if group_weight:
+            for i in ids:
+                out.setdefault(i, group_weight)
+    return out
+
+
 def cta_specific_9mer_load(
     cancer_type, *, threshold_tpm: float = 10.0, k: int = DEFAULT_K
 ) -> float:
@@ -211,15 +235,16 @@ def cta_specific_9mer_load(
 
     The join is on the **canonical-member Ensembl gene id**, not ``Symbol``: a
     collapsed proteoform's ``Symbol`` is the slash-joined label (``CTAG1A/CTAG1B``),
-    which would never match the per-gene weight table — but identical-protein members
-    share a sequence (hence one specific-9-mer count), so the canonical member's id
-    carries the proteoform's weight."""
+    which would never match the per-gene weight table. The weight map
+    (:func:`_weight_by_gene_id`) propagates each group's count to *all* its member ids,
+    so even when the canonical (``min``) member is an unexpressed sibling absent from
+    the counts table, it still carries the proteoform's weight."""
     from .coverage import cta_patient_fractions
 
     pf = cta_patient_fractions(cancer_type, threshold_tpm=threshold_tpm)
     if pf.empty:
         return 0.0
-    weight_by_id = cta_specific_9mer_weights(k=k, by="ensembl_gene_id")
+    weight_by_id = _weight_by_gene_id(k=k)
     w = pf["Ensembl_Gene_ID"].astype(str).map(lambda g: weight_by_id.get(strip_version(g), 0))
     return float((pf["fraction_expressing"] * w).sum())
 

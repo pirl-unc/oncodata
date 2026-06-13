@@ -9,6 +9,13 @@
 from cancerdata import gene_ids as g
 
 
+def test_unversioned_normalizer():
+    assert g.unversioned("ENSG00000141510.5") == "ENSG00000141510"
+    assert g.unversioned("ENSG00000141510") == "ENSG00000141510"  # idempotent on bare
+    assert g.unversioned("  ENSG00000141510.5  ") == "ENSG00000141510"  # strips whitespace
+    assert g.unversioned("ENSG00000141510") == g.unversioned(" ENSG00000141510")  # padded == bare
+
+
 def test_ensembl_id_alias_resolution():
     aliases = g.ensembl_id_aliases()
     assert aliases  # non-empty

@@ -27,8 +27,16 @@ import pandas as pd
 from .load_dataset import get_data
 
 
-def _unversioned(gene_id: str) -> str:
-    return str(gene_id).split(".")[0]
+def unversioned(gene_id: str) -> str:
+    """Canonical Ensembl-id normalizer: ``ENSG00000251562.5`` → ``ENSG00000251562``,
+    stripping a single version suffix *and* surrounding whitespace (idempotent on bare
+    ids). The one definition every layer shares, so a padded/versioned id can't match
+    in one place and miss in another."""
+    return str(gene_id).split(".", 1)[0].strip()
+
+
+#: Back-compat internal alias.
+_unversioned = unversioned
 
 
 @lru_cache(maxsize=1)

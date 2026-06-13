@@ -34,7 +34,7 @@ from functools import lru_cache
 
 from pyensembl.shell import collect_all_installed_ensembl_releases
 
-from .gene_ids import resolve_symbol
+from .gene_ids import resolve_symbol, unversioned
 
 #: Curated literary display aliases used as extra symbol candidates (NY-ESO-1 ↔
 #: CTAG1B, gp100 ↔ PMEL, …). Small, base-layer reference — not a full alias table.
@@ -71,8 +71,9 @@ def genomes():
 
 
 def strip_version(gene_id: str) -> str:
-    """``ENSG00000251562.5`` → ``ENSG00000251562`` (idempotent on bare ids)."""
-    return str(gene_id).split(".", 1)[0].strip()
+    """``ENSG00000251562.5`` → ``ENSG00000251562`` (idempotent on bare ids). Alias of
+    :func:`cancerdata.gene_ids.unversioned`, the one shared normalizer."""
+    return unversioned(gene_id)
 
 
 def gene_for_ensembl_id(genome, gene_id: str):
@@ -85,34 +86,50 @@ def gene_for_ensembl_id(genome, gene_id: str):
 
 
 @lru_cache(maxsize=1)
+def _index_genome():
+    """Newest installed release with a **queryable GTF** (gene/transcript tables
+    built), or ``None``. A release with sequence FASTA but no built GTF database
+    (``gene_ids()`` raises) is skipped — otherwise it would be picked as ``genomes()[0]``
+    yet yield empty indexes, silently forcing every lookup onto the slow per-release
+    fallback."""
+    for g in genomes():
+        try:
+            g.gene_ids()  # GTF probe — raises if the database isn't built
+            return g
+        except Exception:
+            continue
+    return None
+
+
+@lru_cache(maxsize=1)
 def _newest_indexes():
-    """``(gene_id->name, transcript_id->gene_name)`` from the newest installed
-    release, built once in memory (pyensembl persists its own SQLite cache)."""
+    """``(gene_id->name, transcript_id->gene_name)`` from the newest *usable* release,
+    built once in memory (pyensembl persists its own SQLite cache)."""
     gid_to_name: dict[str, str] = {}
     tid_to_gene: dict[str, str] = {}
-    gs = genomes()
-    if gs:
-        g = gs[0]
-        try:
-            for gene in g.genes():
-                gid_to_name[strip_version(gene.id)] = gene.name
-        except Exception:
-            pass
-        try:
-            for t in g.transcripts():
-                tid_to_gene[strip_version(t.id)] = t.gene_name
-        except Exception:
-            pass
+    g = _index_genome()
+    if g is not None:
+        for gene in g.genes():
+            gid_to_name[strip_version(gene.id)] = gene.name
+        for t in g.transcripts():
+            tid_to_gene[strip_version(t.id)] = t.gene_name
     return gid_to_name, tid_to_gene
 
 
+def _fallback_genomes():
+    """Installed releases other than the one already indexed (newest first) — for the
+    per-id fallback when the in-memory index misses."""
+    idx = _index_genome()
+    return [g for g in genomes() if g is not idx]
+
+
 def find_gene_name_from_ensembl_gene_id(gene_id: str) -> str | None:
-    """Gene symbol for an Ensembl gene id — newest release, then older releases."""
+    """Gene symbol for an Ensembl gene id — indexed release, then older releases."""
     gid = strip_version(gene_id)
     name = _newest_indexes()[0].get(gid)
     if name:
         return name
-    for genome in genomes()[1:]:
+    for genome in _fallback_genomes():
         gene = gene_for_ensembl_id(genome, gid)
         if gene and gene.gene_name:
             return gene.gene_name
@@ -120,12 +137,12 @@ def find_gene_name_from_ensembl_gene_id(gene_id: str) -> str | None:
 
 
 def find_gene_name_from_ensembl_transcript_id(transcript_id: str) -> str | None:
-    """Gene symbol for an Ensembl transcript id — newest release, then older."""
+    """Gene symbol for an Ensembl transcript id — indexed release, then older."""
     tid = strip_version(transcript_id)
     name = _newest_indexes()[1].get(tid)
     if name:
         return name
-    for genome in genomes()[1:]:
+    for genome in _fallback_genomes():
         try:
             t = genome.transcript_by_id(tid)
         except Exception:
