@@ -157,6 +157,8 @@ def greedy_coverage(
                 "marginal_fraction",
                 "cumulative_patients",
                 "cumulative_fraction",
+                "proteoform_key",
+                "proteoform_members",
             ]
         )
 
@@ -188,8 +190,9 @@ def greedy_coverage(
             "cumulative_patients": cum,
             "cumulative_fraction": cum / n,
         }
-        if "proteoform_members" in sub.columns:
-            row["proteoform_members"] = str(sub.at[best_g, "proteoform_members"])
+        for _idcol in ("proteoform_key", "proteoform_members"):
+            if _idcol in sub.columns:
+                row[_idcol] = str(sub.at[best_g, _idcol])
         rows.append(row)
     return pd.DataFrame(rows)
 

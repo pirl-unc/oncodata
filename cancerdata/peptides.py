@@ -179,46 +179,29 @@ def cta_specific_9mer_counts(*, k: int = DEFAULT_K, refresh: bool = False) -> pd
     return _COUNTS_CACHE[key].copy()
 
 
-def cta_specific_9mer_weights(*, k: int = DEFAULT_K, by: str = "ensembl_gene_id") -> dict[str, int]:
+def cta_specific_9mer_weights(*, k: int = DEFAULT_K, by: str = "proteoform_key") -> dict[str, int]:
     """``{key -> n_specific_9mers}`` from :func:`cta_specific_9mer_counts`.
 
-    ``by="ensembl_gene_id"`` (default) keys by unversioned Ensembl gene id — the safe
-    join key, since a proteoform-collapsed row's ``Symbol`` is a slash-joined label
-    that no per-gene symbol key matches (see :func:`cta_specific_9mer_load`).
-    ``by="symbol"`` keys by gene symbol for display. Identical-protein paralogs share
-    a sequence, hence one count, so a canonical member's id carries the group's weight."""
+    ``by="proteoform_key"`` (default) keys by the **proteoform key** — the uniform join
+    key for collapsed frames. Identical-protein group members share one sequence, hence
+    one count, so the group's proteoform key carries that count regardless of which
+    member is expressed (no canonical-member ambiguity). ``by="ensembl_gene_id"`` /
+    ``by="symbol"`` key per gene, for reference/display."""
     df = cta_specific_9mer_counts(k=k)
     if by == "ensembl_gene_id":
-        keys = df["Ensembl_Gene_ID"]
-    elif by == "symbol":
-        keys = df["Symbol"]
-    else:
-        raise ValueError("by must be 'ensembl_gene_id' or 'symbol'")
-    return {str(key): int(n) for key, n in zip(keys, df["n_specific_9mers"])}
+        return {str(g): int(n) for g, n in zip(df["Ensembl_Gene_ID"], df["n_specific_9mers"])}
+    if by == "symbol":
+        return {str(s): int(n) for s, n in zip(df["Symbol"], df["n_specific_9mers"])}
+    if by == "proteoform_key":
+        from .proteoforms import gene_to_proteoform_id
 
-
-def _weight_by_gene_id(*, k: int = DEFAULT_K, scope: str = "cta") -> dict[str, int]:
-    """``{unversioned member gene id -> n_specific_9mers}`` covering **every** member
-    of each proteoform group, not just the ones in the counts table.
-
-    The counts table only has rows for the expressed/filtered CTA set, so a group's
-    weight lives under whichever member(s) are expressed. But a collapsed proteoform's
-    canonical id (``min`` member, :func:`cancerdata._build.sum_proteoform_tpm`) may be
-    an *un*expressed sibling absent from that table — joining on it alone silently
-    drops the group's weight (CGB3/CGB5/CGB8, CT45A2/CT45A8/CT45A9, …). Identical-
-    protein members share a sequence, hence one count, so we propagate each group's
-    weight to all its member ids; the canonical id then always resolves."""
-    from .proteoforms import proteoform_group_map
-
-    per_gene = cta_specific_9mer_weights(k=k, by="ensembl_gene_id")
-    out = dict(per_gene)
-    for members in proteoform_group_map(scope=scope).values():
-        ids = [strip_version(m) for m in members]
-        group_weight = max((per_gene.get(i, 0) for i in ids), default=0)
-        if group_weight:
-            for i in ids:
-                out.setdefault(i, group_weight)
-    return out
+        key_map = gene_to_proteoform_id(df["Ensembl_Gene_ID"].tolist())
+        out: dict[str, int] = {}
+        for g, n in zip(df["Ensembl_Gene_ID"], df["n_specific_9mers"]):
+            key = str(key_map[strip_version(g)])
+            out[key] = max(out.get(key, 0), int(n))  # members share the count
+        return out
+    raise ValueError("by must be 'proteoform_key', 'ensembl_gene_id', or 'symbol'")
 
 
 def cta_specific_9mer_load(
@@ -233,19 +216,16 @@ def cta_specific_9mer_load(
     :func:`cancerdata.coverage.cta_patient_fractions` (proteoform-summed) — no second
     pass over the per-sample matrix. Needs the cohort's per-sample matrix cached.
 
-    The join is on the **canonical-member Ensembl gene id**, not ``Symbol``: a
-    collapsed proteoform's ``Symbol`` is the slash-joined label (``CTAG1A/CTAG1B``),
-    which would never match the per-gene weight table. The weight map
-    (:func:`_weight_by_gene_id`) propagates each group's count to *all* its member ids,
-    so even when the canonical (``min``) member is an unexpressed sibling absent from
-    the counts table, it still carries the proteoform's weight."""
+    The join is on ``proteoform_key`` — the uniform identity shared by the per-patient
+    frame and the weight table. A group's members share one count, so its key resolves
+    whichever member is expressed (no canonical-member ambiguity)."""
     from .coverage import cta_patient_fractions
 
     pf = cta_patient_fractions(cancer_type, threshold_tpm=threshold_tpm)
     if pf.empty:
         return 0.0
-    weight_by_id = _weight_by_gene_id(k=k)
-    w = pf["Ensembl_Gene_ID"].astype(str).map(lambda g: weight_by_id.get(strip_version(g), 0))
+    weight_by_key = cta_specific_9mer_weights(k=k, by="proteoform_key")
+    w = pf["proteoform_key"].astype(str).map(lambda key: weight_by_key.get(key, 0))
     return float((pf["fraction_expressing"] * w).sum())
 
 

@@ -623,13 +623,14 @@ def cta_patient_count_heatmap(
         )
     col = "fraction_expressing" if value == "fraction" else "n_patients_expressing"
     rows = {}
+    key_to_symbol = {}
     for code in cohorts:
         pf = cta_patient_fractions(code, threshold_tpm=threshold_tpm)
-        # Collapse identical-protein paralogs sharing a Symbol to one column (max
-        # prevalence) so the per-cohort index is unique — pd.DataFrame can't align
-        # Series on a duplicated index.
-        rows[code] = pf.groupby("Symbol")[col].max()
-    matrix = pd.DataFrame(rows).T  # cohorts × CTA symbols
+        # Index by the proteoform_key (unique per antigen after the collapse) so the
+        # per-cohort Series align cleanly; the column display label comes from Symbol.
+        rows[code] = pf.groupby("proteoform_key")[col].max()
+        key_to_symbol.update(zip(pf["proteoform_key"].astype(str), pf["Symbol"].astype(str)))
+    matrix = pd.DataFrame(rows).T  # cohorts × CTA proteoform keys
     if matrix.empty or matrix.shape[1] == 0:
         raise ValueError("no CTA expressed above the threshold in the selected cohorts")
 
@@ -637,6 +638,8 @@ def cta_patient_count_heatmap(
     row_score = matrix[top_ctas].max(axis=1)
     top_cohorts = row_score.sort_values(ascending=False).head(n_cohorts).index
     grid = matrix.loc[top_cohorts, top_ctas].fillna(0.0)
+    # Label columns by the proteoform symbol (NY-ESO-1, CT83), not the ENSG-or-symbol key.
+    grid = grid.rename(columns=lambda key: key_to_symbol.get(str(key), str(key)))
 
     unit = "fraction of patients" if value == "fraction" else "patients"
     return _cohort_gene_heatmap(
