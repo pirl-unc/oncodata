@@ -479,20 +479,48 @@ def proteoform_representative_samples(
     return collapse_to_proteoforms(wide, sample_cols=sample_cols)
 
 
-# Proteoform-level named accessors. Each pairs with a gene-level base accessor
-# (per_sample_expression, cohort_mean_expression, cohort_gene_percentiles,
-# within_sample_top_fraction); the name carries the level so callers never have to
-# read a boolean flag to know which space a result is in. They are thin wrappers over
-# the base ``proteoform=True`` path, so the collapse logic lives in exactly one place.
+# ----- Symmetric gene-level / proteoform-level expression accessors -----
+#
+# Every expression dataset is exposed as a matched pair whose name carries the level —
+# no boolean flag to read. ``gene_*`` is one row per Ensembl gene; ``proteoform_*``
+# sums identical-protein paralogs to one row per proteoform key (see
+# :func:`cancerdata.proteoforms.expression_level`). Both are thin wrappers over the one
+# base accessor, so the collapse logic lives in exactly one place; the unprefixed base
+# names (``per_sample_expression`` etc.) remain the gene-level implementation.
+#
+#   dataset          gene_*                            proteoform_*
+#   per-sample TPM   gene_per_sample_expression        proteoform_per_sample_expression
+#   cohort-mean TPM  gene_cohort_mean_expression       proteoform_cohort_mean_expression
+#   percentiles      gene_cohort_percentiles           proteoform_cohort_percentiles
+#   within-sample    gene_within_sample_top_fraction   proteoform_within_sample_top_fraction
+#   representatives  gene_representative_samples       proteoform_representative_samples
+
+
+def gene_per_sample_expression(
+    cancer_type, *, normalize: str = "tpm_clean", auto_fetch: bool = True
+) -> pd.DataFrame:
+    """Gene-level per-sample **TPM values** (one row per Ensembl gene). Proteoform
+    counterpart: :func:`proteoform_per_sample_expression`."""
+    return per_sample_expression(cancer_type, normalize=normalize, auto_fetch=auto_fetch)
 
 
 def proteoform_per_sample_expression(
     cancer_type, *, normalize: str = "tpm_clean", auto_fetch: bool = True, scope: str = "cta"
 ) -> pd.DataFrame:
     """Proteoform-level per-sample **TPM values** — identical-protein paralogs summed
-    per sample. Gene-level counterpart: :func:`per_sample_expression`."""
+    per sample. Gene-level counterpart: :func:`gene_per_sample_expression`."""
     return per_sample_expression(
         cancer_type, normalize=normalize, auto_fetch=auto_fetch, proteoform=True, scope=scope
+    )
+
+
+def gene_cohort_mean_expression(
+    cancer_type, *, normalize: str = "tpm_clean", statistic: str = "mean", auto_fetch: bool = True
+) -> pd.DataFrame:
+    """Gene-level across-patient **TPM** summary. Proteoform counterpart:
+    :func:`proteoform_cohort_mean_expression`."""
+    return cohort_mean_expression(
+        cancer_type, normalize=normalize, statistic=statistic, auto_fetch=auto_fetch
     )
 
 
@@ -505,7 +533,7 @@ def proteoform_cohort_mean_expression(
     scope: str = "cta",
 ) -> pd.DataFrame:
     """Proteoform-level across-patient **TPM** summary. Gene-level counterpart:
-    :func:`cohort_mean_expression`."""
+    :func:`gene_cohort_mean_expression`."""
     return cohort_mean_expression(
         cancer_type,
         normalize=normalize,
@@ -516,13 +544,45 @@ def proteoform_cohort_mean_expression(
     )
 
 
+def gene_cohort_percentiles(cancer_type, *, as_tpm: bool = True) -> pd.DataFrame:
+    """Gene-level per-cohort **percentile vectors**. Proteoform counterpart:
+    :func:`proteoform_cohort_percentiles`. (Alias of :func:`cohort_gene_percentiles`.)"""
+    return cohort_gene_percentiles(cancer_type, as_tpm=as_tpm)
+
+
 def proteoform_cohort_percentiles(cancer_type, *, as_tpm: bool = True) -> pd.DataFrame:
     """Proteoform-level per-cohort **percentile vectors** (members summed before
-    ranking). Gene-level counterpart: :func:`cohort_gene_percentiles`."""
+    ranking). Gene-level counterpart: :func:`gene_cohort_percentiles`."""
     return cohort_gene_percentiles(cancer_type, as_tpm=as_tpm, proteoform=True)
+
+
+def gene_within_sample_top_fraction(cancer_type, *, threshold: float = 0.95) -> pd.DataFrame:
+    """Gene-level within-sample top-fraction prevalence. Proteoform counterpart:
+    :func:`proteoform_within_sample_top_fraction`."""
+    return within_sample_top_fraction(cancer_type, threshold=threshold)
 
 
 def proteoform_within_sample_top_fraction(cancer_type, *, threshold: float = 0.95) -> pd.DataFrame:
     """Proteoform-level within-sample top-fraction prevalence. Gene-level counterpart:
-    :func:`within_sample_top_fraction`."""
+    :func:`gene_within_sample_top_fraction`."""
     return within_sample_top_fraction(cancer_type, threshold=threshold, proteoform=True)
+
+
+def gene_representative_samples(
+    cancer_types: str | Iterable[str] | None = None,
+    *,
+    k: int | None = None,
+    normalize: str = "tpm_clean",
+    format: str = "wide",
+    include_provenance: bool = False,
+) -> pd.DataFrame:
+    """Gene-level representative per-sample vectors. Proteoform counterpart:
+    :func:`proteoform_representative_samples`. (Alias of
+    :func:`representative_cohort_samples`.)"""
+    return representative_cohort_samples(
+        cancer_types,
+        k=k,
+        normalize=normalize,
+        format=format,
+        include_provenance=include_provenance,
+    )
