@@ -253,16 +253,30 @@ def _cmd_plot(args: argparse.Namespace) -> int:
         "incidence-vs-mortality": plots.incidence_vs_mortality,
         "cta-expression-heatmap": plots.cta_expression_heatmap,
         "cta-addressable-burden": plots.cta_addressable_burden,
+        "cta-patient-heatmap": plots.cta_patient_count_heatmap,
+        "cta-coverage-curves": plots.cta_coverage_curves,
     }
     try:
         if args.which == "incidence-vs-mortality":
             kwargs = {"region": args.region}
         elif args.which == "cta-expression-heatmap":
             kwargs = {"stat": args.stat}
+        elif args.which == "cta-addressable-burden":
+            kwargs = {"source": args.source, "threshold_tpm": args.threshold_tpm}
+        elif args.which == "cta-patient-heatmap":
+            kwargs = {"threshold_tpm": args.threshold_tpm}
+        elif args.which == "cta-coverage-curves":
+            if not args.codes:
+                print("Error: cta-coverage-curves needs --codes", file=sys.stderr)
+                return 1
+            kwargs = {
+                "cancer_types": [c.strip() for c in args.codes.split(",")],
+                "threshold_tpm": args.threshold_tpm,
+            }
         else:
             kwargs = {}
         fns[args.which](save=args.out, **kwargs)
-    except (ValueError, ModuleNotFoundError, NotImplementedError) as e:
+    except (ValueError, ModuleNotFoundError, NotImplementedError, FileNotFoundError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
     print(f"Wrote {args.out}")
@@ -439,6 +453,8 @@ def _build_parser() -> argparse.ArgumentParser:
             "incidence-vs-mortality",
             "cta-expression-heatmap",
             "cta-addressable-burden",
+            "cta-patient-heatmap",
+            "cta-coverage-curves",
         ],
         help="Which plot to render",
     )
@@ -451,6 +467,23 @@ def _build_parser() -> argparse.ArgumentParser:
         default="median",
         choices=["q1", "median", "q3"],
         help="Statistic for cta-expression-heatmap",
+    )
+    p_plot.add_argument(
+        "--source",
+        default="within_sample",
+        choices=["within_sample", "per_sample"],
+        help="Prevalence basis for cta-addressable-burden (per_sample needs matrices)",
+    )
+    p_plot.add_argument(
+        "--threshold-tpm",
+        type=float,
+        default=10.0,
+        help="Clean-TPM 'expressed' cut for the per-sample CTA plots",
+    )
+    p_plot.add_argument(
+        "--codes",
+        default=None,
+        help="Comma-separated cancer codes (for cta-coverage-curves)",
     )
     p_plot.set_defaults(func=_cmd_plot)
 

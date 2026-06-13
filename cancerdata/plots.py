@@ -320,37 +320,58 @@ def _cta_prevalence_by_cohort(threshold):
     return out
 
 
+def _addressable_prevalence(source, *, threshold, threshold_tpm):
+    """``({code: addressable share}, xlabel)`` for the two prevalence sources."""
+    if source == "per_sample":
+        # Faithful: fraction of a cohort's patients expressing >=1 CTA above
+        # threshold_tpm (the union), from the per-sample matrices.
+        from .coverage import addressable_fraction_by_cohort
+
+        prev = addressable_fraction_by_cohort(threshold_tpm=threshold_tpm).to_dict()
+        return prev, (
+            f"Addressable burden  (incidence share × P(≥1 CTA > {threshold_tpm:g} TPM), per-patient)"
+        )
+    if source == "within_sample":
+        prev = _cta_prevalence_by_cohort(threshold)
+        return prev, f"Addressable burden  (incidence share × top-CTA prevalence, thr={threshold})"
+    raise ValueError("source must be 'within_sample' or 'per_sample'")
+
+
 def cta_addressable_burden(
     *,
+    source="within_sample",
     threshold=0.95,
+    threshold_tpm=10.0,
     metric="us_incidence_pct",
     n=25,
     save=None,
 ):
-    """Bar chart of **CTA-addressable cancer burden** per cancer type.
+    """Bar chart of **CTA-addressable cancer burden** per cancer type — ``incidence
+    share × CTA prevalence``, ranking cancers by how many patients a CTA-directed
+    therapy could address.
 
-    Combines two things cancerdata owns: the incidence share of each cancer
-    (:func:`cancerdata.incidence.cancer_burden`) and the within-sample prevalence of
-    the most-expressed CTA in that cohort (:func:`_cta_prevalence_by_cohort`). The
-    bar is ``incidence_share × CTA_prevalence`` — a relative measure of how many
-    patients a CTA-directed therapy could address, ranking cancers by opportunity.
+    ``source`` selects the prevalence basis:
+      - ``"within_sample"`` (default, portable) — the single-best-CTA within-sample
+        prevalence from the shipped within-sample bundle (a *proxy*; ``threshold`` is
+        the within-sample rank cut 0.99/0.95/0.90);
+      - ``"per_sample"`` — the **faithful** fraction of patients expressing ≥1 CTA
+        above ``threshold_tpm`` (the per-patient union), from the per-sample matrices
+        (:func:`cancerdata.coverage.addressable_fraction_by_cohort`); needs the
+        cohorts' per-sample matrices cached.
 
-    ``threshold`` is the within-sample rank cut (0.99/0.95/0.90 → top 1/5/10%);
-    ``metric`` selects the incidence basis; ``n`` caps the bars shown. Bars are
-    coloured by registry family. Needs the within-sample bundle present.
-
-    Scope note: incidence is at burden-category granularity (several subtypes share
-    a category), and the prevalence is the single-best-CTA proxy — an exact "fraction
-    expressing ≥1 CTA" union needs the per-sample matrices (#13). So read this as a
-    relative prioritization, not an absolute patient count."""
+    ``metric`` selects the incidence basis; ``n`` caps the bars; bars are coloured by
+    registry family. Incidence is at burden-category granularity (several subtypes
+    share a category), so read the bar as a relative prioritization."""
     import numpy as np
 
     plt = _plt()
-    prevalence = _cta_prevalence_by_cohort(threshold)
+    prevalence, xlabel = _addressable_prevalence(
+        source, threshold=threshold, threshold_tpm=threshold_tpm
+    )
     if not prevalence:
         raise ValueError(
-            "no within-sample CTA prevalence available — is the within-sample bundle present? "
-            "(see available_within_sample_cohorts())"
+            f"no CTA prevalence available for source={source!r} — is the required data "
+            "present? (within-sample bundle, or cached per-sample matrices)"
         )
     burden = cancer_burden(metric=metric)  # {burden category: share}
 
@@ -376,10 +397,127 @@ def cta_addressable_burden(
     ax.set_yticks(y)
     ax.set_yticklabels([format_cancer_code_label(c) for c in codes], fontsize=7)
     ax.invert_yaxis()
-    ax.set_xlabel(f"Addressable burden  (incidence share × top-CTA prevalence, thr={threshold})")
+    ax.set_xlabel(xlabel)
     ax.set_title(f"CTA-addressable cancer burden — top {len(codes)} cancers")
     handles = [plt.Rectangle((0, 0), 1, 1, color=c) for c in fam_color.values()]
     ax.legend(handles, list(fam_color), fontsize=6, title="family", loc="lower right")
+    fig.tight_layout()
+    return _save(fig, save)
+
+
+def _cached_per_sample_cohorts():
+    """Cohort codes whose per-sample matrix is cached locally (sorted)."""
+    from . import source_matrices
+
+    return sorted(c for c in source_matrices.available_cohorts() if source_matrices.is_cached(c))
+
+
+def cta_patient_count_heatmap(
+    *,
+    threshold_tpm=10.0,
+    cohorts=None,
+    n_cohorts=30,
+    n_ctas=30,
+    value="fraction",
+    save=None,
+):
+    """Heatmap of **per-patient CTA prevalence** — rows are cohorts, columns are
+    CTAs, each cell is the fraction (or count) of that cohort's patients expressing
+    the CTA above ``threshold_tpm`` clean TPM.
+
+    Unlike :func:`cta_expression_heatmap` (cohort summary TPM), this is computed from
+    the full per-sample matrices, so it answers "in what fraction of *patients* is
+    this antigen expressed". ``cohorts`` defaults to every cohort whose per-sample
+    matrix is cached; ``value`` is ``"fraction"`` (0–1) or ``"count"`` (patients).
+    Rows/cols are the top ``n_cohorts``/``n_ctas`` by prevalence."""
+    import pandas as pd
+
+    from .coverage import cta_patient_fractions
+
+    if value not in ("fraction", "count"):
+        raise ValueError("value must be 'fraction' or 'count'")
+    plt = _plt()
+    cohorts = list(cohorts) if cohorts is not None else _cached_per_sample_cohorts()
+    if not cohorts:
+        raise ValueError(
+            "no cohorts with a cached per-sample matrix — fetch them via "
+            "source_matrices.fetch(code) (or stage them) first."
+        )
+    col = "fraction_expressing" if value == "fraction" else "n_patients_expressing"
+    rows = {}
+    for code in cohorts:
+        pf = cta_patient_fractions(code, threshold_tpm=threshold_tpm)
+        # Collapse identical-protein paralogs sharing a Symbol to one column (max
+        # prevalence) so the per-cohort index is unique — pd.DataFrame can't align
+        # Series on a duplicated index.
+        rows[code] = pf.groupby("Symbol")[col].max()
+    matrix = pd.DataFrame(rows).T  # cohorts × CTA symbols
+    if matrix.empty or matrix.shape[1] == 0:
+        raise ValueError("no CTA expressed above the threshold in the selected cohorts")
+
+    top_ctas = matrix.max(axis=0).sort_values(ascending=False).head(n_ctas).index
+    row_score = matrix[top_ctas].max(axis=1)
+    top_cohorts = row_score.sort_values(ascending=False).head(n_cohorts).index
+    grid = matrix.loc[top_cohorts, top_ctas].fillna(0.0)
+
+    fig, ax = plt.subplots(figsize=(max(8, 0.42 * len(top_ctas)), max(6, 0.34 * len(top_cohorts))))
+    im = ax.imshow(grid.to_numpy(dtype=float), aspect="auto", cmap="viridis")
+    ax.set_xticks(range(len(top_ctas)))
+    ax.set_xticklabels(list(top_ctas), rotation=90, fontsize=6)
+    ax.set_yticks(range(len(top_cohorts)))
+    ax.set_yticklabels([format_cancer_code_label(c) for c in top_cohorts], fontsize=6)
+    unit = "fraction of patients" if value == "fraction" else "patients"
+    ax.set_title(
+        f"CTA per-patient prevalence (> {threshold_tpm:g} TPM) — "
+        f"{len(top_cohorts)} cohorts × {len(top_ctas)} CTAs"
+    )
+    cbar = fig.colorbar(im, ax=ax, fraction=0.025, pad=0.01)
+    cbar.set_label(unit)
+    fig.tight_layout()
+    return _save(fig, save)
+
+
+def cta_coverage_curves(
+    cancer_types,
+    *,
+    threshold_tpm=10.0,
+    max_genes=20,
+    save=None,
+):
+    """Greedy **antigen-coverage curves** — for each cohort, the cumulative fraction
+    of patients covered as CTAs are added to the panel in greedy set-cover order
+    (:func:`cancerdata.coverage.greedy_coverage`). Answers "how many antigens does a
+    panel need to reach most patients of this cancer".
+
+    ``cancer_types`` is a code or iterable of codes (each needs a cached per-sample
+    matrix); the curve starts at 0 antigens / 0 coverage and steps up per added CTA,
+    truncated at ``max_genes``."""
+    import numpy as np
+
+    from .coverage import greedy_coverage
+
+    codes = [cancer_types] if isinstance(cancer_types, str) else list(cancer_types)
+    plt = _plt()
+    fig, ax = plt.subplots(figsize=(8, 5))
+    plotted = 0
+    for code in codes:
+        gc = greedy_coverage(code, threshold_tpm=threshold_tpm, max_genes=max_genes)
+        if gc.empty:
+            continue
+        x = np.concatenate([[0], gc["rank"].to_numpy()])
+        y = np.concatenate([[0.0], gc["cumulative_fraction"].to_numpy()])
+        ax.step(x, y, where="post", marker="o", markersize=3, label=format_cancer_code_label(code))
+        plotted += 1
+    if not plotted:
+        raise ValueError(
+            "no coverage curve could be drawn — are the cohorts' per-sample matrices "
+            "cached, and does any CTA clear the threshold?"
+        )
+    ax.set_xlabel("number of CTAs in panel (greedy set cover)")
+    ax.set_ylabel(f"fraction of patients covered (≥1 CTA > {threshold_tpm:g} TPM)")
+    ax.set_ylim(0, 1)
+    ax.set_title("CTA antigen-coverage curves")
+    ax.legend(fontsize=7, loc="lower right")
     fig.tight_layout()
     return _save(fig, save)
 
