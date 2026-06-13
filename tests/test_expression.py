@@ -112,3 +112,27 @@ def test_per_sample_expression_no_autofetch_raises(monkeypatch, tmp_path):
     monkeypatch.setattr(expression.source_matrices, "local_path", lambda code: missing)
     with pytest.raises(FileNotFoundError, match="not cached"):
         expression.per_sample_expression("PRAD", auto_fetch=False)
+
+
+def test_cohort_mean_expression(monkeypatch):
+    fixture = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["E1", "E2"],
+            "Symbol": ["A", "B"],
+            "s1": [10.0, 0.0],
+            "s2": [20.0, 4.0],
+            "s3": [30.0, 2.0],
+        }
+    )
+    monkeypatch.setattr(expression, "per_sample_expression", lambda *a, **k: fixture.copy())
+    mean = expression.cohort_mean_expression("X", statistic="mean")
+    assert list(mean.columns) == ["Ensembl_Gene_ID", "Symbol", "expression"]
+    assert dict(zip(mean["Symbol"], mean["expression"])) == {"A": 20.0, "B": 2.0}
+    median = expression.cohort_mean_expression("X", statistic="median")
+    assert dict(zip(median["Symbol"], median["expression"])) == {"A": 20.0, "B": 2.0}
+
+
+def test_cohort_mean_expression_bad_statistic(monkeypatch):
+    monkeypatch.setattr(expression, "per_sample_expression", lambda *a, **k: pd.DataFrame())
+    with pytest.raises(ValueError, match="statistic must be"):
+        expression.cohort_mean_expression("X", statistic="mode")

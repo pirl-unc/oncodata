@@ -170,6 +170,30 @@ def per_sample_expression(
     return out
 
 
+def cohort_mean_expression(
+    cancer_type, *, normalize: str = "tpm_clean", statistic: str = "mean", auto_fetch: bool = True
+) -> pd.DataFrame:
+    """Per-gene **across-patient summary** of a cohort's expression (one value per
+    gene, collapsed over all patients).
+
+    The continuous cohort-level expression that downstream mechanism/correlation
+    analyses need (e.g. cohort-mean TGF-β-signature expression vs aPD1 ORR) — which
+    the percentile vectors and n=5 medoids don't give directly. Reduces
+    :func:`per_sample_expression` over the sample axis with ``statistic`` (``"mean"``
+    / ``"median"``). ``normalize`` is passed through (clean TPM by default; use
+    ``"tpm_clean_log1p"`` to average in log space). Returns ``Ensembl_Gene_ID``,
+    ``Symbol`` and one ``expression`` column."""
+    if statistic not in ("mean", "median"):
+        raise ValueError("statistic must be 'mean' or 'median'")
+    df = per_sample_expression(cancer_type, normalize=normalize, auto_fetch=auto_fetch)
+    base = ["Ensembl_Gene_ID", "Symbol"]
+    samples = [c for c in df.columns if c not in base]
+    reducer = df[samples].mean(axis=1) if statistic == "mean" else df[samples].median(axis=1)
+    out = df[base].copy()
+    out["expression"] = reducer.to_numpy()
+    return out
+
+
 def representative_cohort_samples(
     cancer_types: str | Iterable[str] | None = None,
     *,
