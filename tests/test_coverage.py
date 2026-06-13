@@ -94,13 +94,8 @@ def test_proteoform_paralogs_are_summed(monkeypatch):
     )
     monkeypatch.setattr(coverage, "per_sample_expression", lambda *a, **k: fixture.copy())
     monkeypatch.setattr(coverage, "_panel_ids", lambda gene_ids: {"ENSG_A1", "ENSG_A2", "ENSG_B"})
-    monkeypatch.setattr(
-        coverage,
-        "proteoform_group_map",
-        lambda: {"A1/A2": ["ENSG_A1", "ENSG_A2"]},
-        raising=False,
-    )
-    # patch the lazily-imported symbol used inside _hit_matrix
+    # _hit_matrix lazily does `from .proteoforms import proteoform_group_map`, so patch
+    # the source symbol it re-resolves on each call.
     import cancerdata.proteoforms as pmod
 
     monkeypatch.setattr(pmod, "proteoform_group_map", lambda: {"A1/A2": ["ENSG_A1", "ENSG_A2"]})
