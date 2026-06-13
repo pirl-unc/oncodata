@@ -278,6 +278,36 @@ def test_proteoform_named_accessors_delegate_with_proteoform_true(monkeypatch):
     assert seen["ws"]["proteoform"] is True and seen["ws"]["threshold"] == 0.9
 
 
+def test_gene_named_accessors_are_gene_level(monkeypatch):
+    # The symmetric gene_* accessors delegate to the gene-level base (proteoform not set,
+    # or False), exposing only gene-relevant params.
+    seen = {}
+    empty = pd.DataFrame()
+
+    monkeypatch.setattr(
+        expression, "per_sample_expression", lambda c, **k: seen.update(ps=k) or empty
+    )
+    monkeypatch.setattr(
+        expression, "cohort_mean_expression", lambda c, **k: seen.update(mean=k) or empty
+    )
+    monkeypatch.setattr(
+        expression, "cohort_gene_percentiles", lambda c, **k: seen.update(pct=k) or empty
+    )
+    monkeypatch.setattr(
+        expression, "within_sample_top_fraction", lambda c, **k: seen.update(ws=k) or empty
+    )
+
+    expression.gene_per_sample_expression("X")
+    expression.gene_cohort_mean_expression("X", statistic="median")
+    expression.gene_cohort_percentiles("X", as_tpm=False)
+    expression.gene_within_sample_top_fraction("X", threshold=0.9)
+
+    assert seen["ps"].get("proteoform", False) is False  # gene level
+    assert seen["mean"].get("proteoform", False) is False and seen["mean"]["statistic"] == "median"
+    assert seen["pct"].get("proteoform", False) is False and seen["pct"]["as_tpm"] is False
+    assert seen["ws"].get("proteoform", False) is False and seen["ws"]["threshold"] == 0.9
+
+
 def test_cohort_mean_expression_bad_statistic(monkeypatch):
     monkeypatch.setattr(expression, "per_sample_expression", lambda *a, **k: pd.DataFrame())
     with pytest.raises(ValueError, match="statistic must be"):
