@@ -82,3 +82,53 @@ def test_normalize_to_housekeeping():
     df = gt.assign(s1=[10.0, 30.0, 100.0])  # hk median = 20
     out = norm.normalize_to_housekeeping(df)
     assert np.allclose(out["s1"], [0.5, 1.5, 5.0])
+
+
+# ---- FPKM->TPM / renormalize-to-million ----
+
+
+def test_renormalize_to_million_rescales_each_column():
+    df = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["E1", "E2"],
+            "Symbol": ["A", "B"],
+            "s1_TPM": [1.0, 3.0],  # sum 4 -> scale 250000
+            "s2_TPM": [10.0, 10.0],  # sum 20 -> scale 50000
+        }
+    )
+    out, stats = norm.renormalize_to_million(df)
+    assert out["s1_TPM"].sum() == pytest.approx(1e6)
+    assert out["s2_TPM"].sum() == pytest.approx(1e6)
+    assert stats["applied"] is True
+    assert stats["columns"]["s1_TPM"]["scale"] == pytest.approx(250000.0)
+    # id columns untouched
+    assert list(out["Symbol"]) == ["A", "B"]
+
+
+def test_renormalize_ignores_raw_and_zero_columns():
+    df = pd.DataFrame(
+        {
+            "s1_TPM": [1.0, 1.0],
+            "s2_TPM_raw": [5.0, 5.0],  # _raw provenance -> never rescaled
+            "s3_TPM": [0.0, 0.0],  # zero sum -> left untouched, scale 1.0
+        }
+    )
+    out, stats = norm.renormalize_to_million(df)
+    assert list(out["s2_TPM_raw"]) == [5.0, 5.0]  # untouched
+    assert "s2_TPM_raw" not in stats["columns"]
+    assert stats["columns"]["s3_TPM"]["scale"] == 1.0
+    assert out["s1_TPM"].sum() == pytest.approx(1e6)
+
+
+def test_fpkm_to_tpm_equals_renormalize():
+    df = pd.DataFrame({"x_FPKM": [2.0, 6.0, 2.0]})
+    out, _ = norm.fpkm_to_tpm(df, value_cols=["x_FPKM"])
+    assert out["x_FPKM"].sum() == pytest.approx(1e6)
+    assert out["x_FPKM"].to_numpy() == pytest.approx([2e5, 6e5, 2e5])
+
+
+def test_is_expression_value_col():
+    assert norm.is_expression_value_col("LUAD_TPM_clean")
+    assert norm.is_expression_value_col("TPM")
+    assert not norm.is_expression_value_col("LUAD_TPM_raw")
+    assert not norm.is_expression_value_col("Ensembl_Gene_ID")
