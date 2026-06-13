@@ -101,6 +101,23 @@ def test_per_sample_expression_normalize_modes(tmp_path, monkeypatch):
     assert np.allclose(logged["s1"].to_numpy(), np.log1p(clean["s1"].to_numpy()))
 
 
+def test_per_sample_expression_memoizes_and_copies(tmp_path, monkeypatch):
+    path = _raw_matrix(tmp_path)
+    monkeypatch.setattr(expression.source_matrices, "ensure", lambda code: path)
+    expression._load_per_sample_matrix.cache_clear()
+
+    a = expression.per_sample_expression("PRAD", normalize="tpm_clean")
+    expression.per_sample_expression("PRAD", normalize="tpm_clean")  # served from cache
+    info = expression._load_per_sample_matrix.cache_info()
+    assert info.misses == 1 and info.hits >= 1
+
+    # Each call returns an independent copy — mutating one must not corrupt the cache.
+    col = a.columns[2]
+    a.loc[0, col] = -12345.0
+    c = expression.per_sample_expression("PRAD", normalize="tpm_clean")
+    assert c.loc[0, col] != -12345.0
+
+
 def test_per_sample_expression_bad_normalize(tmp_path, monkeypatch):
     monkeypatch.setattr(expression.source_matrices, "ensure", lambda code: _raw_matrix(tmp_path))
     with pytest.raises(ValueError, match="normalize must be one of"):
