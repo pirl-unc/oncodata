@@ -37,6 +37,16 @@ def test_find_column_absorbs_naming():
         ee.find_column(df, ["nope"], "missing")
 
 
+def test_find_column_respects_candidate_priority():
+    # Frame carries both a transcript id and a 'name' column; the higher-priority
+    # candidate (transcript_id) must win regardless of column order.
+    df = pd.DataFrame({"name": ["n"], "transcript_id": ["t"]})
+    assert ee.find_column(df, ["transcript_id", "name"], "tx") == "transcript_id"
+    # column order reversed -> still resolves by candidate priority, not column order
+    df2 = pd.DataFrame({"transcript_id": ["t"], "name": ["n"]})
+    assert ee.find_column(df2, ["transcript_id", "name"], "tx") == "transcript_id"
+
+
 def test_expanded_tx_map_versionless():
     m = ee.expanded_tx_map({"ENST9.3": "G"})
     assert m["ENST9.3"] == "G"

@@ -32,6 +32,15 @@ from functools import lru_cache
 
 import pandas as pd
 
+#: Canonical identity columns of a cancerdata expression frame. Everything else is a
+#: per-sample / per-representative value column. One definition shared by every
+#: "value columns = all columns except the id columns" consumer (the build
+#: generators, the normalization helpers, the coverage hit-matrix) so a
+#: proteoform-collapsed frame's ``proteoform_id`` label is never mistaken for a
+#: sample. (The *named*-TPM rule for curated frames is :func:`is_expression_value_col`,
+#: a deliberately distinct concept.)
+ID_COLUMNS = ("Ensembl_Gene_ID", "Symbol", "proteoform_id")
+
 _DEFAULT_TX_COLUMN_CANDIDATES = (
     "transcript",
     "transcript_id",
@@ -45,12 +54,16 @@ _DEFAULT_TPM_COLUMN_CANDIDATES = ("tpm",)
 
 
 def find_column(df: pd.DataFrame, candidates, column_name: str) -> str:
-    """First column of ``df`` whose lowercase name is in ``candidates`` — absorbs
-    naming variation across upstream quantifiers (``transcript_id`` vs ``tx`` …).
-    Raises ``ValueError`` listing the available columns if nothing matches."""
-    cand = {c.lower() for c in candidates}
-    for col in df.columns:
-        if str(col).lower() in cand:
+    """The column of ``df`` matching the highest-priority ``candidates`` entry —
+    absorbs naming variation across upstream quantifiers (``transcript_id`` vs ``tx``
+    …). ``candidates`` is consulted **in order**, so a frame carrying both
+    ``transcript_id`` and ``name`` resolves by candidate priority, not by column
+    order. Matching is case-insensitive. Raises ``ValueError`` listing the available
+    columns if nothing matches."""
+    by_lower = {str(col).lower(): col for col in df.columns}
+    for cand in candidates:
+        col = by_lower.get(cand.lower())
+        if col is not None:
             return col
     raise ValueError(
         f"no column for {column_name} in expression data; available: {list(df.columns)}"

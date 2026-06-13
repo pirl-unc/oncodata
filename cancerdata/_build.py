@@ -25,7 +25,7 @@ from collections.abc import Iterable, Mapping
 import numpy as np
 import pandas as pd
 
-_ID_COLS = ("Ensembl_Gene_ID", "Symbol", "proteoform_id")
+from .expression_engine import ID_COLUMNS as _ID_COLS
 
 #: Per-gene cohort percentile breakpoints — dense in the actionable upper tail so
 #: a consumer can place a sample's gene as a percentile rank within the cohort

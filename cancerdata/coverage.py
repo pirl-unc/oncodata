@@ -38,6 +38,7 @@ import pandas as pd
 
 from .cta import CTA_gene_id_to_name, CTA_gene_ids
 from .expression import per_sample_expression
+from .expression_engine import ID_COLUMNS as _ANTIGEN_ID_COLS
 
 #: Default clean-TPM threshold for "expressed in a patient". 10 TPM is a common
 #: cut for a confidently-expressed transcript.
@@ -49,11 +50,6 @@ _BASE = ["Ensembl_Gene_ID", "Symbol"]
 def _panel_ids(gene_ids: Iterable[str] | None) -> set[str]:
     ids = set(gene_ids) if gene_ids is not None else set(CTA_gene_ids())
     return {str(g).split(".")[0] for g in ids}
-
-
-#: Identity columns a (possibly proteoform-collapsed) antigen frame may carry;
-#: everything else is a per-sample expression column.
-_ANTIGEN_ID_COLS = ("Ensembl_Gene_ID", "Symbol", "proteoform_id")
 
 
 def _hit_matrix(cancer_type, *, threshold_tpm: float, gene_ids, proteoform: bool = True):
