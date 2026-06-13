@@ -477,3 +477,52 @@ def proteoform_representative_samples(
     if wide.empty or not sample_cols:
         return wide
     return collapse_to_proteoforms(wide, sample_cols=sample_cols)
+
+
+# Proteoform-level named accessors. Each pairs with a gene-level base accessor
+# (per_sample_expression, cohort_mean_expression, cohort_gene_percentiles,
+# within_sample_top_fraction); the name carries the level so callers never have to
+# read a boolean flag to know which space a result is in. They are thin wrappers over
+# the base ``proteoform=True`` path, so the collapse logic lives in exactly one place.
+
+
+def proteoform_per_sample_expression(
+    cancer_type, *, normalize: str = "tpm_clean", auto_fetch: bool = True, scope: str = "cta"
+) -> pd.DataFrame:
+    """Proteoform-level per-sample **TPM values** — identical-protein paralogs summed
+    per sample. Gene-level counterpart: :func:`per_sample_expression`."""
+    return per_sample_expression(
+        cancer_type, normalize=normalize, auto_fetch=auto_fetch, proteoform=True, scope=scope
+    )
+
+
+def proteoform_cohort_mean_expression(
+    cancer_type,
+    *,
+    normalize: str = "tpm_clean",
+    statistic: str = "mean",
+    auto_fetch: bool = True,
+    scope: str = "cta",
+) -> pd.DataFrame:
+    """Proteoform-level across-patient **TPM** summary. Gene-level counterpart:
+    :func:`cohort_mean_expression`."""
+    return cohort_mean_expression(
+        cancer_type,
+        normalize=normalize,
+        statistic=statistic,
+        auto_fetch=auto_fetch,
+        proteoform=True,
+        scope=scope,
+    )
+
+
+def proteoform_cohort_percentiles(cancer_type, *, as_tpm: bool = True) -> pd.DataFrame:
+    """Proteoform-level per-cohort **percentile vectors** (members summed before
+    ranking). Gene-level counterpart: :func:`cohort_gene_percentiles`."""
+    return cohort_gene_percentiles(cancer_type, as_tpm=as_tpm, proteoform=True)
+
+
+def proteoform_within_sample_top_fraction(cancer_type, *, threshold: float = 0.95) -> pd.DataFrame:
+    """Proteoform-level within-sample top-fraction prevalence. Gene-level counterpart:
+    :func:`within_sample_top_fraction`."""
+    return within_sample_top_fraction(cancer_type, threshold=threshold, proteoform=True)

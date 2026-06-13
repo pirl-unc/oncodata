@@ -247,6 +247,37 @@ def test_cohort_mean_expression_threads_proteoform_and_scope(monkeypatch):
     assert expression_level(out) == "proteoform"  # proteoform_key carried through
 
 
+def test_proteoform_named_accessors_delegate_with_proteoform_true(monkeypatch):
+    # The proteoform_* named accessors are thin wrappers that set proteoform=True on
+    # their gene-level base, threading scope/statistic/etc. through.
+    seen = {}
+    empty = pd.DataFrame()
+
+    monkeypatch.setattr(
+        expression, "per_sample_expression", lambda c, **k: seen.update(ps=k) or empty
+    )
+    monkeypatch.setattr(
+        expression, "cohort_mean_expression", lambda c, **k: seen.update(mean=k) or empty
+    )
+    monkeypatch.setattr(
+        expression, "cohort_gene_percentiles", lambda c, **k: seen.update(pct=k) or empty
+    )
+    monkeypatch.setattr(
+        expression, "within_sample_top_fraction", lambda c, **k: seen.update(ws=k) or empty
+    )
+
+    expression.proteoform_per_sample_expression("X", scope="genome")
+    expression.proteoform_cohort_mean_expression("X", statistic="median", scope="genome")
+    expression.proteoform_cohort_percentiles("X", as_tpm=False)
+    expression.proteoform_within_sample_top_fraction("X", threshold=0.9)
+
+    assert seen["ps"]["proteoform"] is True and seen["ps"]["scope"] == "genome"
+    assert seen["mean"]["proteoform"] is True
+    assert seen["mean"]["statistic"] == "median" and seen["mean"]["scope"] == "genome"
+    assert seen["pct"]["proteoform"] is True and seen["pct"]["as_tpm"] is False
+    assert seen["ws"]["proteoform"] is True and seen["ws"]["threshold"] == 0.9
+
+
 def test_cohort_mean_expression_bad_statistic(monkeypatch):
     monkeypatch.setattr(expression, "per_sample_expression", lambda *a, **k: pd.DataFrame())
     with pytest.raises(ValueError, match="statistic must be"):
