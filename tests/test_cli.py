@@ -16,7 +16,9 @@ def test_version(capsys):
 
 def test_proteoforms_gene_lookup(capsys):
     assert cli.main(["proteoforms", "--gene", "SSX4B"]) == 0
-    assert "SSX4/SSX4B" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "SSX4/B" in out  # the proteoform symbol
+    assert "SSX4B" in out  # listed among the members
 
 
 def test_proteoforms_unknown_gene_errors(capsys):

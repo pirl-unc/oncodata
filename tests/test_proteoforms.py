@@ -9,13 +9,16 @@ import pytest
 
 from cancerdata import (
     gene_to_proteoform,
+    proteoform_aliases,
     proteoform_for_gene,
     proteoform_group_map,
     proteoform_groups,
     proteoform_representative_samples,
+    proteoform_symbol,
     proteoform_symbol_map,
 )
 from cancerdata._build import sum_proteoform_tpm
+from cancerdata.proteoforms import _contract_members
 
 # Known identical-protein groups that must be in the shipped registry.
 _KNOWN = {
@@ -58,11 +61,48 @@ def test_ct47_family_is_a_single_large_group():
     assert len(symbol_map[ct47[0]]) >= 10
 
 
+def test_contract_members_factors_common_prefix():
+    assert _contract_members("XAGE1A/XAGE1B") == "XAGE1A/B"
+    assert _contract_members("CGB3/CGB5/CGB8") == "CGB3/5/8"
+    assert _contract_members("SSX4/SSX4B") == "SSX4/B"
+    assert _contract_members("GAGE12C/GAGE12D/GAGE12E") == "GAGE12C/D/E"
+    assert _contract_members("PRAME") == "PRAME"  # singleton unchanged
+    assert _contract_members("AAA/BBB") == "AAA/BBB"  # no shared prefix -> full join
+
+
+def test_proteoform_symbol_prefers_curated_alias():
+    assert proteoform_aliases()["CTAG1A/CTAG1B"] == "NY-ESO-1"
+    assert proteoform_symbol("CTAG1A/CTAG1B") == "NY-ESO-1"  # alias wins
+    assert proteoform_symbol("XAGE1A/XAGE1B") == "XAGE1A/B"  # else contracted
+
+
+def test_collapse_decreases_key_count_no_duplicate_keys():
+    # The reduction invariant: collapsing identical-protein members yields fewer keys
+    # (members merge), and the surviving Symbol/ENSG keys are unique.
+    from cancerdata.proteoforms import collapse_to_proteoforms
+
+    gmap = proteoform_group_map()
+    members = next(ids for ids in gmap.values() if len(ids) > 1)
+    extra = "ENSG00000185686"  # PRAME singleton
+    df = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": [*members, extra],
+            "Symbol": [f"m{i}" for i in range(len(members))] + ["PRAME"],
+            "s1": [1.0] * (len(members) + 1),
+        }
+    )
+    out = collapse_to_proteoforms(df, sample_cols=["s1"])
+    assert len(out) < len(df)  # fewer keys after collapse
+    assert len(out) == 2  # one proteoform + PRAME
+    assert out["Symbol"].is_unique and out["Ensembl_Gene_ID"].is_unique
+
+
 def test_proteoform_for_gene_by_id_symbol_and_version():
-    assert proteoform_for_gene("ENSG00000268009") == "SSX4/SSX4B"  # SSX4 gene id
-    assert proteoform_for_gene("ENSG00000269791") == "SSX4/SSX4B"  # SSX4B gene id
-    assert proteoform_for_gene("ENSG00000268009.3") == "SSX4/SSX4B"  # version suffix
-    assert proteoform_for_gene("ssx4") == "SSX4/SSX4B"  # symbol, case-insensitive
+    # Returns the proteoform SYMBOL (prefix-contracted members), not the raw slash-label.
+    assert proteoform_for_gene("ENSG00000268009") == "SSX4/B"  # SSX4 gene id
+    assert proteoform_for_gene("ENSG00000269791") == "SSX4/B"  # SSX4B gene id
+    assert proteoform_for_gene("ENSG00000268009.3") == "SSX4/B"  # version suffix
+    assert proteoform_for_gene("ssx4") == "SSX4/B"  # symbol, case-insensitive
     assert proteoform_for_gene("PRAME") is None  # not duplicated
 
 
@@ -84,14 +124,16 @@ def test_sum_proteoform_tpm_collapses_members_and_passes_through():
             "s2": [1.0, 0.0, 7.0],
         }
     )
+    # No group_symbols passed -> Symbol falls back to the raw members label; the
+    # sorted members are always in proteoform_members.
     out = sum_proteoform_tpm(df, {"SSX4/SSX4B": ("ENSG00000268009", "ENSG00000269791")})
-    by_pf = out.set_index("proteoform_id")
+    by_pf = out.set_index("proteoform_members")
     assert by_pf.loc["SSX4/SSX4B", "s1"] == 8.0
     assert by_pf.loc["SSX4/SSX4B", "s2"] == 1.0
     # ENSG stays a REAL Ensembl id (the canonical = smallest member), not the label.
     assert by_pf.loc["SSX4/SSX4B", "Ensembl_Gene_ID"] == "ENSG00000268009"
     assert by_pf.loc["SSX4/SSX4B", "Symbol"] == "SSX4/SSX4B"
-    # PRAME passes through: singleton class -> proteoform_id is its symbol, ENSG kept.
+    # PRAME passes through: singleton -> proteoform_members is its own symbol, ENSG kept.
     assert by_pf.loc["PRAME", "s1"] == 100.0
     assert by_pf.loc["PRAME", "Ensembl_Gene_ID"] == "ENSG00000185686"
     # One collapsed row + one passthrough row.
@@ -173,10 +215,12 @@ def representatives_cache(monkeypatch, tmp_path):
 
 def test_proteoform_representative_samples_sums_members(representatives_cache):
     out = proteoform_representative_samples("PRAD")
+    # Symbol is now the contracted proteoform symbol; members are in proteoform_members.
     by_symbol = out.set_index("Symbol")
-    assert by_symbol.loc["SSX4/SSX4B", "rep_0"] == 10.0
-    assert by_symbol.loc["SSX4/SSX4B", "rep_1"] == 4.0
+    assert by_symbol.loc["SSX4/B", "rep_0"] == 10.0
+    assert by_symbol.loc["SSX4/B", "rep_1"] == 4.0
     assert by_symbol.loc["PRAME", "rep_0"] == 50.0
+    assert out.set_index("proteoform_members").loc["SSX4/SSX4B", "rep_0"] == 10.0
 
 
 def test_gene_to_proteoform_id_is_total():
@@ -207,8 +251,12 @@ def test_gene_to_proteoform_id_rejects_mismatched_symbols():
 
 def test_collapse_to_proteoforms_keeps_ensembl_id_real():
     # The reusable collapse entry point: ENSG column stays a real Ensembl id, the
-    # antigen identity is in proteoform_id.
-    from cancerdata.proteoforms import collapse_to_proteoforms, proteoform_group_map
+    # sorted members are in proteoform_members, and the key count drops to 1.
+    from cancerdata.proteoforms import (
+        collapse_to_proteoforms,
+        proteoform_group_map,
+        proteoform_symbol,
+    )
 
     gmap = proteoform_group_map()
     # pick a real CTA group to exercise the collapse
@@ -221,8 +269,10 @@ def test_collapse_to_proteoforms_keeps_ensembl_id_real():
         }
     )
     out = collapse_to_proteoforms(df, sample_cols=["s1"])
-    assert "proteoform_id" in out.columns
-    assert len(out) == 1
-    assert out.iloc[0]["proteoform_id"] == label
+    assert "proteoform_members" in out.columns
+    assert "proteoform_id" not in out.columns
+    assert len(out) == 1  # members collapsed to one key
+    assert out.iloc[0]["proteoform_members"] == label  # provenance = sorted members
+    assert out.iloc[0]["Symbol"] == proteoform_symbol(label)  # alias / contracted
     assert out.iloc[0]["Ensembl_Gene_ID"] == min(members)  # canonical member
     assert out.iloc[0]["s1"] == 10.0 * len(members)  # summed

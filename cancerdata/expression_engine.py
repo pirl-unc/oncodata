@@ -39,7 +39,7 @@ import pandas as pd
 #: proteoform-collapsed frame's ``proteoform_id`` label is never mistaken for a
 #: sample. (The *named*-TPM rule for curated frames is :func:`is_expression_value_col`,
 #: a deliberately distinct concept.)
-ID_COLUMNS = ("Ensembl_Gene_ID", "Symbol", "proteoform_id")
+ID_COLUMNS = ("Ensembl_Gene_ID", "Symbol", "proteoform_members")
 
 _DEFAULT_TX_COLUMN_CANDIDATES = (
     "transcript",

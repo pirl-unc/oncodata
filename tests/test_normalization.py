@@ -57,15 +57,15 @@ def test_clean_tpm_validates():
         norm.clean_tpm(vals)
 
 
-def test_value_cols_excludes_proteoform_id():
-    # A proteoform-collapsed frame carries a proteoform_id label column; the
+def test_value_cols_excludes_proteoform_members():
+    # A proteoform-collapsed frame carries a proteoform_members provenance column; the
     # "everything-not-id" value-column rule must not treat it as a sample (it would
     # crash/poison geomean normalization). Uses the shared ID_COLUMNS constant.
     df = pd.DataFrame(
         {
             "Ensembl_Gene_ID": ["E1"],
             "Symbol": ["GA"],
-            "proteoform_id": ["GA/GB"],
+            "proteoform_members": ["GA/GB"],
             "s1": [3.0],
             "s2": [4.0],
         }

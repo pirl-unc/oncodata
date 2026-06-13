@@ -35,15 +35,51 @@ slash-joined, sorted member symbols (``"SSX4/SSX4B"``).
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 
 import pandas as pd
 
+from .gene_ids import unversioned
 from .load_dataset import get_data
 
-_LABEL_COLUMN = "proteoform_id"
+_LABEL_COLUMN = "proteoform_id"  # registry column: the sorted slash-joined members
 _SYMBOL_COLUMN = "member_symbol"
 _GENE_ID_COLUMN = "member_gene_id"
+
+#: Curated preferred names for specific proteoforms, keyed by the **sorted
+#: slash-joined member symbols** (the canonical members label). A group with an alias
+#: collapses to the alias instead of the contracted member symbols. Small and
+#: hand-maintained — extend as needed.
+_PROTEOFORM_ALIASES = {
+    "CTAG1A/CTAG1B": "NY-ESO-1",
+}
+
+
+def _contract_members(members_label: str) -> str:
+    """Compact a sorted slash-joined members label by factoring out the common symbol
+    prefix: ``XAGE1A/XAGE1B`` → ``XAGE1A/B``, ``CGB3/CGB5/CGB8`` → ``CGB3/5/8``,
+    ``SSX4/SSX4B`` → ``SSX4/B``. No shared prefix → unchanged."""
+    parts = members_label.split("/")
+    if len(parts) < 2:
+        return members_label
+    prefix = os.path.commonprefix(parts)
+    return parts[0] + "".join("/" + p[len(prefix) :] for p in parts[1:])
+
+
+def proteoform_aliases() -> dict[str, str]:
+    """Curated ``{sorted members label → preferred name}`` (e.g. ``CTAG1A/CTAG1B →
+    NY-ESO-1``). Copy."""
+    return dict(_PROTEOFORM_ALIASES)
+
+
+def proteoform_symbol(members_label: str) -> str:
+    """The single proteoform symbol that survives a collapse, from a group's sorted
+    members label: the curated alias if one exists, else the prefix-contracted member
+    symbols (``XAGE1A/XAGE1B`` → ``XAGE1A/B``). The reduced key — the individual
+    members no longer appear."""
+    return _PROTEOFORM_ALIASES.get(members_label) or _contract_members(members_label)
+
 
 #: Registry scopes -> bundled dataset name. ``cta`` is the shipped default (the
 #: focused CGA universe); ``genome`` is the opt-in genome-wide identical-protein
@@ -130,11 +166,21 @@ def _member_to_label(scope: str) -> dict[str, str]:
 
 
 def proteoform_for_gene(gene: str, *, scope: str = "cta") -> str | None:
-    """Proteoform label for a gene given by Ensembl ID (version-insensitive) or
-    symbol (case-insensitive), within ``scope`` (see :func:`proteoform_groups`).
-    ``None`` if the gene isn't in any group in that scope."""
+    """Proteoform **symbol** for a gene given by Ensembl ID (version-insensitive) or
+    symbol (case-insensitive), within ``scope`` (see :func:`proteoform_groups`): the
+    curated alias (``NY-ESO-1``) or the prefix-contracted members (``XAGE1A/B``).
+    ``None`` if the gene isn't in any multi-member group in that scope."""
     mapping = _member_to_label(scope)
-    return mapping.get(str(gene).split(".")[0]) or mapping.get(str(gene).upper())
+    label = mapping.get(unversioned(gene)) or mapping.get(str(gene).upper())
+    return proteoform_symbol(label) if label is not None else None
+
+
+def proteoform_members_for_gene(gene: str, *, scope: str = "cta") -> tuple[str, ...] | None:
+    """The member symbols of the proteoform a gene belongs to (the provenance behind
+    :func:`proteoform_for_gene`), or ``None`` if it's in no multi-member group."""
+    mapping = _member_to_label(scope)
+    label = mapping.get(unversioned(gene)) or mapping.get(str(gene).upper())
+    return proteoform_symbol_map(scope=scope).get(label) if label is not None else None
 
 
 def gene_to_proteoform() -> dict[str, str]:
@@ -146,19 +192,18 @@ def gene_to_proteoform() -> dict[str, str]:
 
 
 def gene_to_proteoform_id(genes, *, symbols=None, scope: str = "cta") -> dict[str, str]:
-    """Total ``{gene → proteoform_id}`` over the given genes: every gene maps to
+    """Total ``{gene → proteoform symbol}`` over the given genes: every gene maps to
     exactly one proteoform equivalence class.
 
-    A gene in a multi-member group maps to the group's ``proteoform_id`` (the
-    slash-joined label); a gene in no group is its **own** singleton class, mapping
-    to its symbol (if ``symbols`` is given, aligned to ``genes``) else its
-    unversioned Ensembl id. This is the join key for proteoform-level analyses —
-    unlike :func:`gene_to_proteoform`, it is defined for **every** gene, so callers
-    never need an ad-hoc "is it grouped?" branch. ``genes``/``symbols`` are parallel
-    iterables of Ensembl ids / symbols."""
+    A gene in a multi-member group maps to the group's **proteoform symbol** (the
+    curated alias ``NY-ESO-1`` or the prefix-contracted members ``XAGE1A/B``); a gene
+    in no group is its **own** singleton class, mapping to its symbol (if ``symbols``
+    is given, aligned to ``genes``) else its unversioned Ensembl id. Total over every
+    gene, so callers never need an ad-hoc "is it grouped?" branch. ``genes``/``symbols``
+    are parallel iterables of Ensembl ids / symbols."""
     pf = _proteoform_frame(scope)
     member_map = dict(zip(pf[_GENE_ID_COLUMN].astype(str), pf[_LABEL_COLUMN].astype(str)))
-    genes = [str(g).split(".")[0] for g in genes]
+    genes = [unversioned(g) for g in genes]
     if symbols is None:
         syms: list = [None] * len(genes)
     else:
@@ -172,7 +217,11 @@ def gene_to_proteoform_id(genes, *, symbols=None, scope: str = "cta") -> dict[st
             )
     out: dict[str, str] = {}
     for gid, sym in zip(genes, syms):
-        out[gid] = member_map.get(gid) or (str(sym) if sym is not None else gid)
+        label = member_map.get(gid)
+        if label is not None:
+            out[gid] = proteoform_symbol(label)
+        else:
+            out[gid] = str(sym) if sym is not None else gid
     return out
 
 
@@ -180,15 +229,24 @@ def collapse_to_proteoforms(
     df: pd.DataFrame, *, scope: str = "cta", sample_cols=None
 ) -> pd.DataFrame:
     """Collapse a genes×samples expression frame to proteoform level — the single
-    reusable entry point for proteoform summation.
+    reusable entry point for proteoform summation, and the "second step" applied
+    before comparing/quantifying/plotting so everything shares one reduced key space.
 
-    Identical-protein members in ``scope`` are summed per sample into one antigen
-    row (see :func:`cancerdata._build.sum_proteoform_tpm`). The output keeps
-    ``Ensembl_Gene_ID`` as a real **canonical-member** ENSG (never the label) and
-    adds a total ``proteoform_id`` column (the class identity). Use this instead of
-    calling ``sum_proteoform_tpm`` + ``proteoform_group_map`` directly, so coverage,
-    the medoid/within-sample generators, and any future consumer share one
-    collapse + one identity scheme."""
+    Identical-protein members in ``scope`` are summed per sample into one row, so the
+    key count **decreases** (the members disappear). The output:
+
+      - ``Ensembl_Gene_ID`` — the group's canonical-member ENSG (``min``), a real
+        joinable Ensembl id; the gene's own ENSG for a singleton (the 1:1 case);
+      - ``Symbol`` — the single proteoform symbol: the curated alias (``NY-ESO-1``) or
+        the prefix-contracted members (``XAGE1A/B``); the gene's symbol for a singleton;
+      - ``proteoform_members`` — the sorted slash-joined member symbols
+        (``CTAG1A/CTAG1B``), provenance only; the gene's symbol for a singleton.
+
+    Use this instead of calling ``sum_proteoform_tpm`` + ``proteoform_group_map``
+    directly, so coverage, the medoid/within-sample generators, and any future
+    consumer share one collapse + one identity scheme."""
     from ._build import sum_proteoform_tpm
 
-    return sum_proteoform_tpm(df, proteoform_group_map(scope=scope), sample_cols)
+    gmap = proteoform_group_map(scope=scope)
+    group_symbols = {label: proteoform_symbol(label) for label in gmap}
+    return sum_proteoform_tpm(df, gmap, sample_cols, group_symbols=group_symbols)

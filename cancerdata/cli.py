@@ -228,12 +228,12 @@ def _cmd_cta(args: argparse.Namespace) -> int:
 
 def _cmd_proteoforms(args: argparse.Namespace) -> int:
     if args.gene:
-        label = proteoforms.proteoform_for_gene(args.gene)
-        if label is None:
+        symbol = proteoforms.proteoform_for_gene(args.gene)
+        if symbol is None:
             print(f"{args.gene} is not in any proteoform group", file=sys.stderr)
             return 1
-        members = proteoforms.proteoform_symbol_map()[label]
-        print(f"{label}\t{', '.join(members)}")
+        members = proteoforms.proteoform_members_for_gene(args.gene) or ()
+        print(f"{symbol}\t{', '.join(members)}")
         return 0
     symbol_map = proteoforms.proteoform_symbol_map()
     if args.count:

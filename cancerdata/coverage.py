@@ -85,8 +85,9 @@ def cta_patient_fractions(
 ) -> pd.DataFrame:
     """Per antigen, the fraction of a cohort's patients expressing it above
     ``threshold_tpm`` (clean TPM). Returns ``Ensembl_Gene_ID`` (a real ENSG — the
-    canonical member for a collapsed proteoform), ``Symbol``, ``proteoform_id`` (the
-    antigen identity, present when ``proteoform=True``), ``fraction_expressing``,
+    canonical member for a collapsed proteoform), ``Symbol`` (the proteoform symbol —
+    alias ``NY-ESO-1`` / contracted ``XAGE1A/B`` — when collapsed), ``proteoform_members``
+    (the sorted member symbols, present when ``proteoform=True``), ``fraction_expressing``,
     ``n_patients_expressing``, ``n_patients`` — sorted by prevalence. The default
     gene panel is the expressed CTA set; identical-protein paralogs are summed to
     one antigen (``proteoform=True``)."""
@@ -187,8 +188,8 @@ def greedy_coverage(
             "cumulative_patients": cum,
             "cumulative_fraction": cum / n,
         }
-        if "proteoform_id" in sub.columns:
-            row["proteoform_id"] = str(sub.at[best_g, "proteoform_id"])
+        if "proteoform_members" in sub.columns:
+            row["proteoform_members"] = str(sub.at[best_g, "proteoform_members"])
         rows.append(row)
     return pd.DataFrame(rows)
 

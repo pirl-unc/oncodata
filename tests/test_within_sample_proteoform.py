@@ -50,9 +50,11 @@ def test_generator_proteoform_collapses_members_before_ranking(tmp_path):
 
     out = pd.read_parquet(out_dir / "PRAD.parquet")
     symbols = set(out["Symbol"])
-    # SSX4 + SSX4B collapsed to a single proteoform row; the members are gone.
-    assert "SSX4/SSX4B" in symbols
+    # SSX4 + SSX4B collapsed to a single proteoform row; the members are gone from the
+    # key space (Symbol is the contracted proteoform symbol; provenance in members).
+    assert "SSX4/B" in symbols
     assert "SSX4" not in symbols and "SSX4B" not in symbols
+    assert "SSX4/SSX4B" in set(out["proteoform_members"])
     # Ungrouped genes survive untouched.
     assert {"PRAME", "ITGA2B"} <= symbols
     # n_samples is the sample count, and the threshold columns exist.
@@ -92,7 +94,7 @@ def test_generator_proteoform_rescues_diluted_members(tmp_path):
     proteoform = pd.read_parquet(proteoform_dir / "PRAD.parquet").set_index("Symbol")
 
     member_fracs = per_gene.loc[["SSX4", "SSX4B"], "frac_samples_top5pct"]
-    proteoform_frac = proteoform.loc["SSX4/SSX4B", "frac_samples_top5pct"]
+    proteoform_frac = proteoform.loc["SSX4/B", "frac_samples_top5pct"]
     # Neither diluted member clears the bar; the summed proteoform does.
     assert (member_fracs == 0.0).all()
     assert proteoform_frac > member_fracs.max()

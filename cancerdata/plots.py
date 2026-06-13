@@ -213,6 +213,7 @@ _ANTIGEN_FAMILY_PREFIXES = (
     ("CT45", "CT45"),
     ("CTAG", "CTAG/NY-ESO"),
     ("LAGE", "CTAG/NY-ESO"),
+    ("NY-ESO", "CTAG/NY-ESO"),  # the curated proteoform alias for CTAG1A/CTAG1B
     ("SPANX", "SPANX"),
     ("PRAME", "PRAME"),
     ("DPPA2", "DPPA"),

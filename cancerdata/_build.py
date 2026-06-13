@@ -78,6 +78,8 @@ def sum_proteoform_tpm(
     df: pd.DataFrame,
     group_map: Mapping[str, Iterable[str]],
     sample_cols: Iterable[str] | None = None,
+    *,
+    group_symbols: Mapping[str, str] | None = None,
 ) -> pd.DataFrame:
     """Collapse genes that encode an identical protein into one summed row.
 
@@ -92,20 +94,23 @@ def sum_proteoform_tpm(
     so a proteoform-summed artifact and a per-gene one share the same arithmetic.
 
     ``df`` has ``Ensembl_Gene_ID``, ``Symbol`` and one column per sample. Gene IDs
-    are matched version-insensitively. The output carries a stable proteoform
-    identity **without overloading the Ensembl ID column** (so it stays a real,
-    joinable ENSG):
+    are matched version-insensitively. The collapse **reduces the key count** (members
+    merge into one row), and the output carries the proteoform identity **without
+    overloading the Ensembl ID column** (so it stays a real, joinable ENSG):
 
       - ``Ensembl_Gene_ID`` — the group's **canonical member** ENSG (the
         lexicographically-smallest member id) for a collapsed group; the gene's own
         ENSG for a singleton. Always a genuine Ensembl id.
-      - ``proteoform_id`` — the equivalence-class identity: the slash-joined label
-        for a group (``CTAG1A/CTAG1B``), the gene's own ``Symbol`` for a singleton.
-        Total over every row — the join key for proteoform-level analyses.
-      - ``Symbol`` — the slash-label for a group / the gene's symbol for a singleton
-        (display).
+      - ``Symbol`` — the single **proteoform symbol** that survives: for a group, the
+        value supplied in ``group_symbols`` (the curated alias ``NY-ESO-1`` or the
+        prefix-contracted members ``XAGE1A/B``), falling back to the raw members label
+        if no ``group_symbols`` entry; the gene's own symbol for a singleton.
+      - ``proteoform_members`` — provenance: the group's sorted slash-joined member
+        symbols (``CTAG1A/CTAG1B``); the gene's own symbol for a singleton.
 
-    First-appearance row order is preserved.
+    ``group_symbols`` maps a group's members label → its surviving proteoform symbol
+    (see :func:`cancerdata.proteoforms.proteoform_symbol`). First-appearance row order
+    is preserved.
 
     Summation uses ``min_count=1`` so a missing measurement stays missing: a cell
     that is all-NaN (e.g. a gene absent from a cohort after an outer-merge across
@@ -137,21 +142,24 @@ def sum_proteoform_tpm(
     work["_key"] = label.where(in_group, unversioned)
     # ENSG stays a real Ensembl id (canonical member / own id), never the label.
     work["_out_id"] = canonical.where(in_group, work["Ensembl_Gene_ID"].astype(str))
-    work["_out_symbol"] = label.where(in_group, work["Symbol"].astype(str))
-    # proteoform_id is total: the class label for groups, the symbol for singletons.
-    work["_out_pfid"] = label.where(in_group, work["Symbol"].astype(str))
+    # Symbol = the single surviving proteoform symbol (alias / contracted members) for
+    # a group, the gene's own symbol for a singleton.
+    group_sym = label.map(group_symbols) if group_symbols else label
+    work["_out_symbol"] = group_sym.where(in_group, work["Symbol"].astype(str))
+    # proteoform_members = the sorted slash-joined members (provenance) / own symbol.
+    work["_out_members"] = label.where(in_group, work["Symbol"].astype(str))
 
     grouped = work.groupby("_key", sort=False)
-    ids = grouped[["_out_id", "_out_symbol", "_out_pfid"]].first()
+    ids = grouped[["_out_id", "_out_symbol", "_out_members"]].first()
     sums = grouped[cols].sum(min_count=1)
     agg = ids.join(sums).rename(
         columns={
             "_out_id": "Ensembl_Gene_ID",
             "_out_symbol": "Symbol",
-            "_out_pfid": "proteoform_id",
+            "_out_members": "proteoform_members",
         }
     )
-    return agg.reset_index(drop=True)[["Ensembl_Gene_ID", "Symbol", "proteoform_id", *cols]]
+    return agg.reset_index(drop=True)[["Ensembl_Gene_ID", "Symbol", "proteoform_members", *cols]]
 
 
 def within_sample_top_fractions(
@@ -186,8 +194,8 @@ def within_sample_top_fractions(
             "Symbol": df["Symbol"].astype(str).to_numpy(),
         }
     )
-    if "proteoform_id" in df.columns:  # carry the proteoform identity through (collapsed input)
-        out["proteoform_id"] = df["proteoform_id"].astype(str).to_numpy()
+    if "proteoform_members" in df.columns:  # carry proteoform provenance through (collapsed input)
+        out["proteoform_members"] = df["proteoform_members"].astype(str).to_numpy()
     for t in thresholds:
         pct = round((1.0 - t) * 100)
         out[f"frac_samples_top{pct}pct"] = (ranks >= t).mean(axis=1).to_numpy()
@@ -238,8 +246,8 @@ def cohort_percentile_vectors(
             "Symbol": df["Symbol"].astype(str).to_numpy(),
         }
     )
-    if "proteoform_id" in df.columns:  # carry the proteoform identity through (collapsed input)
-        out["proteoform_id"] = df["proteoform_id"].astype(str).to_numpy()
+    if "proteoform_members" in df.columns:  # carry proteoform provenance through (collapsed input)
+        out["proteoform_members"] = df["proteoform_members"].astype(str).to_numpy()
     for i, bp in enumerate(bps):
         out[f"p{bp}"] = q[i].astype("float16")
     return out

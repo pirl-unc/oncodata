@@ -116,9 +116,11 @@ def test_proteoform_paralogs_are_summed(monkeypatch):
     )
 
     pf_sum = coverage.cta_patient_fractions("X", threshold_tpm=10, proteoform=True)
-    # A1/A2 collapsed to one row, expressed in p0 (summed 12 > 10) -> fraction 0.5
-    a_row = pf_sum[pf_sum["Symbol"] == "A1/A2"]
+    # A1/A2 collapsed to one row keyed by the contracted symbol "A1/2" (members
+    # "A1/A2" in provenance), expressed in p0 (summed 12 > 10) -> fraction 0.5
+    a_row = pf_sum[pf_sum["Symbol"] == "A1/2"]
     assert len(a_row) == 1 and a_row["fraction_expressing"].iloc[0] == 0.5
+    assert a_row["proteoform_members"].iloc[0] == "A1/A2"
     # per-gene view: neither A1 nor A2 clears 10 alone -> 0 in p0
     pf_split = coverage.cta_patient_fractions("X", threshold_tpm=10, proteoform=False)
     assert pf_split[pf_split["Symbol"] == "A1"]["fraction_expressing"].iloc[0] == 0.0
