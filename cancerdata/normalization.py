@@ -157,3 +157,77 @@ def percentile_rank(df: pd.DataFrame, value_cols=None) -> pd.DataFrame:
     out = df.copy()
     out[cols] = df[cols].rank(axis=0, pct=True) * 100.0
     return out
+
+
+# ---------- TPM-scale rescaling (FPKM->TPM, renormalize to 1e6) ----------
+
+#: Column-name conventions for "an expression value column" — TPM/nTPM/FPKM named
+#: (mirrors the pirlygenes expression schema), excluding the ``_raw`` provenance
+#: copies that must never be rescaled.
+_VALUE_COL_PREFIXES = ("TPM", "nTPM_", "FPKM_")
+_VALUE_COL_SUFFIXES = (
+    "_TPM",
+    "_nTPM",
+    "_FPKM",
+    "_TPM_log1p",
+    "_nTPM_log1p",
+    "_TPM_clean",
+    "_nTPM_clean",
+    "_TPM_clean_log1p",
+    "_nTPM_clean_log1p",
+    "_TPM_hk",
+    "_nTPM_hk",
+    "_TPM_percentile",
+    "_nTPM_percentile",
+)
+_RAW_VALUE_COL_PREFIXES = ("TPM_raw_", "nTPM_raw_")
+_RAW_VALUE_COL_SUFFIXES = ("_TPM_raw", "_nTPM_raw")
+
+
+def is_expression_value_col(col: object) -> bool:
+    """True if ``col`` names an expression value column (TPM/nTPM/FPKM-named),
+    excluding the ``_raw`` provenance copies."""
+    name = str(col)
+    return (name.startswith(_VALUE_COL_PREFIXES) or name.endswith(_VALUE_COL_SUFFIXES)) and not (
+        name.startswith(_RAW_VALUE_COL_PREFIXES) or name.endswith(_RAW_VALUE_COL_SUFFIXES)
+    )
+
+
+def renormalize_to_million(df: pd.DataFrame, *, value_cols=None) -> tuple[pd.DataFrame, dict]:
+    """Rescale each expression column so its finite sum is exactly 1e6 (the TPM
+    convention). Drops nothing — a bare utility, e.g. after :func:`clean_tpm` /
+    technical-gene removal if you also want the post-filter total pinned at 1e6.
+
+    Returns ``(rescaled_df, stats)`` where ``stats`` records, per column, the input
+    sum and applied scale (a column whose sum is ≤ 0 is left untouched, scale 1.0).
+    ``value_cols`` defaults to the TPM/nTPM/FPKM-named columns
+    (:func:`is_expression_value_col`)."""
+    out = df.copy()
+    if value_cols is None:
+        value_cols = [c for c in out.columns if is_expression_value_col(c)]
+    value_cols = [str(c) for c in value_cols if str(c) in out.columns]
+    columns: dict[str, dict] = {}
+    any_applied = False
+    for col in value_cols:
+        vals = pd.to_numeric(out[col], errors="coerce")
+        col_sum = float(vals.sum())
+        columns[col] = {"input_sum": col_sum}
+        if col_sum <= 0:
+            columns[col]["scale"] = 1.0
+            continue
+        scale = 1e6 / col_sum
+        out[col] = vals * scale
+        columns[col]["scale"] = scale
+        columns[col]["output_sum"] = 1e6
+        any_applied = True
+    stats = {"applied": any_applied, "columns": columns, "value_cols": value_cols}
+    return out, stats
+
+
+def fpkm_to_tpm(df: pd.DataFrame, *, value_cols=None) -> tuple[pd.DataFrame, dict]:
+    """Convert FPKM-scale expression columns to TPM by per-column rescaling:
+    ``TPM_i = FPKM_i / sum(FPKM_j) * 1e6`` over finite rows. Mathematically the same
+    as :func:`renormalize_to_million` (FPKM and TPM share the same per-sample
+    normalization), but a self-documenting entry point for the quantifier→TPM step.
+    Returns ``(df, stats)``."""
+    return renormalize_to_million(df, value_cols=value_cols)
