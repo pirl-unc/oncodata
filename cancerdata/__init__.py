@@ -85,6 +85,7 @@ from .expression import (
     representative_cohort_samples,
     within_sample_top_fraction,
 )
+from .expression_engine import aggregate_transcripts_to_genes
 from .expression_registry import (
     ExpressionSource,
     expression_source,
@@ -163,6 +164,7 @@ __all__ = [
     # expression (read accessors over the downloadable bundle)
     "addressable_fraction",
     "addressable_fraction_by_cohort",
+    "aggregate_transcripts_to_genes",
     "available_percentile_cohorts",
     "available_representative_cohorts",
     "available_within_sample_cohorts",
