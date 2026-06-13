@@ -142,6 +142,7 @@ from .peptides import (
 )
 from .proteoforms import (
     collapse_to_proteoforms,
+    expression_level,
     gene_to_proteoform,
     gene_to_proteoform_id,
     proteoform_aliases,
@@ -246,6 +247,7 @@ __all__ = [
     "cta_specific_9mer_counts",
     "cta_specific_9mer_load",
     "cta_specific_9mer_weights",
+    "expression_level",
     "expression_source",
     "expression_sources",
     "family_display_name",

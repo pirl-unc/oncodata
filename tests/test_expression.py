@@ -186,6 +186,27 @@ def test_cohort_mean_expression(monkeypatch):
     assert dict(zip(median["Symbol"], median["expression"])) == {"A": 20.0, "B": 2.0}
 
 
+def test_cohort_mean_expression_scope_threads_to_collapse(monkeypatch):
+    # proteoform scope="genome" must reach collapse_to_proteoforms (the universal
+    # all-genes key space), not just the CTA subset.
+    import cancerdata.proteoforms as pmod
+
+    seen = {}
+
+    def spy_group_map(*, scope="cta"):
+        seen["scope"] = scope
+        return {}  # no groups -> every gene a singleton (proteoform_key = its ENSG)
+
+    monkeypatch.setattr(pmod, "proteoform_group_map", spy_group_map)
+    fixture = pd.DataFrame(
+        {"Ensembl_Gene_ID": ["E1", "E2"], "Symbol": ["A", "B"], "s1": [1.0, 2.0], "s2": [3.0, 4.0]}
+    )
+    monkeypatch.setattr(expression, "per_sample_expression", lambda *a, **k: fixture.copy())
+    out = expression.cohort_mean_expression("X", proteoform=True, scope="genome")
+    assert seen["scope"] == "genome"
+    assert pmod.expression_level(out) == "proteoform"
+
+
 def test_cohort_mean_expression_bad_statistic(monkeypatch):
     monkeypatch.setattr(expression, "per_sample_expression", lambda *a, **k: pd.DataFrame())
     with pytest.raises(ValueError, match="statistic must be"):

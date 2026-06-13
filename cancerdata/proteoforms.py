@@ -39,6 +39,20 @@ A collapsed frame carries: ``proteoform_key`` (the identity above), ``Symbol``
 canonical-member ENSG, a real id for joining to per-gene Ensembl references), and
 ``proteoform_members`` (the sorted slash-joined member symbols, provenance only).
 
+How the groups are defined: every gene is reduced to its **best (canonical, longest)
+protein sequence**, and genes whose best protein is byte-identical form one group —
+so the key space is "one entry per distinct protein," and a group's proteoform-level
+expression is the **sum of its member genes' TPMs** (RNA-seq reads multi-map between
+identical-protein loci, so per-gene TPM under-counts the protein). ``scope`` selects
+the gene universe: ``"cta"`` (the focused cancer-germline set, the shipped default)
+or ``"genome"`` (all protein-coding genes — histones, tubulins, the PAR X/Y pairs,
+…). Both registries ship; the genome one is the universal "do this for every gene".
+
+GENE-LEVEL vs PROTEOFORM-LEVEL: an expression frame is one or the other, told apart
+by :func:`expression_level` (the ``proteoform_key`` column is present iff collapsed).
+Keep the two straight — don't mix a gene-level dict/stat with a proteoform-level one;
+convert with :func:`collapse_to_proteoforms`.
+
 This module is the read surface over the curated registry
 (``proteoform-groups.csv``, derived offline by
 ``scripts/generate_proteoform_groups.py`` from pyensembl protein sequences). It
@@ -73,6 +87,18 @@ _GENE_ID_COLUMN = "member_gene_id"
 _PROTEOFORM_ALIASES = {
     "CTAG1A/CTAG1B": "NY-ESO-1",
 }
+
+
+def expression_level(df) -> str:
+    """Which space an expression frame is in: ``"proteoform"`` if it carries a
+    ``proteoform_key`` column (the collapsed key space, where identical-protein genes
+    are summed into one row), else ``"gene"`` (one row per Ensembl gene).
+
+    The single, uniform way for any code path or caller to be **cognizant** of the
+    level it's holding — so a gene-level dict/stat is never silently mixed with a
+    proteoform-level one. Pair with :func:`collapse_to_proteoforms` to convert
+    gene-level → proteoform-level."""
+    return "proteoform" if "proteoform_key" in getattr(df, "columns", ()) else "gene"
 
 
 def _contract_members(members_label: str) -> str:

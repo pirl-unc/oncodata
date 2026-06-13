@@ -202,6 +202,7 @@ def cohort_mean_expression(
     statistic: str = "mean",
     auto_fetch: bool = True,
     proteoform: bool = False,
+    scope: str = "cta",
 ) -> pd.DataFrame:
     """Per-gene **across-patient summary** of a cohort's expression (one value per
     gene, collapsed over all patients).
@@ -211,20 +212,23 @@ def cohort_mean_expression(
     the percentile vectors and n=5 medoids don't give directly. Reduces
     :func:`per_sample_expression` over the sample axis with ``statistic`` (``"mean"``
     / ``"median"``). ``normalize`` is passed through (clean TPM by default; use
-    ``"tpm_clean_log1p"`` to average in log space).
+    ``"tpm_clean_log1p"`` to average in log space). A **gene-level** frame.
 
     With ``proteoform=True``, identical-protein paralogs are summed per sample
     (:func:`cancerdata.proteoforms.collapse_to_proteoforms`) **before** the
     across-patient reduction, so the summary is over the reduced proteoform key space
-    (rows carry ``proteoform_key``). Returns ``Ensembl_Gene_ID``, ``Symbol`` (plus the
-    proteoform identity columns when collapsed) and one ``expression`` column."""
+    (rows carry ``proteoform_key`` — a **proteoform-level** frame, see
+    :func:`cancerdata.proteoforms.expression_level`). ``scope`` selects the gene
+    universe to collapse: ``"cta"`` (focused) or ``"genome"`` (every protein-coding
+    gene). Returns ``Ensembl_Gene_ID``, ``Symbol`` (plus the proteoform identity
+    columns when collapsed) and one ``expression`` column."""
     if statistic not in ("mean", "median"):
         raise ValueError("statistic must be 'mean' or 'median'")
     df = per_sample_expression(cancer_type, normalize=normalize, auto_fetch=auto_fetch)
     if proteoform:
         from .proteoforms import collapse_to_proteoforms
 
-        df = collapse_to_proteoforms(df)
+        df = collapse_to_proteoforms(df, scope=scope)
     id_cols = [c for c in ID_COLUMNS if c in df.columns]
     samples = [c for c in df.columns if c not in id_cols]
     reducer = df[samples].mean(axis=1) if statistic == "mean" else df[samples].median(axis=1)

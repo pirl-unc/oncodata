@@ -61,6 +61,20 @@ def test_ct47_family_is_a_single_large_group():
     assert len(symbol_map[ct47[0]]) >= 10
 
 
+def test_expression_level_marker():
+    from cancerdata import expression_level
+
+    gene = pd.DataFrame({"Ensembl_Gene_ID": ["E1"], "Symbol": ["A"], "s1": [1.0]})
+    assert expression_level(gene) == "gene"
+    assert expression_level(gene.assign(proteoform_key=["E1"])) == "proteoform"
+
+
+def test_genome_scope_is_superset_of_cta():
+    # Every gene mapped to its best protein, genome-wide: the genome registry has many
+    # more identical-protein groups (histones, tubulins, PAR X/Y, …) than the CTA subset.
+    assert len(proteoform_group_map(scope="genome")) > len(proteoform_group_map(scope="cta"))
+
+
 def test_contract_members_factors_common_prefix():
     assert _contract_members("XAGE1A/XAGE1B") == "XAGE1A/B"
     assert _contract_members("CGB3/CGB5/CGB8") == "CGB3/5/8"
