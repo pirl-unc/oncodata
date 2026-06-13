@@ -255,10 +255,13 @@ def _cmd_plot(args: argparse.Namespace) -> int:
         "cta-addressable-burden": plots.cta_addressable_burden,
         "cta-patient-heatmap": plots.cta_patient_count_heatmap,
         "cta-coverage-curves": plots.cta_coverage_curves,
+        "apd1-response-signature": plots.apd1_response_signature_scatter,
     }
     try:
         if args.which == "incidence-vs-mortality":
             kwargs = {"region": args.region}
+        elif args.which == "apd1-response-signature":
+            kwargs = {"signature": args.signature}
         elif args.which == "cta-expression-heatmap":
             kwargs = {"stat": args.stat}
         elif args.which == "cta-addressable-burden":
@@ -455,10 +458,16 @@ def _build_parser() -> argparse.ArgumentParser:
             "cta-addressable-burden",
             "cta-patient-heatmap",
             "cta-coverage-curves",
+            "apd1-response-signature",
         ],
         help="Which plot to render",
     )
     p_plot.add_argument("--out", required=True, help="Output PNG path")
+    p_plot.add_argument(
+        "--signature",
+        default="t_cell_inflamed",
+        help="Response signature for apd1-response-signature (e.g. t_cell_inflamed, tgfb_exclusion)",
+    )
     p_plot.add_argument(
         "--region", default="us", choices=["us", "world"], help="Region for incidence-vs-mortality"
     )

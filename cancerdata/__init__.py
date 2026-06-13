@@ -133,6 +133,13 @@ from .proteoforms import (
     proteoform_groups,
     proteoform_symbol_map,
 )
+from .response_signatures import (
+    response_signature_direction,
+    response_signature_genes,
+    response_signature_names,
+    response_signatures_df,
+    signature_score,
+)
 from .samples import (
     sample_counts_by_cancer_code,
     sample_manifest,
@@ -248,11 +255,16 @@ __all__ = [
     "renormalize_to_million",
     "representative_cohort_samples",
     "resolve_cancer_type",
+    "response_signature_direction",
+    "response_signature_genes",
+    "response_signature_names",
+    "response_signatures_df",
     "sample_counts_by_cancer_code",
     "sample_manifest",
     "samples_for_cancer_code",
     "samples_for_cohort",
     "sarcoma_lineage_codes",
+    "signature_score",
     "sources_for_cancer_code",
     "tissue_of_origin",
     "tpm_to_housekeeping_normalized",

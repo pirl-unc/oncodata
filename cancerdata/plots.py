@@ -522,6 +522,60 @@ def cta_coverage_curves(
     return _save(fig, save)
 
 
+def apd1_response_signature_scatter(signature="t_cell_inflamed", *, cohorts=None, save=None):
+    """Scatter of a cohort's **aPD1 response-signature score** vs its anti-PD-1 ORR,
+    one point per cancer type — the mechanism view of *why* response varies.
+
+    The signature score is the cohort-mean log clean-TPM of the signature's genes
+    (:func:`cancerdata.response_signatures.signature_score`); ``signature`` is one of
+    :func:`cancerdata.response_signatures.response_signature_names` (e.g.
+    ``"t_cell_inflamed"`` / ``"cytotoxic"`` / ``"antigen_presentation"`` →
+    response-associated, ``"tgfb_exclusion"`` → resistance-associated). Points are
+    cohorts that have BOTH a cached per-sample matrix and a curated aPD1 ORR,
+    coloured by lineage family. Needs the per-sample matrices cached."""
+    from .response_signatures import response_signature_direction, signature_score
+
+    plt = _plt()
+    direction = response_signature_direction(signature)  # validates the name
+    orr = cancer_apd1_response()
+    cohorts = list(cohorts) if cohorts is not None else _cached_per_sample_cohorts()
+    rows = []
+    for code in cohorts:
+        if code not in orr:
+            continue
+        score = signature_score(code, signature)
+        if score == score:  # not NaN
+            rows.append((code, score, float(orr[code])))
+    if not rows:
+        raise ValueError(
+            "no cohort with both a cached per-sample matrix and an aPD1 ORR — fetch "
+            "the matrices (source_matrices.fetch) for aPD1 cohorts first."
+        )
+    codes = [r[0] for r in rows]
+    colors, fam_color = _family_colors(codes)
+    fig, ax = plt.subplots(figsize=(9, 7))
+    for code, x, y in rows:
+        ax.scatter(x, y, color=colors[code], s=70, edgecolor="white", linewidth=0.6, zorder=3)
+        ax.annotate(
+            format_cancer_code_label(code),
+            (x, y),
+            fontsize=6,
+            xytext=(3, 3),
+            textcoords="offset points",
+        )
+    ax.set_xlabel(f"{signature} signature score (cohort-mean log clean TPM)")
+    ax.set_ylabel("Anti-PD-1 monotherapy ORR (%)")
+    ax.set_title(f"aPD1 response vs {signature} ({direction}-associated) — {len(rows)} cancers")
+    ax.grid(True, alpha=0.3)
+    handles = [
+        plt.Line2D([], [], marker="o", linestyle="", color=col, label=fam)
+        for fam, col in sorted(fam_color.items())
+    ]
+    ax.legend(handles=handles, fontsize=6, ncol=2, loc="best", framealpha=0.9)
+    fig.tight_layout()
+    return _save(fig, save)
+
+
 def cta_specific_9mer_counts(*, save=None, **kwargs):
     """**Scaffold** — CTA-specific 9-mer (peptide) counts per cancer type.
 

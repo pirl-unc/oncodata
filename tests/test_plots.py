@@ -230,3 +230,29 @@ def test_cta_coverage_curves_empty_raises(monkeypatch):
     monkeypatch.setattr(coverage, "greedy_coverage", lambda *a, **k: pd.DataFrame())
     with pytest.raises(ValueError, match="no coverage curve"):
         plots.cta_coverage_curves(["LUAD"])
+
+
+def test_apd1_response_signature_scatter_renders(tmp_path, monkeypatch):
+    from cancerdata import response_signatures as rs
+
+    monkeypatch.setattr(plots, "_cached_per_sample_cohorts", lambda: ["LUAD", "SKCM", "MM"])
+    monkeypatch.setattr(
+        plots, "cancer_apd1_response", lambda: {"LUAD": 19.0, "SKCM": 42.0, "MM": 3.0}
+    )
+    monkeypatch.setattr(
+        rs, "signature_score", lambda code, sig, **k: {"LUAD": 3.1, "SKCM": 2.9, "MM": 1.0}[code]
+    )
+    out = tmp_path / "sig.png"
+    fig = plots.apd1_response_signature_scatter("t_cell_inflamed", save=str(out))
+    assert out.exists() and fig is not None
+
+
+def test_apd1_response_signature_scatter_no_data(monkeypatch):
+    monkeypatch.setattr(plots, "_cached_per_sample_cohorts", lambda: [])
+    with pytest.raises(ValueError, match="no cohort with both"):
+        plots.apd1_response_signature_scatter("t_cell_inflamed")
+
+
+def test_apd1_response_signature_bad_name():
+    with pytest.raises(ValueError, match="unknown signature"):
+        plots.apd1_response_signature_scatter("not_a_signature")

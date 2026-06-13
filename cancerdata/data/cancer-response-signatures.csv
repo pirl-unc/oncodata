@@ -1,0 +1,25 @@
+signature,gene_symbol,direction,description,source
+t_cell_inflamed,IFNG,positive,IFN-gamma / T-cell-inflamed GEP (response-associated),Ayers 2017 PMID:28650338
+t_cell_inflamed,STAT1,positive,IFN-gamma / T-cell-inflamed GEP (response-associated),Ayers 2017 PMID:28650338
+t_cell_inflamed,CXCL9,positive,IFN-gamma / T-cell-inflamed GEP (response-associated),Ayers 2017 PMID:28650338
+t_cell_inflamed,CXCL10,positive,IFN-gamma / T-cell-inflamed GEP (response-associated),Ayers 2017 PMID:28650338
+t_cell_inflamed,CXCL11,positive,IFN-gamma / T-cell-inflamed GEP (response-associated),Ayers 2017 PMID:28650338
+t_cell_inflamed,IDO1,positive,IFN-gamma / T-cell-inflamed GEP (response-associated),Ayers 2017 PMID:28650338
+t_cell_inflamed,HLA-DRA,positive,IFN-gamma / T-cell-inflamed GEP (response-associated),Ayers 2017 PMID:28650338
+t_cell_inflamed,CD8A,positive,IFN-gamma / T-cell-inflamed GEP (response-associated),Ayers 2017 PMID:28650338
+cytotoxic,GZMA,positive,Cytotoxic T/NK effector activity (response-associated),Rooney 2015 PMID:25594174
+cytotoxic,GZMB,positive,Cytotoxic T/NK effector activity (response-associated),Rooney 2015 PMID:25594174
+cytotoxic,PRF1,positive,Cytotoxic T/NK effector activity (response-associated),Rooney 2015 PMID:25594174
+cytotoxic,NKG7,positive,Cytotoxic T/NK effector activity (response-associated),Rooney 2015 PMID:25594174
+cytotoxic,GNLY,positive,Cytotoxic T/NK effector activity (response-associated),Rooney 2015 PMID:25594174
+antigen_presentation,B2M,positive,MHC-I antigen presentation machinery (response-associated),Chowell 2018 PMID:29217585
+antigen_presentation,HLA-A,positive,MHC-I antigen presentation machinery (response-associated),Chowell 2018 PMID:29217585
+antigen_presentation,HLA-B,positive,MHC-I antigen presentation machinery (response-associated),Chowell 2018 PMID:29217585
+antigen_presentation,HLA-C,positive,MHC-I antigen presentation machinery (response-associated),Chowell 2018 PMID:29217585
+antigen_presentation,TAP1,positive,MHC-I antigen presentation machinery (response-associated),Chowell 2018 PMID:29217585
+antigen_presentation,NLRC5,positive,MHC-I antigen presentation machinery (response-associated),Chowell 2018 PMID:29217585
+tgfb_exclusion,TGFB1,negative,TGF-beta / immune-exclusion (resistance-associated),Mariathasan 2018 PMID:29443960
+tgfb_exclusion,TGFBR2,negative,TGF-beta / immune-exclusion (resistance-associated),Mariathasan 2018 PMID:29443960
+tgfb_exclusion,ACTA2,negative,TGF-beta / immune-exclusion (resistance-associated),Mariathasan 2018 PMID:29443960
+tgfb_exclusion,COL1A1,negative,TGF-beta / immune-exclusion (resistance-associated),Mariathasan 2018 PMID:29443960
+tgfb_exclusion,FAP,negative,TGF-beta / immune-exclusion (resistance-associated),Mariathasan 2018 PMID:29443960
