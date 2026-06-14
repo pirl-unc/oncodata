@@ -6,12 +6,28 @@
 
 """Expression normalization: clean TPM + helpers (#35, Phase N)."""
 
+import inspect
+
 import numpy as np
 import pandas as pd
 import pytest
 
+import cancerdata
 from cancerdata import gene_families as gf
 from cancerdata import normalization as norm
+
+
+def test_public_normalization_functions_are_all_exported():
+    # Coherence guard: every undecorated function DEFINED in normalization.py is
+    # re-exported from the top-level package, so the surface can't drift back to
+    # "clean_tpm exported but its siblings aren't".
+    public = [
+        name
+        for name, obj in vars(norm).items()
+        if not name.startswith("_") and inspect.isfunction(obj) and obj.__module__ == norm.__name__
+    ]
+    missing = [n for n in public if n not in cancerdata.__all__ or not hasattr(cancerdata, n)]
+    assert not missing, f"normalization publics not exported from cancerdata: {missing}"
 
 
 def _matrix():

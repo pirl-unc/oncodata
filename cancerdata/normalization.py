@@ -128,7 +128,10 @@ def normalize_to_housekeeping(df: pd.DataFrame, value_cols=None) -> pd.DataFrame
     becomes NaN rather than silently staying on the input scale.
 
     ``value_cols`` defaults to every per-sample value column (not just named-TPM
-    columns), so a plain ``genes × samples`` frame normalizes as expected."""
+    columns), so a plain ``genes × samples`` frame normalizes as expected. A frame
+    without an ``Ensembl_Gene_ID`` column (no way to locate the panel) passes through
+    **unchanged** — call :func:`tpm_to_housekeeping_normalized` directly for the stats
+    dict that reports whether normalization was applied."""
     out, _ = tpm_to_housekeeping_normalized(df, value_cols=_value_cols(df, value_cols))
     return out
 
@@ -446,9 +449,12 @@ def tpm_to_housekeeping_normalized(
 
     The panel defaults to cancerdata's housekeeping gene set
     (:func:`cancerdata.gene_families.housekeeping_gene_ids`), matched by Ensembl id.
-    Returns ``(normalized_df, stats)`` with per-column denominator + panel coverage; a
-    column with no measurable panel gene is blanked to NaN (never left on the input
-    scale beside normalized siblings)."""
+    ``value_cols`` defaults to the **named-TPM** columns (:func:`is_expression_value_col`)
+    — for a plain ``genes × samples`` frame whose columns aren't ``*_TPM``, pass them
+    explicitly or use :func:`normalize_to_housekeeping` (which defaults to all sample
+    columns). Returns ``(normalized_df, stats)`` with per-column denominator + panel
+    coverage; a column with no measurable panel gene is blanked to NaN (never left on
+    the input scale beside normalized siblings)."""
     if df is None:
         return None, {"applied": False, "reason": "no table", "columns": {}}
     out = df.copy()
