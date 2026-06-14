@@ -120,15 +120,16 @@ def filter_technical_rna(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def normalize_to_housekeeping(df: pd.DataFrame, value_cols=None) -> pd.DataFrame:
-    """Rescale each value column by its housekeeping-gene median (unitless: 1.0 =
-    baseline). NaN/non-positive housekeeping median -> that column becomes NaN."""
-    cols = _value_cols(df, value_cols)
-    hk = gene_families.housekeeping_gene_ids()
-    hk_rows = _unversioned(df["Ensembl_Gene_ID"]).isin(hk)
-    out = df.copy()
-    for c in cols:
-        med = df.loc[hk_rows, c].median()
-        out[c] = df[c] / med if med and med > 0 else np.nan
+    """Rescale each value column to its housekeeping-panel baseline (unitless: 1.0 =
+    panel level). The df-only convenience over :func:`tpm_to_housekeeping_normalized`
+    (the canonical normalizer, which also returns per-column diagnostics) — both use the
+    **geometric mean** of the housekeeping panel, the single housekeeping method (see
+    that function for why geomean over median). A column with no measurable panel gene
+    becomes NaN rather than silently staying on the input scale.
+
+    ``value_cols`` defaults to every per-sample value column (not just named-TPM
+    columns), so a plain ``genes × samples`` frame normalizes as expected."""
+    out, _ = tpm_to_housekeeping_normalized(df, value_cols=_value_cols(df, value_cols))
     return out
 
 
@@ -436,10 +437,18 @@ def tpm_to_housekeeping_normalized(
     panel, putting expression on a unit-free ratio-to-baseline scale that survives
     library-prep depth drift in a way TPM doesn't.
 
+    The single, canonical housekeeping normalizer — the method behind
+    ``per_sample_expression(normalize="tpm_clean_hk")`` and the df-only convenience
+    :func:`normalize_to_housekeeping`. The geometric mean (the geNorm convention) is
+    used over the median because it is the natural centre for multiplicative
+    log-normal expression and is dominated by no single deviating reference gene; a
+    small ``pseudocount`` keeps it finite through zeros.
+
     The panel defaults to cancerdata's housekeeping gene set
     (:func:`cancerdata.gene_families.housekeeping_gene_ids`), matched by Ensembl id.
-    A small ``pseudocount`` makes the geometric mean robust to zeros. Returns
-    ``(normalized_df, stats)`` with per-column denominator + panel coverage."""
+    Returns ``(normalized_df, stats)`` with per-column denominator + panel coverage; a
+    column with no measurable panel gene is blanked to NaN (never left on the input
+    scale beside normalized siblings)."""
     if df is None:
         return None, {"applied": False, "reason": "no table", "columns": {}}
     out = df.copy()
@@ -478,7 +487,7 @@ def tpm_to_housekeeping_normalized(
             # No measurable panel genes in this column -> it can't be put on the
             # ratio-to-baseline scale. Blank it to NaN rather than silently leaving
             # it on the raw-TPM scale alongside normalized siblings (the scale-mixing
-            # trap; matches normalize_to_housekeeping's contract).
+            # trap).
             out[col] = np.nan
     return out, {
         "applied": applied,

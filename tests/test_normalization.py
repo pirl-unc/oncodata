@@ -92,12 +92,14 @@ def test_log_and_rank_helpers():
 
 
 def test_normalize_to_housekeeping():
-    # housekeeping genes present -> column scaled by their median (1.0 = baseline)
+    # housekeeping genes present -> column scaled by their panel GEOMEAN (the single
+    # housekeeping method; this convenience delegates to tpm_to_housekeeping_normalized).
     hk = list(gf.housekeeping_gene_ids())[:2]
     gt = pd.DataFrame({"Ensembl_Gene_ID": [*hk, "ENSG00000999999"], "Symbol": ["H1", "H2", "X"]})
-    df = gt.assign(s1=[10.0, 30.0, 100.0])  # hk median = 20
+    df = gt.assign(s1=[10.0, 30.0, 100.0])
+    denom = np.exp(np.mean(np.log(np.array([10.0, 30.0]) + 0.1)))  # geomean(+pseudocount)
     out = norm.normalize_to_housekeeping(df)
-    assert np.allclose(out["s1"], [0.5, 1.5, 5.0])
+    assert np.allclose(out["s1"], np.array([10.0, 30.0, 100.0]) / denom)
 
 
 # ---- FPKM->TPM / renormalize-to-million ----
