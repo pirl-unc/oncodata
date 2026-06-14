@@ -524,11 +524,14 @@ def representative_cohort_samples(
     return long
 
 
-def _biological_per_sample(code, *, proteoform: bool, auto_fetch: bool) -> pd.DataFrame:
+def _biological_per_sample(
+    code, *, proteoform: bool, auto_fetch: bool, scope: str = "cta"
+) -> pd.DataFrame:
     """Clean-TPM per-sample matrix with technical/censored genes dropped — the
     biological view the summary artifacts are built on — collapsed to proteoform level
-    when requested. The runtime input to the percentile / within-sample build cores,
-    so a summary can be recomputed on the fly from the per-sample matrix (no shard)."""
+    (in ``scope``) when requested. The runtime input to the percentile / within-sample
+    build cores, so a summary can be recomputed on the fly from the per-sample matrix
+    (no shard). ``scope`` is ignored when ``proteoform`` is False."""
     from .gene_families import clean_tpm_censored_gene_ids
 
     clean = per_sample_expression(code, normalize="tpm_clean", auto_fetch=auto_fetch)
@@ -538,12 +541,12 @@ def _biological_per_sample(code, *, proteoform: bool, auto_fetch: bool) -> pd.Da
     if proteoform:
         from .proteoforms import collapse_to_proteoforms
 
-        bio = collapse_to_proteoforms(bio, sample_cols=sample_columns(bio))
+        bio = collapse_to_proteoforms(bio, scope=scope, sample_cols=sample_columns(bio))
     return bio
 
 
 def _read_shard_or_recompute(
-    dataset: _ShardDataset, code: str, *, proteoform: bool, auto_fetch: bool
+    dataset: _ShardDataset, code: str, *, proteoform: bool, auto_fetch: bool, scope: str = "cta"
 ) -> pd.DataFrame:
     """Read ``code``'s shard for ``dataset``; if no shard is present, recompute it on
     the fly from the per-sample matrix via the dataset's ``_build`` core (the same core
@@ -557,7 +560,9 @@ def _read_shard_or_recompute(
     if shard.exists():
         return pd.read_parquet(shard)
     try:
-        bio = _biological_per_sample(code, proteoform=proteoform, auto_fetch=auto_fetch)
+        bio = _biological_per_sample(
+            code, proteoform=proteoform, auto_fetch=auto_fetch, scope=scope
+        )
     except FileNotFoundError as e:
         variant = "proteoform-summed " if proteoform else ""
         raise ValueError(
@@ -571,7 +576,12 @@ def _read_shard_or_recompute(
 
 
 def cohort_gene_percentiles(
-    cancer_type, *, as_tpm: bool = True, proteoform: bool = False, auto_fetch: bool = False
+    cancer_type,
+    *,
+    as_tpm: bool = True,
+    proteoform: bool = False,
+    scope: str = "cta",
+    auto_fetch: bool = False,
 ) -> pd.DataFrame:
     """Tail-weighted per-gene percentile vector for one cohort.
 
@@ -587,7 +597,8 @@ def cohort_gene_percentiles(
 
     With ``proteoform=True``, the vector is one row per proteoform key
     (``proteoform_key``/``Symbol`` carry the collapsed identity), identical-protein
-    members summed **before** the percentiles are computed.
+    members summed **before** the percentiles are computed (``scope`` ``"cta"``/``"genome"``,
+    ignored when ``proteoform`` is False).
 
     The shipped percentile **shard** can't be converted to the proteoform view (you
     can't sum already-computed percentiles), so when no shard is present the vector is
@@ -597,7 +608,9 @@ def cohort_gene_percentiles(
     clear error.
     """
     code = resolve_cancer_type(cancer_type)
-    df = _read_shard_or_recompute(_PERCENTILES, code, proteoform=proteoform, auto_fetch=auto_fetch)
+    df = _read_shard_or_recompute(
+        _PERCENTILES, code, proteoform=proteoform, auto_fetch=auto_fetch, scope=scope
+    )
     bp_cols = sample_columns(df)
     df[bp_cols] = df[bp_cols].astype("float32")
     if as_tpm:
@@ -621,7 +634,12 @@ def available_within_sample_cohorts(*, proteoform: bool = False) -> list[str]:
 
 
 def within_sample_top_fraction(
-    cancer_type, *, threshold: float = 0.95, proteoform: bool = False, auto_fetch: bool = False
+    cancer_type,
+    *,
+    threshold: float = 0.95,
+    proteoform: bool = False,
+    scope: str = "cta",
+    auto_fetch: bool = False,
 ) -> pd.DataFrame:
     """Per-gene fraction of a cohort's samples in which the gene is highly
     expressed *within that sample* — the "top ~5% expressed gene in this tumor"
@@ -634,7 +652,8 @@ def within_sample_top_fraction(
     With ``proteoform=True``, identical-protein paralogs (CTAG1A+CTAG1B, the CT47A
     family, …) are summed per sample *before* the within-sample ranking, so a
     duplicated antigen is ranked as one proteoform rather than several individually-
-    diluted genes (``proteoform_key``/``Symbol`` carry the collapsed identity). Note
+    diluted genes (``proteoform_key``/``Symbol`` carry the collapsed identity;
+    ``scope`` ``"cta"``/``"genome"``, ignored when ``proteoform`` is False). Note
     collapsing members shrinks the gene axis the within-sample rank is computed over,
     so an ungrouped gene's fraction can shift slightly vs the gene variant.
 
@@ -648,7 +667,7 @@ def within_sample_top_fraction(
         raise ValueError(f"threshold must be one of {sorted(_WITHIN_SAMPLE_THRESHOLD_COLS)}")
     code = resolve_cancer_type(cancer_type)
     df = _read_shard_or_recompute(
-        _WITHIN_SAMPLE, code, proteoform=proteoform, auto_fetch=auto_fetch
+        _WITHIN_SAMPLE, code, proteoform=proteoform, auto_fetch=auto_fetch, scope=scope
     )
     keep = [*id_columns(df), col]
     if "n_samples" in df.columns:
@@ -812,14 +831,16 @@ def gene_cohort_percentiles(
 
 
 def proteoform_cohort_percentiles(
-    cancer_type, *, as_tpm: bool = True, auto_fetch: bool = False
+    cancer_type, *, as_tpm: bool = True, scope: str = "cta", auto_fetch: bool = True
 ) -> pd.DataFrame:
     """Proteoform-level per-cohort **percentile vectors** (members summed before
-    ranking). Gene-level counterpart: :func:`gene_cohort_percentiles`. Computed on the
-    fly from the per-sample matrix until the proteoform shard ships (``auto_fetch=True``
-    to download the matrix)."""
+    ranking, ``scope`` ``"cta"``/``"genome"``). Gene-level counterpart:
+    :func:`gene_cohort_percentiles`. No proteoform shard ships yet, so this **always**
+    recomputes from the per-sample matrix — hence ``auto_fetch`` defaults to ``True``
+    here (unlike the gene variant, which reads a shipped shard); pass ``False`` to
+    require the matrix already be cached."""
     return cohort_gene_percentiles(
-        cancer_type, as_tpm=as_tpm, proteoform=True, auto_fetch=auto_fetch
+        cancer_type, as_tpm=as_tpm, proteoform=True, scope=scope, auto_fetch=auto_fetch
     )
 
 
@@ -832,13 +853,15 @@ def gene_within_sample_top_fraction(
 
 
 def proteoform_within_sample_top_fraction(
-    cancer_type, *, threshold: float = 0.95, auto_fetch: bool = False
+    cancer_type, *, threshold: float = 0.95, scope: str = "cta", auto_fetch: bool = True
 ) -> pd.DataFrame:
-    """Proteoform-level within-sample top-fraction prevalence. Gene-level counterpart:
-    :func:`gene_within_sample_top_fraction`. Computed on the fly from the per-sample
-    matrix until the proteoform shard ships (``auto_fetch=True`` to download it)."""
+    """Proteoform-level within-sample top-fraction prevalence (``scope``
+    ``"cta"``/``"genome"``). Gene-level counterpart: :func:`gene_within_sample_top_fraction`.
+    No proteoform shard ships yet, so this **always** recomputes from the per-sample
+    matrix — hence ``auto_fetch`` defaults to ``True`` here (unlike the gene variant,
+    which reads a shipped shard); pass ``False`` to require the matrix already be cached."""
     return within_sample_top_fraction(
-        cancer_type, threshold=threshold, proteoform=True, auto_fetch=auto_fetch
+        cancer_type, threshold=threshold, proteoform=True, scope=scope, auto_fetch=auto_fetch
     )
 
 

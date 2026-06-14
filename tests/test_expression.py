@@ -135,6 +135,56 @@ def test_cohort_gene_percentiles_proteoform_computed_on_the_fly(
     assert out.set_index("Symbol").loc["A1/2", "p100"] == pytest.approx(10.0, rel=1e-2)
 
 
+def test_cohort_gene_percentiles_threads_scope(proteoform_percentile_cache, monkeypatch):
+    # scope= reaches the on-the-fly collapse: the cta universe leaves A1/A2 separate,
+    # the genome universe groups them. Previously scope was silently fixed.
+    import cancerdata.proteoforms as pmod
+
+    fake = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["ENSG_A1", "ENSG_A2", "ENSG_B"],
+            "Symbol": ["A1", "A2", "B"],
+            "s1": [3.0, 5.0, 1.0],
+            "s2": [9.0, 1.0, 4.0],
+        }
+    )
+    monkeypatch.setattr(expression, "per_sample_expression", lambda code, **k: fake.copy())
+    maps = {"cta": {}, "genome": {"A1/A2": ["ENSG_A1", "ENSG_A2"]}}
+    monkeypatch.setattr(pmod, "proteoform_group_map", lambda *, scope="cta": maps[scope])
+
+    cta = expression.cohort_gene_percentiles("LUAD", proteoform=True, scope="cta", auto_fetch=False)
+    assert {"A1", "A2"} <= set(cta["Symbol"])  # cta universe: ungrouped here
+    genome = expression.cohort_gene_percentiles(
+        "LUAD", proteoform=True, scope="genome", auto_fetch=False
+    )
+    assert "A1/2" in set(genome["Symbol"]) and "A1" not in set(genome["Symbol"])  # collapsed
+
+
+def test_proteoform_summary_wrappers_thread_scope_and_default_autofetch_true(monkeypatch):
+    # The proteoform percentile/within-sample wrappers always recompute (no shard
+    # ships), so they default auto_fetch=True (vs the gene variant's False) and thread scope.
+    seen = {}
+    monkeypatch.setattr(
+        expression, "cohort_gene_percentiles", lambda ct, **k: seen.update(k) or pd.DataFrame()
+    )
+    expression.proteoform_cohort_percentiles("X", scope="genome")
+    assert seen["proteoform"] is True and seen["scope"] == "genome" and seen["auto_fetch"] is True
+
+    seen.clear()
+    monkeypatch.setattr(
+        expression, "within_sample_top_fraction", lambda ct, **k: seen.update(k) or pd.DataFrame()
+    )
+    expression.proteoform_within_sample_top_fraction("X", scope="genome")
+    assert seen["proteoform"] is True and seen["scope"] == "genome" and seen["auto_fetch"] is True
+    # The gene variant still defaults auto_fetch=False (reads a shipped shard).
+    seen.clear()
+    monkeypatch.setattr(
+        expression, "cohort_gene_percentiles", lambda ct, **k: seen.update(k) or pd.DataFrame()
+    )
+    expression.gene_cohort_percentiles("X")
+    assert seen["auto_fetch"] is False
+
+
 def test_representatives_provenance_requires_long_format():
     # Provenance is per-representative; asking for it in the default wide form is
     # a no-op, so it must fail loudly rather than silently dropping the request.
