@@ -265,6 +265,67 @@ def cohort_mean_expression(
     return out
 
 
+#: Per-gene cohort summary statistic -> output column. The percentiles are taken across
+#: the cohort's samples (the same axis as :func:`cohort_gene_percentiles`).
+_COHORT_STAT_PERCENTILES = {
+    0: "min",
+    5: "p5",
+    10: "p10",
+    20: "p20",
+    25: "q1",
+    50: "median",
+    75: "q3",
+    80: "p80",
+    90: "p90",
+    95: "p95",
+    100: "max",
+}
+
+
+def cohort_stats(
+    cancer_type,
+    *,
+    normalize: str = "tpm_clean",
+    auto_fetch: bool = True,
+    proteoform: bool = False,
+    scope: str = "cta",
+) -> pd.DataFrame:
+    """Per-gene **summary statistics** across a cohort's samples, in one pass —
+    ``mean``, ``std`` and the percentiles ``min, p5, p10, p20, q1, median, q3, p80,
+    p90, p95, max``.
+
+    The richer companion to :func:`cohort_mean_expression` (a single statistic) and
+    :func:`cohort_gene_percentiles` (the dense percentile vector): everything a consumer
+    needs to describe a gene's distribution over the cohort in one frame. Computed on
+    the per-sample matrix in the ``normalize`` space (linear clean TPM by default; pass
+    ``"tpm_clean_log1p"`` for log-space stats).
+
+    ``proteoform=True`` summarizes the reduced proteoform key space (members summed per
+    sample first, ``scope`` ``"cta"``/``"genome"``) — a proteoform-level frame carrying
+    ``proteoform_key`` (see :func:`cancerdata.proteoforms.expression_level`). Returns the
+    id columns plus one column per statistic."""
+    import warnings
+
+    df = per_sample_expression(
+        cancer_type, normalize=normalize, auto_fetch=auto_fetch, proteoform=proteoform, scope=scope
+    )
+    id_cols = [c for c in ID_COLUMNS if c in df.columns]
+    samples = [c for c in df.columns if c not in id_cols]
+    if not samples:
+        raise ValueError(f"no per-sample columns to summarize for {cancer_type!r}")
+    mat = df[samples].to_numpy(dtype=float)
+    out = df[id_cols].copy()
+    pcts = list(_COHORT_STAT_PERCENTILES)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN gene rows -> NaN
+        out["mean"] = np.nanmean(mat, axis=1)
+        out["std"] = np.nanstd(mat, axis=1)
+        q = np.nanpercentile(mat, pcts, axis=1)  # (len(pcts), n_genes)
+    for i, p in enumerate(pcts):
+        out[_COHORT_STAT_PERCENTILES[p]] = q[i]
+    return out
+
+
 def representative_cohort_samples(
     cancer_types: str | Iterable[str] | None = None,
     *,
@@ -578,6 +639,24 @@ def proteoform_cohort_mean_expression(
         auto_fetch=auto_fetch,
         proteoform=True,
         scope=scope,
+    )
+
+
+def gene_cohort_stats(
+    cancer_type, *, normalize: str = "tpm_clean", auto_fetch: bool = True
+) -> pd.DataFrame:
+    """Gene-level per-gene cohort **summary statistics** (mean/std/min/p5/p10/p20/q1/
+    median/q3/p80/p90/p95/max). Proteoform counterpart: :func:`proteoform_cohort_stats`."""
+    return cohort_stats(cancer_type, normalize=normalize, auto_fetch=auto_fetch)
+
+
+def proteoform_cohort_stats(
+    cancer_type, *, normalize: str = "tpm_clean", auto_fetch: bool = True, scope: str = "cta"
+) -> pd.DataFrame:
+    """Proteoform-level per-gene cohort **summary statistics**. Gene-level counterpart:
+    :func:`gene_cohort_stats`."""
+    return cohort_stats(
+        cancer_type, normalize=normalize, auto_fetch=auto_fetch, proteoform=True, scope=scope
     )
 
 

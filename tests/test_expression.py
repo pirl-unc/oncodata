@@ -346,6 +346,55 @@ def test_gene_named_accessors_are_gene_level(monkeypatch):
     assert seen["ws"].get("proteoform", False) is False and seen["ws"]["threshold"] == 0.9
 
 
+def test_cohort_stats_full_suite(monkeypatch):
+    fixture = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["E1"],
+            "Symbol": ["A"],
+            "s1": [10.0],
+            "s2": [20.0],
+            "s3": [30.0],
+            "s4": [40.0],
+        }
+    )
+    monkeypatch.setattr(expression, "per_sample_expression", lambda *a, **k: fixture.copy())
+    s = expression.cohort_stats("X")
+    assert set(s.columns) >= {
+        "mean",
+        "std",
+        "min",
+        "p5",
+        "p10",
+        "p20",
+        "q1",
+        "median",
+        "q3",
+        "p80",
+        "p90",
+        "p95",
+        "max",
+    }
+    row = s.iloc[0]
+    assert row["mean"] == pytest.approx(25.0)
+    assert row["std"] == pytest.approx(np.std([10, 20, 30, 40]))
+    assert row["min"] == 10.0 and row["max"] == 40.0
+    assert row["median"] == pytest.approx(25.0)
+    assert row["q1"] == pytest.approx(17.5) and row["q3"] == pytest.approx(32.5)
+    assert row["p90"] == pytest.approx(37.0)
+
+
+def test_cohort_stats_named_accessors_delegate(monkeypatch):
+    seen = {}
+    fixture = pd.DataFrame({"Ensembl_Gene_ID": ["E1"], "Symbol": ["A"], "s1": [1.0], "s2": [2.0]})
+    monkeypatch.setattr(
+        expression, "per_sample_expression", lambda c, **k: seen.update(k) or fixture.copy()
+    )
+    expression.gene_cohort_stats("X")
+    assert seen.get("proteoform", False) is False
+    expression.proteoform_cohort_stats("X", scope="genome")
+    assert seen["proteoform"] is True and seen["scope"] == "genome"
+
+
 def test_cohort_mean_expression_bad_statistic(monkeypatch):
     monkeypatch.setattr(expression, "per_sample_expression", lambda *a, **k: pd.DataFrame())
     with pytest.raises(ValueError, match="statistic must be"):
