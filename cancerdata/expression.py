@@ -40,7 +40,7 @@ from . import data_bundle, source_matrices
 from ._build import WITHIN_SAMPLE_THRESHOLDS as _WITHIN_SAMPLE_THRESHOLD_COLS
 from .cancer_types import cohort_aggregates, resolve_cancer_type
 from .expression_engine import ID_COLUMNS
-from .load_dataset import _BUNDLED_DATA_DIR, _register_derived_cache
+from .load_dataset import _BUNDLED_DATA_DIR, _register_derived_cache, get_data
 from .normalization import clean_tpm
 
 _REPRESENTATIVES_DIR = "cancer-reference-expression-representatives"
@@ -733,3 +733,46 @@ def gene_representative_samples(
         format=format,
         include_provenance=include_provenance,
     )
+
+
+def pan_cancer_expression(
+    genes: str | Iterable[str] | None = None,
+    *,
+    to_tpm: bool = True,
+) -> pd.DataFrame:
+    """Wide pan-cancer reference: each gene's expression across **50 HPA normal
+    tissues** and **33 TCGA tumor cohorts**, tumor and normal side by side in one
+    frame — the combined companion to the per-cohort accessors above.
+
+    Columns: ``Ensembl_Gene_ID``, ``Symbol``, the HPA normal-tissue columns
+    ``nTPM_<tissue>`` (already TPM-scale), and the TCGA cohort columns (shipped as
+    ``FPKM_<CODE>``). With ``to_tpm`` (the default) the TCGA columns are converted
+    FPKM→TPM — rescaled per cohort to sum 1e6 over all genes — and renamed
+    ``TPM_<CODE>`` so every value column is on a comparable TPM scale; the HPA
+    ``nTPM_`` columns are passed through unchanged. Pass ``to_tpm=False`` to keep
+    the raw ``FPKM_`` columns.
+
+    ``genes`` filters to the given Ensembl gene ids (version-insensitive) or
+    symbols; ``None`` returns the full matrix. The FPKM→TPM conversion runs over
+    **all** genes before any filtering, so a filtered slice still carries the
+    cohort-wide TPM scaling."""
+    df = get_data("pan-cancer-expression")
+    if to_tpm:
+        fpkm_cols = [c for c in df.columns if c.startswith("FPKM_")]
+        if fpkm_cols:
+            from .normalization import fpkm_to_tpm
+
+            df, _ = fpkm_to_tpm(df, value_cols=fpkm_cols)
+            df = df.rename(columns={c: "TPM_" + c[len("FPKM_") :] for c in fpkm_cols})
+    if genes is not None:
+        wanted = {genes} if isinstance(genes, str) else set(genes)
+        wanted = {str(g) for g in wanted}
+        unversioned = {g.split(".")[0] for g in wanted}
+        ids = df["Ensembl_Gene_ID"].astype(str)
+        mask = (
+            ids.isin(wanted)
+            | ids.str.split(".").str[0].isin(unversioned)
+            | df["Symbol"].astype(str).isin(wanted)
+        )
+        df = df[mask].reset_index(drop=True)
+    return df
