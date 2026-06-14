@@ -411,6 +411,47 @@ def test_cohort_stats_named_accessors_delegate(monkeypatch):
     assert seen["proteoform"] is True and seen["scope"] == "genome"
 
 
+def _pan_cancer_fixture():
+    return pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["ENSG00000001.5", "ENSG00000002"],
+            "Symbol": ["GENE1", "GENE2"],
+            "nTPM_liver": [3.0, 7.0],
+            "FPKM_LUAD": [2.0, 8.0],
+            "FPKM_BLCA": [5.0, 5.0],
+        }
+    )
+
+
+def test_pan_cancer_expression_converts_fpkm_to_tpm(monkeypatch):
+    monkeypatch.setattr(expression, "get_data", lambda name: _pan_cancer_fixture())
+    out = expression.pan_cancer_expression()
+    # FPKM_<CODE> tumor columns become TPM_<CODE>; HPA nTPM passes through.
+    assert "TPM_LUAD" in out.columns and "FPKM_LUAD" not in out.columns
+    assert "nTPM_liver" in out.columns
+    # Each TCGA column is rescaled to sum 1e6: FPKM_LUAD [2,8] -> [200000, 800000].
+    assert out["TPM_LUAD"].tolist() == pytest.approx([200000.0, 800000.0])
+    assert out["TPM_BLCA"].sum() == pytest.approx(1e6)
+
+
+def test_pan_cancer_expression_raw_fpkm(monkeypatch):
+    monkeypatch.setattr(expression, "get_data", lambda name: _pan_cancer_fixture())
+    out = expression.pan_cancer_expression(to_tpm=False)
+    assert "FPKM_LUAD" in out.columns and "TPM_LUAD" not in out.columns
+    assert out["FPKM_LUAD"].tolist() == [2.0, 8.0]
+
+
+def test_pan_cancer_expression_gene_filter(monkeypatch):
+    monkeypatch.setattr(expression, "get_data", lambda name: _pan_cancer_fixture())
+    # Filter by symbol, and by unversioned Ensembl id (fixture id is versioned).
+    by_symbol = expression.pan_cancer_expression(genes="GENE2")
+    assert by_symbol["Symbol"].tolist() == ["GENE2"]
+    by_id = expression.pan_cancer_expression(genes=["ENSG00000001"])
+    assert by_id["Symbol"].tolist() == ["GENE1"]
+    # Conversion still reflects the cohort-wide scaling computed before filtering.
+    assert by_id["TPM_LUAD"].iloc[0] == pytest.approx(200000.0)
+
+
 def test_cohort_mean_expression_bad_statistic(monkeypatch):
     monkeypatch.setattr(expression, "per_sample_expression", lambda *a, **k: pd.DataFrame())
     with pytest.raises(ValueError, match="statistic must be"):
