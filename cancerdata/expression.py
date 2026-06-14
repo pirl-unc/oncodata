@@ -50,6 +50,13 @@ _PERCENTILES_PROTEOFORM_DIR = "cancer-reference-expression-percentiles-proteofor
 _WITHIN_SAMPLE_DIR = "cancer-reference-expression-within-sample-top5"
 _WITHIN_SAMPLE_PROTEOFORM_DIR = "cancer-reference-expression-within-sample-top5-proteoform"
 
+# How many cleaned per-sample matrices to keep in the in-process LRU. Each frame is
+# a full gene x sample matrix (~100MB+), so the default is intentionally small. A
+# workflow that pools the same N>2 cohorts repeatedly (e.g. a gene then a proteoform
+# pool over one cohort set) can raise CANCERDATA_PER_SAMPLE_CACHE to keep them all
+# warm and skip the re-read, trading memory for latency.
+_PER_SAMPLE_CACHE_SIZE = max(1, int(os.environ.get("CANCERDATA_PER_SAMPLE_CACHE", "2")))
+
 
 def _bundle_subdir(name: str, *, auto_fetch: bool = True) -> Path:
     """Locate a bundle shard directory: an in-repo checkout (``cancerdata/data/…``)
@@ -206,7 +213,7 @@ def per_sample_expression(
     return out
 
 
-@lru_cache(maxsize=2)
+@lru_cache(maxsize=_PER_SAMPLE_CACHE_SIZE)
 def _load_per_sample_matrix(path: str, mtime: float, normalize: str) -> pd.DataFrame:
     """Read + normalize one cohort's per-sample matrix (the cached canonical frame).
     ``path``/``mtime`` identify the on-disk parquet (mtime keys cache invalidation);

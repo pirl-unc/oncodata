@@ -226,3 +226,27 @@ def test_tpm_to_housekeeping_normalized():
     # geomean of [100,100] (+0.1) ~ 100.1 -> GENE 50 / 100.1 ~ 0.4995
     assert stats["applied"] is True
     assert out.loc[out["Symbol"] == "GENE", "s1_TPM"].iloc[0] == pytest.approx(50 / 100.1, rel=1e-3)
+
+
+def test_tpm_to_housekeeping_normalized_blanks_column_with_no_panel():
+    # A column whose housekeeping panel rows are all NaN can't be put on the
+    # ratio-to-baseline scale; it must become NaN, not silently stay raw-TPM
+    # alongside normalized siblings (the scale-mixing trap).
+    from cancerdata import gene_families
+
+    hk = list(gene_families.housekeeping_gene_ids())[:2]
+    df = pd.DataFrame(
+        {
+            "Symbol": ["HK1", "HK2", "GENE"],
+            "Ensembl_Gene_ID": [hk[0], hk[1], "ENSG_X"],
+            "good_TPM": [100.0, 100.0, 50.0],
+            "empty_TPM": [np.nan, np.nan, 50.0],  # panel genes unmeasured here
+        }
+    )
+    out, stats = norm.tpm_to_housekeeping_normalized(df, value_cols=["good_TPM", "empty_TPM"])
+    # The measurable column is normalized; the panel-less column is fully NaN, not 50.0.
+    assert out.loc[out["Symbol"] == "GENE", "good_TPM"].iloc[0] == pytest.approx(
+        50 / 100.1, rel=1e-3
+    )
+    assert out["empty_TPM"].isna().all()
+    assert stats["columns"]["empty_TPM"]["denominator"] == 0.0

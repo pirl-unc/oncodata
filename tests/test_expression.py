@@ -157,6 +157,15 @@ def _raw_matrix(tmp_path):
     return path
 
 
+def test_per_sample_matrix_cache_size_is_tunable():
+    # The LRU is wired to the (env-configurable) constant, not a hardcoded literal,
+    # so heavy pooling workflows can keep >2 matrices warm via CANCERDATA_PER_SAMPLE_CACHE.
+    assert (
+        expression._load_per_sample_matrix.cache_info().maxsize == expression._PER_SAMPLE_CACHE_SIZE
+    )
+    assert expression._PER_SAMPLE_CACHE_SIZE >= 1
+
+
 def test_per_sample_expression_normalize_modes(tmp_path, monkeypatch):
     path = _raw_matrix(tmp_path)
     monkeypatch.setattr(expression.source_matrices, "ensure", lambda code: path)

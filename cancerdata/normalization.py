@@ -474,6 +474,12 @@ def tpm_to_housekeeping_normalized(
         if denom > 0:
             out[col] = pd.to_numeric(out[col], errors="coerce") / denom
             applied = True
+        else:
+            # No measurable panel genes in this column -> it can't be put on the
+            # ratio-to-baseline scale. Blank it to NaN rather than silently leaving
+            # it on the raw-TPM scale alongside normalized siblings (the scale-mixing
+            # trap; matches normalize_to_housekeeping's contract).
+            out[col] = np.nan
     return out, {
         "applied": applied,
         "reason": "divided by housekeeping geometric mean" if applied else "panel denominator <= 0",
