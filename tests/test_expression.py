@@ -166,6 +166,18 @@ def test_per_sample_matrix_cache_size_is_tunable():
     assert expression._PER_SAMPLE_CACHE_SIZE >= 1
 
 
+def test_per_sample_cache_size_tolerates_malformed_env(monkeypatch):
+    # A tuning knob must never break `import cancerdata`: a malformed/empty value
+    # falls back to the default rather than raising at parse time.
+    for bad in ("", "abc", "2.5"):
+        monkeypatch.setenv("CANCERDATA_PER_SAMPLE_CACHE", bad)
+        assert expression._per_sample_cache_size() == 2
+    monkeypatch.setenv("CANCERDATA_PER_SAMPLE_CACHE", "0")  # clamps to >=1
+    assert expression._per_sample_cache_size() == 1
+    monkeypatch.setenv("CANCERDATA_PER_SAMPLE_CACHE", "8")  # honored
+    assert expression._per_sample_cache_size() == 8
+
+
 def test_per_sample_expression_normalize_modes(tmp_path, monkeypatch):
     path = _raw_matrix(tmp_path)
     monkeypatch.setattr(expression.source_matrices, "ensure", lambda code: path)
