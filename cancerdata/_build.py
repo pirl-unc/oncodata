@@ -25,7 +25,7 @@ from collections.abc import Iterable, Mapping
 import numpy as np
 import pandas as pd
 
-from .expression_engine import ID_COLUMNS as _ID_COLS
+from .expression_engine import sample_columns
 
 #: Per-gene cohort percentile breakpoints — dense in the actionable upper tail so
 #: a consumer can place a sample's gene as a percentile rank within the cohort
@@ -67,11 +67,6 @@ WITHIN_SAMPLE_THRESHOLDS = {
     0.95: "frac_samples_top5pct",
     0.90: "frac_samples_top10pct",
 }
-
-
-def sample_columns(df: pd.DataFrame) -> list[str]:
-    """Per-sample value columns (everything that isn't a gene-id column)."""
-    return [c for c in df.columns if c not in _ID_COLS]
 
 
 def sum_proteoform_tpm(

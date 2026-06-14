@@ -41,6 +41,24 @@ import pandas as pd
 #: curated frames is :func:`is_expression_value_col`, a deliberately distinct concept.)
 ID_COLUMNS = ("proteoform_key", "Ensembl_Gene_ID", "Symbol", "proteoform_members")
 
+
+def id_columns(df: pd.DataFrame) -> list[str]:
+    """The identity columns of an expression frame, in canonical :data:`ID_COLUMNS`
+    order, restricted to those actually present (a gene-level frame lacks the
+    ``proteoform_*`` columns). The single definition of "which columns are identity",
+    so no consumer has to re-list them."""
+    return [c for c in ID_COLUMNS if c in df.columns]
+
+
+def sample_columns(df: pd.DataFrame) -> list[str]:
+    """The per-sample / per-representative **value** columns of an expression frame:
+    every column that is not one of the :data:`ID_COLUMNS`. The single definition of
+    "which columns hold expression values" — the partner of :func:`id_columns`, and
+    the one place the value/identity boundary is decided. (For the distinct *named*-TPM
+    rule on curated long tables, see :func:`is_expression_value_col`.)"""
+    return [c for c in df.columns if c not in ID_COLUMNS]
+
+
 _DEFAULT_TX_COLUMN_CANDIDATES = (
     "transcript",
     "transcript_id",

@@ -10,16 +10,45 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Read-only accessors over the per-cohort expression bundle.
+"""Read accessors over the per-cohort expression data.
 
-These read pre-computed parquet artifacts from the downloadable bundle — the
-heavy normalization that produced them runs offline in the build scripts, so the
-read path here is light (resolve a cancer code, read a parquet, maybe ``expm1``).
+This module is a small, regular surface over one underlying object — a cohort's
+**per-sample expression matrix** (genes × samples) — plus the pre-computed summary
+artifacts derived from it. The design is two orthogonal axes; everything here is a
+point on that grid, which is why the accessors look repetitive by construction
+rather than by accident.
 
-  - ``cohort_gene_percentiles`` — per-gene percentile vector for a cohort
-    (within-cohort, across samples): the "how high does this gene get in the
-    cohort tail" signal.
+**Axis 1 — expression level** (``proteoforms.py``). Every value is available at
+*gene* level (one row per Ensembl gene) or *proteoform* level (identical-protein
+paralogs summed per sample — CTAG1A+CTAG1B → NY-ESO-1 — keyed by ``proteoform_key``;
+see :mod:`cancerdata.proteoforms`). The base functions take ``proteoform=``/``scope=``
+flags; each also has an explicit ``gene_*`` / ``proteoform_*`` wrapper so the level is
+legible at the call site and discoverable by name. The wrappers are deliberately
+thin — the collapse logic lives in exactly one place (the base function).
+
+**Axis 2 — the dataset / reduction**:
+  - ``per_sample_expression`` — the raw matrix itself (one column per sample).
+  - ``cohort_mean_expression`` — one across-patient statistic (mean/median).
+  - ``cohort_stats`` / ``pooled_cohort_stats`` — the full per-gene statistic suite,
+    for one cohort or a heterogeneity-safe pool of several.
+  - ``cohort_gene_percentiles`` — the within-cohort percentile vector.
+  - ``within_sample_top_fraction`` — within-sample top-expression prevalence.
   - ``representative_cohort_samples`` — bounded medoid per-sample vectors.
+  - ``pan_cancer_expression`` — the wide tumor+normal HPA/TCGA reference (a distinct
+    data product, not the per-sample-matrix family).
+
+**Normalize spaces** (``per_sample_expression``'s ``normalize=``): raw TPM, clean
+two-compartment TPM (the default biological view), its ``log1p``, and the
+housekeeping ratio (``tpm_clean_hk``). Every summary computed live inherits the space.
+
+**Where the numbers come from.** The light artifacts (percentiles, within-sample,
+representatives) are pre-computed offline by the ``scripts/generate_*`` build cores
+and shipped as per-cohort parquet *shards*; the read path just resolves a code and
+reads a parquet. When a shard isn't shipped (every proteoform variant, today), the
+summary is **recomputed on the fly** from the per-sample matrix via the *same* build
+core, so shipped and on-the-fly values agree. Which artifact ships which variant, and
+whether a missing shard may be fetched, is recorded once in the :class:`_ShardDataset`
+registry rather than restated per accessor.
 
 The richer analysis accessors (``cancer_reference_expression`` etc.) live in
 pirlygenes; this module owns only the data-layer read surface that downstream
@@ -31,6 +60,7 @@ from __future__ import annotations
 import os
 import warnings
 from collections.abc import Iterable
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
@@ -40,15 +70,51 @@ import pandas as pd
 from . import data_bundle, source_matrices
 from ._build import WITHIN_SAMPLE_THRESHOLDS as _WITHIN_SAMPLE_THRESHOLD_COLS
 from .cancer_types import cohort_aggregates, resolve_cancer_type
-from .expression_engine import ID_COLUMNS
+from .expression_engine import id_columns, sample_columns
 from .load_dataset import _BUNDLED_DATA_DIR, _register_derived_cache, get_data
 from .normalization import clean_tpm
 
-_REPRESENTATIVES_DIR = "cancer-reference-expression-representatives"
-_PERCENTILES_DIR = "cancer-reference-expression-percentiles"
-_PERCENTILES_PROTEOFORM_DIR = "cancer-reference-expression-percentiles-proteoform"
-_WITHIN_SAMPLE_DIR = "cancer-reference-expression-within-sample-top5"
-_WITHIN_SAMPLE_PROTEOFORM_DIR = "cancer-reference-expression-within-sample-top5-proteoform"
+
+@dataclass(frozen=True)
+class _ShardDataset:
+    """One per-cohort summary artifact (one parquet shard per cohort code). The single
+    place that records, for each artifact: the bundle directory of its gene-level and
+    optional proteoform-level shards; whether each variant **ships in a released bundle**
+    (so a missing shard may be auto-fetched vs. must be computed on the fly); the
+    ``_build`` core that regenerates a missing shard from the per-sample matrix; and a
+    human ``noun`` for error messages. Replaces the parallel ``_*_DIR`` constants +
+    ``_*_root()`` + ``available_*()`` helpers that used to encode this per artifact."""
+
+    noun: str
+    gene_dir: str
+    gene_fetches: bool  # gene-level shard ships in a released bundle?
+    proteoform_dir: str | None = None  # None -> artifact has no proteoform variant
+    proteoform_fetches: bool = False  # proteoform shard ships? (none do yet)
+    build_attr: str | None = None  # _build core to recompute a missing shard on the fly
+
+
+# The expression summary artifacts. Proteoform shards aren't shipped in any bundle yet,
+# so they never auto-fetch — the proteoform variant is recomputed on the fly from the
+# per-sample matrix (see _read_shard_or_recompute) until those shards ship.
+_REPRESENTATIVES = _ShardDataset(
+    noun="representative-samples shard",
+    gene_dir="cancer-reference-expression-representatives",
+    gene_fetches=True,
+)
+_PERCENTILES = _ShardDataset(
+    noun="percentile vector",
+    gene_dir="cancer-reference-expression-percentiles",
+    gene_fetches=True,
+    proteoform_dir="cancer-reference-expression-percentiles-proteoform",
+    build_attr="cohort_percentile_vectors",
+)
+_WITHIN_SAMPLE = _ShardDataset(
+    noun="within-sample top-fraction vector",
+    gene_dir="cancer-reference-expression-within-sample-top5",
+    gene_fetches=False,  # not part of a released bundle yet -> never trigger a fetch
+    proteoform_dir="cancer-reference-expression-within-sample-top5-proteoform",
+    build_attr="within_sample_top_fractions",
+)
 
 
 # How many cleaned per-sample matrices to keep in the in-process LRU. Each frame is
@@ -93,6 +159,22 @@ def _available_shard_codes(root: Path) -> list[str]:
     return sorted(p.stem for p in root.glob("*.parquet"))
 
 
+def _shard_dir(dataset: _ShardDataset, *, proteoform: bool = False) -> Path:
+    """The bundle directory holding ``dataset``'s per-cohort shards (gene-level, or the
+    proteoform variant). The per-variant auto-fetch policy lives on the dataset record,
+    so it's decided in one place rather than re-stated at each call site."""
+    if proteoform:
+        if dataset.proteoform_dir is None:
+            raise ValueError(f"{dataset.noun} has no proteoform variant")
+        return _bundle_subdir(dataset.proteoform_dir, auto_fetch=dataset.proteoform_fetches)
+    return _bundle_subdir(dataset.gene_dir, auto_fetch=dataset.gene_fetches)
+
+
+def _available_cohorts(dataset: _ShardDataset, *, proteoform: bool = False) -> list[str]:
+    """Sorted cohort codes with a shipped shard for ``dataset`` (gene or proteoform)."""
+    return _available_shard_codes(_shard_dir(dataset, proteoform=proteoform))
+
+
 def _resolve_cancer_types(
     cancer_types: str | Iterable[str] | None,
     *,
@@ -124,28 +206,16 @@ def _resolve_cancer_types(
     return list(dict.fromkeys(out))
 
 
-def _representatives_root() -> Path:
-    return _bundle_subdir(_REPRESENTATIVES_DIR)
-
-
-def _percentiles_root(*, proteoform: bool = False) -> Path:
-    if proteoform:
-        # The proteoform-summed variant isn't in a released bundle yet, so never
-        # trigger a fetch for it.
-        return _bundle_subdir(_PERCENTILES_PROTEOFORM_DIR, auto_fetch=False)
-    return _bundle_subdir(_PERCENTILES_DIR)
-
-
 def available_representative_cohorts() -> list[str]:
     """Registry codes that ship a representative-samples shard (sorted)."""
-    return _available_shard_codes(_representatives_root())
+    return _available_cohorts(_REPRESENTATIVES)
 
 
 def available_percentile_cohorts(*, proteoform: bool = False) -> list[str]:
     """Cohort codes that ship a percentile-vector shard (sorted). With
     ``proteoform=True``, the proteoform-summed variant (one vector per proteoform
     key, identical-protein members collapsed before ranking)."""
-    return _available_shard_codes(_percentiles_root(proteoform=proteoform))
+    return _available_cohorts(_PERCENTILES, proteoform=proteoform)
 
 
 _PER_SAMPLE_NORMALIZE = ("tpm_raw", "tpm_clean", "tpm_clean_log1p", "tpm_clean_hk")
@@ -215,7 +285,7 @@ def per_sample_expression(
 
     linear = "tpm_raw" if normalize == "tpm_raw" else "tpm_clean"
     out = collapse_to_proteoforms(_load_per_sample_matrix(str(path), mtime, linear), scope=scope)
-    samples = [c for c in out.columns if c not in ID_COLUMNS]
+    samples = sample_columns(out)
     if normalize == "tpm_clean_log1p":
         out[samples] = np.log1p(out[samples].to_numpy(dtype=float))
     elif normalize == "tpm_clean_hk":
@@ -229,8 +299,8 @@ def _load_per_sample_matrix(path: str, mtime: float, normalize: str) -> pd.DataF
     ``path``/``mtime`` identify the on-disk parquet (mtime keys cache invalidation);
     the matrix must already be present."""
     raw = pd.read_parquet(path)
-    base = ["Ensembl_Gene_ID", "Symbol"]
-    samples = [c for c in raw.columns if c not in base]
+    base = id_columns(raw)
+    samples = sample_columns(raw)
     if normalize == "tpm_raw":
         return raw
     clean = clean_tpm(raw[samples], gene_table=raw[base])
@@ -291,8 +361,8 @@ def cohort_mean_expression(
         proteoform=proteoform,
         scope=scope,
     )
-    id_cols = [c for c in ID_COLUMNS if c in df.columns]
-    samples = [c for c in df.columns if c not in id_cols]
+    id_cols = id_columns(df)
+    samples = sample_columns(df)
     reducer = df[samples].mean(axis=1) if statistic == "mean" else df[samples].median(axis=1)
     out = df[id_cols].copy()
     out["expression"] = reducer.to_numpy()
@@ -364,8 +434,8 @@ def cohort_stats(
     df = per_sample_expression(
         cancer_type, normalize=normalize, auto_fetch=auto_fetch, proteoform=proteoform, scope=scope
     )
-    id_cols = [c for c in ID_COLUMNS if c in df.columns]
-    samples = [c for c in df.columns if c not in id_cols]
+    id_cols = id_columns(df)
+    samples = sample_columns(df)
     if not samples:
         raise ValueError(f"no per-sample columns to summarize for {cancer_type!r}")
     out = df[id_cols].copy()
@@ -404,7 +474,7 @@ def representative_cohort_samples(
         # long form. Fail loudly rather than silently dropping the request.
         raise ValueError("include_provenance=True requires format='long'")
 
-    root = _representatives_root()
+    root = _shard_dir(_REPRESENTATIVES)
     available = set(available_representative_cohorts())
     if cancer_types is None:
         codes = sorted(available)
@@ -412,12 +482,12 @@ def representative_cohort_samples(
         requested = _resolve_cancer_types(cancer_types, expand_aggregates=True)
         codes = [c for c in dict.fromkeys(requested) if c in available]
 
-    base = ["Ensembl_Gene_ID", "Symbol"]
+    base = ["Ensembl_Gene_ID", "Symbol"]  # representatives are a gene-level artifact
     wide = None
     long_parts = []
     for code in codes:
         shard = pd.read_parquet(root / f"{code}.parquet")
-        rep_cols = [c for c in shard.columns if c not in base]
+        rep_cols = sample_columns(shard)
         if k is not None:
             rep_cols = rep_cols[:k]
         if normalize == "tpm_clean_log1p":
@@ -459,7 +529,6 @@ def _biological_per_sample(code, *, proteoform: bool, auto_fetch: bool) -> pd.Da
     biological view the summary artifacts are built on — collapsed to proteoform level
     when requested. The runtime input to the percentile / within-sample build cores,
     so a summary can be recomputed on the fly from the per-sample matrix (no shard)."""
-    from ._build import sample_columns
     from .gene_families import clean_tpm_censored_gene_ids
 
     clean = per_sample_expression(code, normalize="tpm_clean", auto_fetch=auto_fetch)
@@ -471,6 +540,34 @@ def _biological_per_sample(code, *, proteoform: bool, auto_fetch: bool) -> pd.Da
 
         bio = collapse_to_proteoforms(bio, sample_cols=sample_columns(bio))
     return bio
+
+
+def _read_shard_or_recompute(
+    dataset: _ShardDataset, code: str, *, proteoform: bool, auto_fetch: bool
+) -> pd.DataFrame:
+    """Read ``code``'s shard for ``dataset``; if no shard is present, recompute it on
+    the fly from the per-sample matrix via the dataset's ``_build`` core (the same core
+    that produced the shipped shards — so the on-the-fly and shipped values agree).
+
+    The single home of the shard-or-recompute fallback shared by the percentile and
+    within-sample readers. Raises a clear :class:`ValueError` — not a bare
+    ``FileNotFoundError`` — when neither the shard nor the per-sample matrix is available
+    (the proteoform variant has no shipped shard yet, so it always takes this path)."""
+    shard = _shard_dir(dataset, proteoform=proteoform) / f"{code}.parquet"
+    if shard.exists():
+        return pd.read_parquet(shard)
+    try:
+        bio = _biological_per_sample(code, proteoform=proteoform, auto_fetch=auto_fetch)
+    except FileNotFoundError as e:
+        variant = "proteoform-summed " if proteoform else ""
+        raise ValueError(
+            f"no {variant}{dataset.noun} for {code!r} and its per-sample matrix isn't "
+            f"cached — fetch it (source_matrices.fetch / auto_fetch=True)."
+        ) from e
+    from importlib import import_module
+
+    build_core = getattr(import_module("cancerdata._build"), dataset.build_attr)
+    return build_core(bio, sample_columns(bio))
 
 
 def cohort_gene_percentiles(
@@ -500,22 +597,8 @@ def cohort_gene_percentiles(
     clear error.
     """
     code = resolve_cancer_type(cancer_type)
-    shard = _percentiles_root(proteoform=proteoform) / f"{code}.parquet"
-    if shard.exists():
-        df = pd.read_parquet(shard)
-    else:
-        from ._build import cohort_percentile_vectors, sample_columns
-
-        try:
-            bio = _biological_per_sample(code, proteoform=proteoform, auto_fetch=auto_fetch)
-        except FileNotFoundError as e:
-            variant = "proteoform-summed " if proteoform else ""
-            raise ValueError(
-                f"no {variant}percentile vector for {code!r} and its per-sample matrix "
-                f"isn't cached — fetch it (source_matrices.fetch / auto_fetch=True)."
-            ) from e
-        df = cohort_percentile_vectors(bio, sample_columns(bio))
-    bp_cols = [c for c in df.columns if c not in ID_COLUMNS]
+    df = _read_shard_or_recompute(_PERCENTILES, code, proteoform=proteoform, auto_fetch=auto_fetch)
+    bp_cols = sample_columns(df)
     df[bp_cols] = df[bp_cols].astype("float32")
     if as_tpm:
         df[bp_cols] = np.expm1(df[bp_cols])
@@ -529,18 +612,12 @@ def cohort_gene_percentiles(
 #: source of truth shared with the generator, so the read side and write side can't drift.
 
 
-def _within_sample_root(*, proteoform: bool = False) -> Path:
-    # Not (yet) part of a released bundle, so never trigger a 340 MB fetch.
-    name = _WITHIN_SAMPLE_PROTEOFORM_DIR if proteoform else _WITHIN_SAMPLE_DIR
-    return _bundle_subdir(name, auto_fetch=False)
-
-
 def available_within_sample_cohorts(*, proteoform: bool = False) -> list[str]:
     """Cohort codes that ship a within-sample top-fraction shard (sorted).
 
     With ``proteoform=True``, the proteoform-summed variant (identical-protein
     members collapsed before ranking — see :func:`within_sample_top_fraction`)."""
-    return _available_shard_codes(_within_sample_root(proteoform=proteoform))
+    return _available_cohorts(_WITHIN_SAMPLE, proteoform=proteoform)
 
 
 def within_sample_top_fraction(
@@ -570,22 +647,10 @@ def within_sample_top_fraction(
     if col is None:
         raise ValueError(f"threshold must be one of {sorted(_WITHIN_SAMPLE_THRESHOLD_COLS)}")
     code = resolve_cancer_type(cancer_type)
-    shard = _within_sample_root(proteoform=proteoform) / f"{code}.parquet"
-    if shard.exists():
-        df = pd.read_parquet(shard)
-    else:
-        from ._build import sample_columns, within_sample_top_fractions
-
-        try:
-            bio = _biological_per_sample(code, proteoform=proteoform, auto_fetch=auto_fetch)
-        except FileNotFoundError as e:
-            variant = "proteoform-summed " if proteoform else ""
-            raise ValueError(
-                f"no {variant}within-sample top-fraction vector for {code!r} and its "
-                f"per-sample matrix isn't cached — fetch it (auto_fetch=True)."
-            ) from e
-        df = within_sample_top_fractions(bio, sample_columns(bio))
-    keep = [c for c in ID_COLUMNS if c in df.columns] + [col]
+    df = _read_shard_or_recompute(
+        _WITHIN_SAMPLE, code, proteoform=proteoform, auto_fetch=auto_fetch
+    )
+    keep = [*id_columns(df), col]
     if "n_samples" in df.columns:
         keep.append("n_samples")
     return df[keep]
@@ -892,8 +957,8 @@ def pooled_cohort_stats(
         df = per_sample_expression(
             code, normalize=normalize, auto_fetch=auto_fetch, proteoform=proteoform, scope=scope
         )
-        id_cols = [c for c in ID_COLUMNS if c in df.columns]
-        samples = [c for c in df.columns if c not in id_cols]
+        id_cols = id_columns(df)
+        samples = sample_columns(df)
         if not samples:
             continue
         indexed = df.set_index(key)

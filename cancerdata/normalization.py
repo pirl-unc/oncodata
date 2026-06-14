@@ -30,13 +30,13 @@ import numpy as np
 import pandas as pd
 
 from . import gene_families
-from .expression_engine import ID_COLUMNS
+from .expression_engine import sample_columns
 
 
 def _value_cols(df: pd.DataFrame, value_cols=None) -> list[str]:
     if value_cols is not None:
         return list(value_cols)
-    return [c for c in df.columns if c not in ID_COLUMNS]
+    return sample_columns(df)
 
 
 def _unversioned(series: pd.Series) -> pd.Series:
