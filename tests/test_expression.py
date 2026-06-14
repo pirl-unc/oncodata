@@ -379,6 +379,7 @@ def test_cohort_stats_full_suite(monkeypatch):
         "mean",
         "std",
         "min",
+        "p1",
         "p5",
         "p10",
         "p20",
@@ -388,6 +389,7 @@ def test_cohort_stats_full_suite(monkeypatch):
         "p80",
         "p90",
         "p95",
+        "p99",
         "max",
     }
     row = s.iloc[0]

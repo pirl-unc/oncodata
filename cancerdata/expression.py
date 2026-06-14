@@ -285,6 +285,7 @@ def cohort_mean_expression(
 #: the cohort's samples (the same axis as :func:`cohort_gene_percentiles`).
 _COHORT_STAT_PERCENTILES = {
     0: "min",
+    1: "p1",
     5: "p5",
     10: "p10",
     20: "p20",
@@ -294,6 +295,7 @@ _COHORT_STAT_PERCENTILES = {
     80: "p80",
     90: "p90",
     95: "p95",
+    99: "p99",
     100: "max",
 }
 
@@ -307,8 +309,8 @@ def cohort_stats(
     scope: str = "cta",
 ) -> pd.DataFrame:
     """Per-gene **summary statistics** across a cohort's samples, in one pass —
-    ``mean``, ``std`` and the percentiles ``min, p5, p10, p20, q1, median, q3, p80,
-    p90, p95, max``.
+    ``mean``, ``std`` and the percentiles ``min, p1, p5, p10, p20, q1, median, q3,
+    p80, p90, p95, p99, max``.
 
     The richer companion to :func:`cohort_mean_expression` (a single statistic) and
     :func:`cohort_gene_percentiles` (the dense percentile vector): everything a consumer
@@ -661,8 +663,8 @@ def proteoform_cohort_mean_expression(
 def gene_cohort_stats(
     cancer_type, *, normalize: str = "tpm_clean", auto_fetch: bool = True
 ) -> pd.DataFrame:
-    """Gene-level per-gene cohort **summary statistics** (mean/std/min/p5/p10/p20/q1/
-    median/q3/p80/p90/p95/max). Proteoform counterpart: :func:`proteoform_cohort_stats`."""
+    """Gene-level per-gene cohort **summary statistics** (mean/std/min/p1/p5/p10/p20/q1/
+    median/q3/p80/p90/p95/p99/max). Proteoform counterpart: :func:`proteoform_cohort_stats`."""
     return cohort_stats(cancer_type, normalize=normalize, auto_fetch=auto_fetch)
 
 
@@ -827,7 +829,7 @@ def pooled_cohort_stats(
     denominator ``n_available`` (not the constant ``n_samples``) is the honest one.
 
     Returns an id-keyed frame with the same statistic suite as :func:`cohort_stats`
-    (``mean, std, min, p5, p10, p20, q1, median, q3, p80, p90, p95, max`` over the
+    (``mean, std, min, p1, p5, p10, p20, q1, median, q3, p80, p90, p95, p99, max`` over the
     pooled samples) plus the pooling columns:
 
     - ``balanced_mean`` — the mean of each cohort's per-gene mean, **equal weight
