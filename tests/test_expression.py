@@ -452,6 +452,85 @@ def test_pan_cancer_expression_gene_filter(monkeypatch):
     assert by_id["TPM_LUAD"].iloc[0] == pytest.approx(200000.0)
 
 
+def test_pooled_cohort_stats_availability_and_heterogeneity(monkeypatch):
+    # Two cohorts with overlapping but ragged gene sets and very different sizes.
+    # BIG measures E1+E2 (3 samples), SMALL measures E2+E3 (1 sample). E2 is shared.
+    big = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["E1", "E2"],
+            "Symbol": ["A", "B"],
+            "s1": [10.0, 0.0],
+            "s2": [20.0, 0.0],
+            "s3": [30.0, 6.0],
+        }
+    )
+    small = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["E2", "E3"],
+            "Symbol": ["B", "C"],
+            "x1": [100.0, 4.0],
+        }
+    )
+    frames = {"BIG": big, "SMALL": small}
+    monkeypatch.setattr(expression, "per_sample_expression", lambda code, **k: frames[code].copy())
+    monkeypatch.setattr(expression, "_resolve_cancer_types", lambda ct, **k: list(ct))
+
+    out = expression.pooled_cohort_stats(["BIG", "SMALL"]).set_index("Ensembl_Gene_ID")
+
+    # n_samples is the constant pooled width; n_available is the honest per-gene
+    # denominator; n_cohorts counts measuring cohorts.
+    assert (out["n_samples"] == 4).all()
+    assert out.loc["E1", "n_available"] == 3 and out.loc["E1", "n_cohorts"] == 1
+    assert out.loc["E2", "n_available"] == 4 and out.loc["E2", "n_cohorts"] == 2
+    assert out.loc["E3", "n_available"] == 1 and out.loc["E3", "n_cohorts"] == 1
+    # n_detected ignores measured-but-zero: E2 is 0 in BIG's s1/s2, >0 in s3 + SMALL.
+    assert out.loc["E2", "n_detected"] == 2
+
+    # E2 sample-pooled mean is (0+0+6+100)/4 = 26.5; the balanced (equal-cohort) mean
+    # is mean(BIG_mean=2.0, SMALL_mean=100.0) = 51.0 — the big cohort no longer
+    # dominates. std_between captures the cross-cohort spread (>0 for E2).
+    assert out.loc["E2", "mean"] == pytest.approx(26.5)
+    assert out.loc["E2", "balanced_mean"] == pytest.approx(51.0)
+    assert out.loc["E2", "std_between"] == pytest.approx(np.std([2.0, 100.0]))
+    # A single-cohort gene has no between-cohort spread.
+    assert np.isnan(out.loc["E1", "std_between"])
+    # Off-panel cells are never imputed to zero: E1's max is BIG's max (30), not
+    # dragged down by SMALL's missing samples.
+    assert out.loc["E1", "max"] == 30.0
+
+
+def test_pooled_cohort_stats_min_cohorts_filter(monkeypatch):
+    big = pd.DataFrame({"Ensembl_Gene_ID": ["E1", "E2"], "Symbol": ["A", "B"], "s1": [1.0, 2.0]})
+    small = pd.DataFrame({"Ensembl_Gene_ID": ["E2"], "Symbol": ["B"], "x1": [3.0]})
+    frames = {"BIG": big, "SMALL": small}
+    monkeypatch.setattr(expression, "per_sample_expression", lambda code, **k: frames[code].copy())
+    monkeypatch.setattr(expression, "_resolve_cancer_types", lambda ct, **k: list(ct))
+    out = expression.pooled_cohort_stats(["BIG", "SMALL"], min_cohorts=2)
+    # Only E2 is measured by both cohorts.
+    assert out["Ensembl_Gene_ID"].tolist() == ["E2"]
+
+
+def test_pooled_cohort_stats_requires_cohorts(monkeypatch):
+    monkeypatch.setattr(expression, "_resolve_cancer_types", lambda ct, **k: [])
+    with pytest.raises(ValueError, match="at least one cancer type"):
+        expression.pooled_cohort_stats([])
+
+
+def test_pooled_cohort_stats_named_accessors_delegate(monkeypatch):
+    seen = {}
+
+    def _fake_pool(ct, **k):
+        seen.update(k)
+        seen["ct"] = ct
+        return pd.DataFrame()
+
+    monkeypatch.setattr(expression, "pooled_cohort_stats", _fake_pool)
+    expression.gene_pooled_cohort_stats(["X"])
+    assert seen.get("proteoform", False) is False
+    expression.proteoform_pooled_cohort_stats(["X"], scope="genome")
+    assert seen["proteoform"] is True and seen["scope"] == "genome"
+
+
 def test_cohort_mean_expression_bad_statistic(monkeypatch):
     monkeypatch.setattr(expression, "per_sample_expression", lambda *a, **k: pd.DataFrame())
     with pytest.raises(ValueError, match="statistic must be"):

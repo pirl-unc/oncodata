@@ -676,6 +676,36 @@ def proteoform_cohort_stats(
     )
 
 
+def gene_pooled_cohort_stats(
+    cancer_types, *, normalize: str = "tpm_clean", auto_fetch: bool = True, min_cohorts: int = 1
+) -> pd.DataFrame:
+    """Gene-level heterogeneity-safe cross-cohort pool. Proteoform counterpart:
+    :func:`proteoform_pooled_cohort_stats`. (Alias of :func:`pooled_cohort_stats`.)"""
+    return pooled_cohort_stats(
+        cancer_types, normalize=normalize, auto_fetch=auto_fetch, min_cohorts=min_cohorts
+    )
+
+
+def proteoform_pooled_cohort_stats(
+    cancer_types,
+    *,
+    normalize: str = "tpm_clean",
+    auto_fetch: bool = True,
+    scope: str = "cta",
+    min_cohorts: int = 1,
+) -> pd.DataFrame:
+    """Proteoform-level heterogeneity-safe cross-cohort pool. Gene-level counterpart:
+    :func:`gene_pooled_cohort_stats`."""
+    return pooled_cohort_stats(
+        cancer_types,
+        normalize=normalize,
+        auto_fetch=auto_fetch,
+        proteoform=True,
+        scope=scope,
+        min_cohorts=min_cohorts,
+    )
+
+
 def gene_cohort_percentiles(
     cancer_type, *, as_tpm: bool = True, auto_fetch: bool = False
 ) -> pd.DataFrame:
@@ -776,3 +806,104 @@ def pan_cancer_expression(
         )
         df = df[mask].reset_index(drop=True)
     return df
+
+
+def pooled_cohort_stats(
+    cancer_types: str | Iterable[str],
+    *,
+    normalize: str = "tpm_clean",
+    auto_fetch: bool = True,
+    proteoform: bool = False,
+    scope: str = "cta",
+    min_cohorts: int = 1,
+) -> pd.DataFrame:
+    """**Heterogeneity-safe** per-gene summary pooled across several cohorts.
+
+    The cross-cohort companion to the single-cohort :func:`cohort_stats`. Pools the
+    requested cohorts' per-sample matrices at the **sample** level on the shared key
+    (``Ensembl_Gene_ID``, or ``proteoform_key`` when ``proteoform=True``) and
+    summarizes each gene over the union of samples — **availability-aware**: a cell
+    a cohort never measured is ``NaN`` and never treated as a zero, so the per-gene
+    denominator ``n_available`` (not the constant ``n_samples``) is the honest one.
+
+    Returns an id-keyed frame with the same statistic suite as :func:`cohort_stats`
+    (``mean, std, min, p5, p10, p20, q1, median, q3, p80, p90, p95, max`` over the
+    pooled samples) plus the pooling columns:
+
+    - ``balanced_mean`` — the mean of each cohort's per-gene mean, **equal weight
+      per cohort**. The heterogeneity-safe central value: a large cohort can't
+      dominate it the way it dominates the sample-pooled ``mean``. The gap between
+      ``mean`` and ``balanced_mean`` is itself the cross-cohort imbalance signal.
+    - ``std_between`` — std *across* the per-cohort means (between-cohort spread:
+      how differently the cancer types express the gene), ``NaN`` for a single cohort.
+    - ``n_samples`` — total pooled sample columns (constant across genes).
+    - ``n_available`` — per-gene count of samples that **measured** it (non-``NaN``).
+    - ``n_detected`` — measured **and** ``> 0``.
+    - ``n_cohorts`` — how many of the pooled cohorts measured the gene.
+
+    ``min_cohorts`` drops genes measured by fewer than that many cohorts (default
+    ``1`` keeps everything). ``normalize`` selects the pooling space (linear clean
+    TPM by default; see :func:`per_sample_expression`). ``proteoform=True`` pools
+    the reduced proteoform key space (``scope`` ``"cta"``/``"genome"``)."""
+    import warnings
+
+    codes = _resolve_cancer_types(cancer_types)
+    codes = list(dict.fromkeys(codes or []))
+    if not codes:
+        raise ValueError("pooled_cohort_stats needs at least one cancer type")
+
+    key = "proteoform_key" if proteoform else "Ensembl_Gene_ID"
+    sample_frames: list[pd.DataFrame] = []  # per cohort: key-indexed sample matrix
+    cohort_means: list[pd.Series] = []  # per cohort: key -> per-gene mean
+    id_rows: list[pd.DataFrame] = []  # per cohort: id columns, key-indexed
+    for code in codes:
+        df = per_sample_expression(
+            code, normalize=normalize, auto_fetch=auto_fetch, proteoform=proteoform, scope=scope
+        )
+        id_cols = [c for c in ID_COLUMNS if c in df.columns]
+        samples = [c for c in df.columns if c not in id_cols]
+        if not samples:
+            continue
+        indexed = df.set_index(key)
+        mat = indexed[samples]
+        # Sample labels can collide across cohorts ("s1"); namespace them so the
+        # outer concat keeps every sample as its own column.
+        mat = mat.add_prefix(f"{code}::")
+        sample_frames.append(mat)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN gene -> NaN mean
+            cohort_means.append(indexed[samples].mean(axis=1, skipna=True).rename(code))
+        id_rows.append(df.set_index(key)[[c for c in id_cols if c != key]])
+    if not sample_frames:
+        raise ValueError(f"no per-sample columns to pool for {cancer_types!r}")
+
+    pooled = pd.concat(sample_frames, axis=1, join="outer").sort_index()
+    per_cohort_mean = pd.concat(cohort_means, axis=1).reindex(pooled.index)
+    ids = pd.concat(id_rows).groupby(level=0).first().reindex(pooled.index)
+
+    measured = pooled.notna()
+    mat = pooled.to_numpy(dtype=float)
+    out = ids.reset_index()
+    pcts = list(_COHORT_STAT_PERCENTILES)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN gene rows -> NaN
+        out["mean"] = np.nanmean(mat, axis=1)
+        out["std"] = np.nanstd(mat, axis=1)
+        q = np.nanpercentile(mat, pcts, axis=1)
+    for i, p in enumerate(pcts):
+        out[_COHORT_STAT_PERCENTILES[p]] = q[i]
+    cohort_mean_mat = per_cohort_mean.to_numpy(dtype=float)
+    n_cohorts = per_cohort_mean.notna().to_numpy().sum(axis=1)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        out["balanced_mean"] = np.nanmean(cohort_mean_mat, axis=1)
+        # Between-cohort spread is undefined for a single measuring cohort (nanstd
+        # would report a misleading 0) -> NaN there, mirroring std's >=2 rule.
+        out["std_between"] = np.where(n_cohorts >= 2, np.nanstd(cohort_mean_mat, axis=1), np.nan)
+    out["n_samples"] = pooled.shape[1]
+    out["n_available"] = measured.to_numpy().sum(axis=1)
+    out["n_detected"] = ((mat > 0) & measured.to_numpy()).sum(axis=1)
+    out["n_cohorts"] = n_cohorts
+    if min_cohorts > 1:
+        out = out[out["n_cohorts"] >= min_cohorts].reset_index(drop=True)
+    return out
