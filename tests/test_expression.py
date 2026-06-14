@@ -175,6 +175,22 @@ def test_per_sample_expression_normalize_modes(tmp_path, monkeypatch):
     logged = expression.per_sample_expression("PRAD", normalize="tpm_clean_log1p")
     assert np.allclose(logged["s1"].to_numpy(), np.log1p(clean["s1"].to_numpy()))
 
+    # hk mode runs (no HK panel genes in this fixture -> a no-op rescale, but valid).
+    hk = expression.per_sample_expression("PRAD", normalize="tpm_clean_hk")
+    assert list(hk.columns) == ["Ensembl_Gene_ID", "Symbol", "s1", "s2"]
+
+
+def test_housekeeping_normalize_divides_by_panel_geomean(monkeypatch):
+    import cancerdata.gene_families as gf
+
+    monkeypatch.setattr(gf, "housekeeping_gene_ids", lambda: frozenset({"ENSG_HK"}))
+    df = pd.DataFrame(
+        {"Ensembl_Gene_ID": ["ENSG_HK", "ENSG_X"], "Symbol": ["HK", "X"], "s1": [100.0, 50.0]}
+    )
+    out = expression._housekeeping_normalize(df, ["s1"])
+    # Each column divided by its housekeeping geomean -> the gene/HK *ratio* is preserved.
+    assert out.loc[1, "s1"] / out.loc[0, "s1"] == pytest.approx(0.5)
+
 
 def test_per_sample_expression_gene_and_proteoform_levels(tmp_path, monkeypatch):
     # ENSG1+ENSG2 are an identical-protein group; per_sample_expression(proteoform=True)

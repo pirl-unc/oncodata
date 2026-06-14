@@ -130,7 +130,7 @@ def available_percentile_cohorts(*, proteoform: bool = False) -> list[str]:
     return _available_shard_codes(_percentiles_root(proteoform=proteoform))
 
 
-_PER_SAMPLE_NORMALIZE = ("tpm_raw", "tpm_clean", "tpm_clean_log1p")
+_PER_SAMPLE_NORMALIZE = ("tpm_raw", "tpm_clean", "tpm_clean_log1p", "tpm_clean_hk")
 
 
 def per_sample_expression(
@@ -157,6 +157,8 @@ def per_sample_expression(
       - ``"tpm_clean"`` (default) — two-compartment clean TPM (the comparable
         biological view the summaries are built on);
       - ``"tpm_clean_log1p"`` — clean TPM, ``log1p``-transformed;
+      - ``"tpm_clean_hk"`` — clean TPM divided per sample by the housekeeping-panel
+        geometric mean (unit-free ratio-to-baseline, robust to library-depth drift);
       - ``"tpm_raw"`` — the matrix as shipped (raw TPM), no normalization.
 
     With ``proteoform=True``, identical-protein paralogs are **summed per sample** to
@@ -195,9 +197,11 @@ def per_sample_expression(
 
     linear = "tpm_raw" if normalize == "tpm_raw" else "tpm_clean"
     out = collapse_to_proteoforms(_load_per_sample_matrix(str(path), mtime, linear), scope=scope)
+    samples = [c for c in out.columns if c not in ID_COLUMNS]
     if normalize == "tpm_clean_log1p":
-        samples = [c for c in out.columns if c not in ID_COLUMNS]
         out[samples] = np.log1p(out[samples].to_numpy(dtype=float))
+    elif normalize == "tpm_clean_hk":
+        out = _housekeeping_normalize(out, samples)
     return out
 
 
@@ -215,6 +219,18 @@ def _load_per_sample_matrix(path: str, mtime: float, normalize: str) -> pd.DataF
     out = pd.concat([raw[base].reset_index(drop=True), clean.reset_index(drop=True)], axis=1)
     if normalize == "tpm_clean_log1p":
         out[samples] = np.log1p(out[samples].to_numpy(dtype=float))
+    elif normalize == "tpm_clean_hk":
+        out = _housekeeping_normalize(out, samples)
+    return out
+
+
+def _housekeeping_normalize(df: pd.DataFrame, sample_cols) -> pd.DataFrame:
+    """Divide each sample column by its housekeeping-panel geometric mean (a per-sample
+    rescale to a unit-free ratio-to-baseline scale). Commutes with the proteoform sum
+    (the denominator is per-column), so it can be applied before or after collapse."""
+    from .normalization import tpm_to_housekeeping_normalized
+
+    out, _ = tpm_to_housekeeping_normalized(df, value_cols=list(sample_cols))
     return out
 
 
