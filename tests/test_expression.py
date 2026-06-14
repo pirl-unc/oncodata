@@ -383,9 +383,9 @@ def test_cohort_stats_full_suite(monkeypatch):
         "p5",
         "p10",
         "p20",
-        "q1",
-        "median",
-        "q3",
+        "p25",
+        "p50",
+        "p75",
         "p80",
         "p90",
         "p95",
@@ -396,8 +396,8 @@ def test_cohort_stats_full_suite(monkeypatch):
     assert row["mean"] == pytest.approx(25.0)
     assert row["std"] == pytest.approx(np.std([10, 20, 30, 40]))
     assert row["min"] == 10.0 and row["max"] == 40.0
-    assert row["median"] == pytest.approx(25.0)
-    assert row["q1"] == pytest.approx(17.5) and row["q3"] == pytest.approx(32.5)
+    assert row["p50"] == pytest.approx(25.0)
+    assert row["p25"] == pytest.approx(17.5) and row["p75"] == pytest.approx(32.5)
     assert row["p90"] == pytest.approx(37.0)
 
 
