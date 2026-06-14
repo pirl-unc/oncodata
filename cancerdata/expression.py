@@ -50,12 +50,22 @@ _PERCENTILES_PROTEOFORM_DIR = "cancer-reference-expression-percentiles-proteofor
 _WITHIN_SAMPLE_DIR = "cancer-reference-expression-within-sample-top5"
 _WITHIN_SAMPLE_PROTEOFORM_DIR = "cancer-reference-expression-within-sample-top5-proteoform"
 
+
 # How many cleaned per-sample matrices to keep in the in-process LRU. Each frame is
 # a full gene x sample matrix (~100MB+), so the default is intentionally small. A
 # workflow that pools the same N>2 cohorts repeatedly (e.g. a gene then a proteoform
 # pool over one cohort set) can raise CANCERDATA_PER_SAMPLE_CACHE to keep them all
 # warm and skip the re-read, trading memory for latency.
-_PER_SAMPLE_CACHE_SIZE = max(1, int(os.environ.get("CANCERDATA_PER_SAMPLE_CACHE", "2")))
+def _per_sample_cache_size(default: int = 2) -> int:
+    """Parse the cache-size env knob, falling back to ``default`` on any malformed
+    value (empty string, non-integer) — a tuning knob must never break ``import``."""
+    try:
+        return max(1, int(os.environ.get("CANCERDATA_PER_SAMPLE_CACHE", str(default))))
+    except (TypeError, ValueError):
+        return default
+
+
+_PER_SAMPLE_CACHE_SIZE = _per_sample_cache_size()
 
 
 def _bundle_subdir(name: str, *, auto_fetch: bool = True) -> Path:
