@@ -288,11 +288,13 @@ _COHORT_STAT_PERCENTILES = {
     1: "p1",
     5: "p5",
     10: "p10",
+    15: "p15",
     20: "p20",
     25: "p25",
     50: "p50",
     75: "p75",
     80: "p80",
+    85: "p85",
     90: "p90",
     95: "p95",
     99: "p99",
@@ -309,8 +311,9 @@ def cohort_stats(
     scope: str = "cta",
 ) -> pd.DataFrame:
     """Per-gene **summary statistics** across a cohort's samples, in one pass —
-    ``mean``, ``std`` and a uniform percentile ladder ``min, p1, p5, p10, p20, p25,
-    p50, p75, p80, p90, p95, p99, max`` (``p25``/``p50``/``p75`` are q1/median/q3).
+    ``mean``, ``std`` and a uniform percentile ladder ``min, p1, p5, p10, p15, p20,
+    p25, p50, p75, p80, p85, p90, p95, p99, max`` (``p25``/``p50``/``p75`` are
+    q1/median/q3).
 
     The richer companion to :func:`cohort_mean_expression` (a single statistic) and
     :func:`cohort_gene_percentiles` (the dense percentile vector): everything a consumer
@@ -664,7 +667,7 @@ def gene_cohort_stats(
     cancer_type, *, normalize: str = "tpm_clean", auto_fetch: bool = True
 ) -> pd.DataFrame:
     """Gene-level per-gene cohort **summary statistics** (mean/std + the percentile ladder
-    min/p1/p5/p10/p20/p25/p50/p75/p80/p90/p95/p99/max). Proteoform counterpart:
+    min/p1/p5/p10/p15/p20/p25/p50/p75/p80/p85/p90/p95/p99/max). Proteoform counterpart:
     :func:`proteoform_cohort_stats`."""
     return cohort_stats(cancer_type, normalize=normalize, auto_fetch=auto_fetch)
 
@@ -830,7 +833,7 @@ def pooled_cohort_stats(
     denominator ``n_available`` (not the constant ``n_samples``) is the honest one.
 
     Returns an id-keyed frame with the same statistic suite as :func:`cohort_stats`
-    (``mean, std, min, p1, p5, p10, p20, p25, p50, p75, p80, p90, p95, p99, max`` over the
+    (``mean, std, min, p1, p5, p10, p15, p20, p25, p50, p75, p80, p85, p90, p95, p99, max`` over the
     pooled samples) plus the pooling columns:
 
     - ``balanced_mean`` — the mean of each cohort's per-gene mean, **equal weight
