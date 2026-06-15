@@ -72,7 +72,7 @@ def test_cohort_gene_percentiles_missing_raises(percentile_cache, monkeypatch):
 @pytest.fixture
 def proteoform_percentile_cache(monkeypatch, tmp_path):
     monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
-    shard_dir = tmp_path / "cancer-reference-expression-percentiles-proteoform"
+    shard_dir = tmp_path / "cancer-reference-expression-percentiles-proteoform-cta"
     shard_dir.mkdir(parents=True)
     # A collapsed shard carries the proteoform identity columns alongside the breakpoints.
     cols = {
@@ -158,6 +158,41 @@ def test_cohort_gene_percentiles_threads_scope(proteoform_percentile_cache, monk
         "LUAD", proteoform=True, scope="genome", auto_fetch=False
     )
     assert "A1/2" in set(genome["Symbol"]) and "A1" not in set(genome["Symbol"])  # collapsed
+
+
+def test_proteoform_shard_selection_is_scope_specific(proteoform_percentile_cache, monkeypatch):
+    # The fixture ships a *cta-scope* proteoform shard. A cta request reads it; a genome
+    # request must NOT (it resolves the genome dir, which is absent) — proving scope
+    # selects the shard directory, not just the on-the-fly collapse universe.
+    cta = expression.cohort_gene_percentiles("PRAD", proteoform=True, scope="cta", auto_fetch=False)
+    assert list(cta["proteoform_key"]) == ["NY-ESO-1", "ENSG00000185686"]
+
+    def _no_matrix(*a, **k):
+        raise FileNotFoundError("not cached")
+
+    monkeypatch.setattr(expression, "per_sample_expression", _no_matrix)
+    with pytest.raises(ValueError, match="per-sample matrix isn't cached"):
+        expression.cohort_gene_percentiles(
+            "PRAD", proteoform=True, scope="genome", auto_fetch=False
+        )
+
+
+def test_shard_dataset_registry_is_public_and_scope_aware():
+    # ShardDataset + SHARD_DATASETS are public; the proteoform shard dir is scope-specific.
+    import cancerdata
+
+    assert set(cancerdata.SHARD_DATASETS) == {"representatives", "percentiles", "within_sample"}
+    pct = cancerdata.SHARD_DATASETS["percentiles"]
+    assert isinstance(pct, cancerdata.ShardDataset)
+    assert pct.subdir(proteoform=False) == "cancer-reference-expression-percentiles"
+    assert pct.subdir(proteoform=True, scope="cta").endswith("-proteoform-cta")
+    assert pct.subdir(proteoform=True, scope="genome").endswith("-proteoform-genome")
+    assert pct.fetches(proteoform=False) is True and pct.fetches(proteoform=True) is False
+    # an artifact with no proteoform variant rejects the request
+    with pytest.raises(ValueError, match="no proteoform variant"):
+        cancerdata.SHARD_DATASETS["representatives"].subdir(proteoform=True)
+    # the column-vocabulary helpers are now package-public too
+    assert callable(cancerdata.id_columns) and callable(cancerdata.sample_columns)
 
 
 def test_proteoform_summary_wrappers_thread_scope_and_default_autofetch_true(monkeypatch):

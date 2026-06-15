@@ -55,10 +55,18 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from cancerdata._build import cohort_percentile_vectors, sample_columns
+from cancerdata.expression import SHARD_DATASETS
 
-_DATA_DIR = Path(__file__).resolve().parents[1] / "cancerdata" / "data"
-OUT_DIR = _DATA_DIR / "cancer-reference-expression-percentiles"
-PROTEOFORM_OUT_DIR = _DATA_DIR / "cancer-reference-expression-percentiles-proteoform"
+_DATASET = SHARD_DATASETS["percentiles"]  # the reader's record — derive dirs from it so
+_DATA_DIR = (
+    Path(__file__).resolve().parents[1] / "cancerdata" / "data"
+)  # producer/reader can't drift
+OUT_DIR = _DATA_DIR / _DATASET.gene_dir
+
+
+def _proteoform_out_dir(scope: str) -> Path:
+    """The scope-specific proteoform shard directory the reader expects."""
+    return _DATA_DIR / _DATASET.subdir(proteoform=True, scope=scope)
 
 
 def _load_drop_genes(path: Path | None) -> set[str]:
@@ -73,16 +81,18 @@ def build(
     drop_genes: set[str],
     out_dir: Path | None = None,
     proteoform: bool = False,
+    scope: str = "cta",
 ) -> None:
     """Build the percentile-vector artifact for each cohort under ``input_dir``.
 
     With ``proteoform=True``, each cohort's per-sample matrix is collapsed to the
-    proteoform key space (identical-protein members summed) *before* the percentiles
-    are computed, so the vector is one row per proteoform key. Output lands in a
-    parallel ``…-percentiles-proteoform`` directory.
+    proteoform key space (identical-protein members summed, in ``scope``) *before* the
+    percentiles are computed, so the vector is one row per proteoform key. Output lands
+    in the scope-specific ``…-percentiles-proteoform-<scope>`` directory the reader
+    expects (see :meth:`cancerdata.expression.ShardDataset.subdir`).
     """
     if out_dir is None:
-        out_dir = PROTEOFORM_OUT_DIR if proteoform else OUT_DIR
+        out_dir = _proteoform_out_dir(scope) if proteoform else OUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     shards = sorted(input_dir.glob("*.parquet"))
     if not shards:
@@ -102,7 +112,7 @@ def build(
             # reduced proteoform key space (one reusable collapse + proteoform_key).
             from cancerdata.proteoforms import collapse_to_proteoforms
 
-            df = collapse_to_proteoforms(df, sample_cols=cols)
+            df = collapse_to_proteoforms(df, scope=scope, sample_cols=cols)
             cols = sample_columns(df)
         out = cohort_percentile_vectors(df, cols)
         out.to_parquet(out_dir / f"{code}.parquet", index=False, compression="zstd")
@@ -128,11 +138,18 @@ def main(argv=None) -> None:
         action="store_true",
         help="Collapse identical-protein members before ranking (proteoform key space)",
     )
+    p.add_argument(
+        "--scope",
+        default="cta",
+        choices=("cta", "genome"),
+        help="Proteoform-collapse scope (only with --proteoform); writes a scope-specific dir",
+    )
     args = p.parse_args(argv)
     build(
         args.input,
         drop_genes=_load_drop_genes(args.drop_genes),
         proteoform=args.proteoform,
+        scope=args.scope,
     )
 
 

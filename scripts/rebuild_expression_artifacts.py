@@ -60,9 +60,17 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from cancerdata._build import cohort_medoids, cohort_percentile_vectors, within_sample_top_fractions
+from cancerdata.expression import SHARD_DATASETS
 from cancerdata.gene_families import clean_tpm_censored_gene_ids
 from cancerdata.normalization import clean_tpm
 from cancerdata.source_matrices import registry as source_registry
+
+# Rebuilt artifacts must land in the exact directories the reader resolves; derive every
+# name from the shared registry so producer and reader can't drift. Proteoform shards are
+# built at "cta" scope (the only scope generated today).
+_PCT_DS = SHARD_DATASETS["percentiles"]
+_WS_DS = SHARD_DATASETS["within_sample"]
+_PROTEOFORM_SCOPE = "cta"
 
 _BASE = ["Ensembl_Gene_ID", "Symbol"]
 
@@ -158,11 +166,11 @@ def rebuild(cache: Path, ref: Path, out: Path, *, limit: int | None, validate: b
     print(f"rebuilding {len(codes)} cohorts -> {out}", flush=True)
 
     clean_dir = out / "clean"
-    pct_dir = out / "cancer-reference-expression-percentiles"
-    pct_pf_dir = out / "cancer-reference-expression-percentiles-proteoform"
-    rep_dir = out / "cancer-reference-expression-representatives"
-    ws_dir = out / "cancer-reference-expression-within-sample-top5"
-    ws_pf_dir = out / "cancer-reference-expression-within-sample-top5-proteoform"
+    pct_dir = out / _PCT_DS.gene_dir
+    pct_pf_dir = out / _PCT_DS.subdir(proteoform=True, scope=_PROTEOFORM_SCOPE)
+    rep_dir = out / SHARD_DATASETS["representatives"].gene_dir
+    ws_dir = out / _WS_DS.gene_dir
+    ws_pf_dir = out / _WS_DS.subdir(proteoform=True, scope=_PROTEOFORM_SCOPE)
     for d in (clean_dir, pct_dir, pct_pf_dir, rep_dir, ws_dir, ws_pf_dir):
         d.mkdir(parents=True, exist_ok=True)
 
@@ -204,7 +212,7 @@ def rebuild(cache: Path, ref: Path, out: Path, *, limit: int | None, validate: b
         from cancerdata._build import sample_columns
         from cancerdata.proteoforms import collapse_to_proteoforms
 
-        bio_pf = collapse_to_proteoforms(bio_df, sample_cols=samples)
+        bio_pf = collapse_to_proteoforms(bio_df, scope=_PROTEOFORM_SCOPE, sample_cols=samples)
         pf_samples = sample_columns(bio_pf)
         cohort_percentile_vectors(bio_pf, pf_samples).to_parquet(
             pct_pf_dir / f"{code}.parquet", index=False, compression="zstd"
