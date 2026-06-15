@@ -40,12 +40,12 @@ Run:
 
 Pass ``--proteoform`` to additionally sum identical-protein paralogs (CTAG1A+
 CTAG1B, the CT47A family, …) to proteoform level *before* the within-sample
-ranking, written to a parallel ``…-within-sample-top5-proteoform`` directory — so
-a duplicated antigen ranks as one proteoform rather than several
-individually-diluted genes.
+ranking, written to a parallel scope-specific
+``…-within-sample-top5-proteoform-<scope>`` directory — so a duplicated antigen
+ranks as one proteoform rather than several individually-diluted genes.
 
 After building, add ``cancer-reference-expression-within-sample-top5`` (and, if
-built, ``…-within-sample-top5-proteoform``) to ``data_bundle.DOWNLOADABLE_PATHS``,
+built, ``…-within-sample-top5-proteoform-<scope>``) to ``data_bundle.DOWNLOADABLE_PATHS``,
 rebuild + upload the data tarball, and bump ``DATA_VERSION`` (never bump it before
 the tarball is uploaded — a 404 hangs fetch).
 """
