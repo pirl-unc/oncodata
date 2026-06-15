@@ -47,8 +47,8 @@ and shipped as per-cohort parquet *shards*; the read path just resolves a code a
 reads a parquet. When a shard isn't shipped (every proteoform variant, today), the
 summary is **recomputed on the fly** from the per-sample matrix via the *same* build
 core, so shipped and on-the-fly values agree. Which artifact ships which variant, and
-whether a missing shard may be fetched, is recorded once in the :class:`_ShardDataset`
-registry rather than restated per accessor.
+whether a missing shard may be fetched, is recorded once in the :class:`ShardDataset`
+registry (:data:`SHARD_DATASETS`) rather than restated per accessor.
 
 The richer analysis accessors (``cancer_reference_expression`` etc.) live in
 pirlygenes; this module owns only the data-layer read surface that downstream
@@ -76,45 +76,81 @@ from .normalization import clean_tpm
 
 
 @dataclass(frozen=True)
-class _ShardDataset:
-    """One per-cohort summary artifact (one parquet shard per cohort code). The single
-    place that records, for each artifact: the bundle directory of its gene-level and
-    optional proteoform-level shards; whether each variant **ships in a released bundle**
-    (so a missing shard may be auto-fetched vs. must be computed on the fly); the
-    ``_build`` core that regenerates a missing shard from the per-sample matrix; and a
-    human ``noun`` for error messages. Replaces the parallel ``_*_DIR`` constants +
-    ``_*_root()`` + ``available_*()`` helpers that used to encode this per artifact."""
+class ShardDataset:
+    """A per-cohort summary artifact: one parquet shard per cohort code, available at
+    gene level and (optionally) proteoform level. The single declarative record of
+    everything the read path needs for one artifact, so the accessors stay generic over
+    it rather than special-casing each.
+
+    Fields:
+      - ``noun`` — human label used in error messages.
+      - ``gene_dir`` — bundle subdirectory of the gene-level shards.
+      - ``gene_fetches`` — whether the gene-level shards ship in a released bundle (so a
+        missing one may be auto-fetched) vs. must be recomputed on the fly.
+      - ``proteoform_stem`` — the *stem* of the proteoform shard directory; ``None`` if
+        the artifact has no proteoform variant. The on-disk directory is **scope-suffixed**
+        (``f"{proteoform_stem}-{scope}"``) because identical-protein members group
+        differently under ``"cta"`` vs ``"genome"``, so each scope is its own shard set.
+      - ``proteoform_fetches`` — whether proteoform shards ship (none do yet).
+      - ``build_attr`` — name of the :mod:`cancerdata._build` core that regenerates a
+        missing shard from the per-sample matrix (the same core that produced the shipped
+        shards, so on-the-fly and shipped values agree).
+
+    The registry of the concrete artifacts is :data:`SHARD_DATASETS`.
+    """
 
     noun: str
     gene_dir: str
-    gene_fetches: bool  # gene-level shard ships in a released bundle?
-    proteoform_dir: str | None = None  # None -> artifact has no proteoform variant
-    proteoform_fetches: bool = False  # proteoform shard ships? (none do yet)
-    build_attr: str | None = None  # _build core to recompute a missing shard on the fly
+    gene_fetches: bool
+    proteoform_stem: str | None = None
+    proteoform_fetches: bool = False
+    build_attr: str | None = None
+
+    def subdir(self, *, proteoform: bool, scope: str = "cta") -> str:
+        """Bundle subdirectory holding this artifact's shards at the requested level.
+        Gene-level is scope-independent; the proteoform variant is **scope-specific**
+        (``f"{proteoform_stem}-{scope}"``)."""
+        if not proteoform:
+            return self.gene_dir
+        if self.proteoform_stem is None:
+            raise ValueError(f"{self.noun} has no proteoform variant")
+        return f"{self.proteoform_stem}-{scope}"
+
+    def fetches(self, *, proteoform: bool) -> bool:
+        """Whether the requested level's shards ship in a released bundle (so a missing
+        shard may be auto-fetched rather than only recomputed)."""
+        return self.proteoform_fetches if proteoform else self.gene_fetches
 
 
-# The expression summary artifacts. Proteoform shards aren't shipped in any bundle yet,
-# so they never auto-fetch — the proteoform variant is recomputed on the fly from the
-# per-sample matrix (see _read_shard_or_recompute) until those shards ship.
-_REPRESENTATIVES = _ShardDataset(
-    noun="representative-samples shard",
-    gene_dir="cancer-reference-expression-representatives",
-    gene_fetches=True,
-)
-_PERCENTILES = _ShardDataset(
-    noun="percentile vector",
-    gene_dir="cancer-reference-expression-percentiles",
-    gene_fetches=True,
-    proteoform_dir="cancer-reference-expression-percentiles-proteoform",
-    build_attr="cohort_percentile_vectors",
-)
-_WITHIN_SAMPLE = _ShardDataset(
-    noun="within-sample top-fraction vector",
-    gene_dir="cancer-reference-expression-within-sample-top5",
-    gene_fetches=False,  # not part of a released bundle yet -> never trigger a fetch
-    proteoform_dir="cancer-reference-expression-within-sample-top5-proteoform",
-    build_attr="within_sample_top_fractions",
-)
+#: The expression summary artifacts, keyed by short name. Proteoform shards aren't shipped
+#: in any bundle yet (``proteoform_fetches=False``), so the proteoform variant is recomputed
+#: on the fly from the per-sample matrix (see ``_read_shard_or_recompute``) until they ship;
+#: when they do, each scope is a distinct ``{stem}-{scope}`` directory (see
+#: :meth:`ShardDataset.subdir`).
+SHARD_DATASETS: dict[str, ShardDataset] = {
+    "representatives": ShardDataset(
+        noun="representative-samples shard",
+        gene_dir="cancer-reference-expression-representatives",
+        gene_fetches=True,
+    ),
+    "percentiles": ShardDataset(
+        noun="percentile vector",
+        gene_dir="cancer-reference-expression-percentiles",
+        gene_fetches=True,
+        proteoform_stem="cancer-reference-expression-percentiles-proteoform",
+        build_attr="cohort_percentile_vectors",
+    ),
+    "within_sample": ShardDataset(
+        noun="within-sample top-fraction vector",
+        gene_dir="cancer-reference-expression-within-sample-top5",
+        gene_fetches=False,  # not part of a released bundle yet -> never trigger a fetch
+        proteoform_stem="cancer-reference-expression-within-sample-top5-proteoform",
+        build_attr="within_sample_top_fractions",
+    ),
+}
+_REPRESENTATIVES = SHARD_DATASETS["representatives"]
+_PERCENTILES = SHARD_DATASETS["percentiles"]
+_WITHIN_SAMPLE = SHARD_DATASETS["within_sample"]
 
 
 # How many cleaned per-sample matrices to keep in the in-process LRU. Each frame is
@@ -159,20 +195,23 @@ def _available_shard_codes(root: Path) -> list[str]:
     return sorted(p.stem for p in root.glob("*.parquet"))
 
 
-def _shard_dir(dataset: _ShardDataset, *, proteoform: bool = False) -> Path:
-    """The bundle directory holding ``dataset``'s per-cohort shards (gene-level, or the
-    proteoform variant). The per-variant auto-fetch policy lives on the dataset record,
-    so it's decided in one place rather than re-stated at each call site."""
-    if proteoform:
-        if dataset.proteoform_dir is None:
-            raise ValueError(f"{dataset.noun} has no proteoform variant")
-        return _bundle_subdir(dataset.proteoform_dir, auto_fetch=dataset.proteoform_fetches)
-    return _bundle_subdir(dataset.gene_dir, auto_fetch=dataset.gene_fetches)
+def _shard_dir(dataset: ShardDataset, *, proteoform: bool = False, scope: str = "cta") -> Path:
+    """The bundle directory holding ``dataset``'s per-cohort shards at the requested
+    level and ``scope`` (the proteoform variant is scope-specific — see
+    :meth:`ShardDataset.subdir`). The per-variant auto-fetch policy lives on the dataset
+    record, so it's decided in one place rather than re-stated at each call site."""
+    return _bundle_subdir(
+        dataset.subdir(proteoform=proteoform, scope=scope),
+        auto_fetch=dataset.fetches(proteoform=proteoform),
+    )
 
 
-def _available_cohorts(dataset: _ShardDataset, *, proteoform: bool = False) -> list[str]:
-    """Sorted cohort codes with a shipped shard for ``dataset`` (gene or proteoform)."""
-    return _available_shard_codes(_shard_dir(dataset, proteoform=proteoform))
+def _available_cohorts(
+    dataset: ShardDataset, *, proteoform: bool = False, scope: str = "cta"
+) -> list[str]:
+    """Sorted cohort codes with a shipped shard for ``dataset`` (gene, or the
+    scope-specific proteoform variant)."""
+    return _available_shard_codes(_shard_dir(dataset, proteoform=proteoform, scope=scope))
 
 
 def _resolve_cancer_types(
@@ -211,11 +250,11 @@ def available_representative_cohorts() -> list[str]:
     return _available_cohorts(_REPRESENTATIVES)
 
 
-def available_percentile_cohorts(*, proteoform: bool = False) -> list[str]:
+def available_percentile_cohorts(*, proteoform: bool = False, scope: str = "cta") -> list[str]:
     """Cohort codes that ship a percentile-vector shard (sorted). With
     ``proteoform=True``, the proteoform-summed variant (one vector per proteoform
-    key, identical-protein members collapsed before ranking)."""
-    return _available_cohorts(_PERCENTILES, proteoform=proteoform)
+    key, identical-protein members collapsed before ranking, in ``scope``)."""
+    return _available_cohorts(_PERCENTILES, proteoform=proteoform, scope=scope)
 
 
 _PER_SAMPLE_NORMALIZE = ("tpm_raw", "tpm_clean", "tpm_clean_log1p", "tpm_clean_hk")
@@ -546,17 +585,18 @@ def _biological_per_sample(
 
 
 def _read_shard_or_recompute(
-    dataset: _ShardDataset, code: str, *, proteoform: bool, auto_fetch: bool, scope: str = "cta"
+    dataset: ShardDataset, code: str, *, proteoform: bool, auto_fetch: bool, scope: str = "cta"
 ) -> pd.DataFrame:
-    """Read ``code``'s shard for ``dataset``; if no shard is present, recompute it on
-    the fly from the per-sample matrix via the dataset's ``_build`` core (the same core
-    that produced the shipped shards — so the on-the-fly and shipped values agree).
+    """Read ``code``'s shard for ``dataset`` (the ``scope``-specific one at proteoform
+    level); if no shard is present, recompute it on the fly from the per-sample matrix
+    via the dataset's ``_build`` core (the same core that produced the shipped shards —
+    so the on-the-fly and shipped values agree).
 
     The single home of the shard-or-recompute fallback shared by the percentile and
     within-sample readers. Raises a clear :class:`ValueError` — not a bare
     ``FileNotFoundError`` — when neither the shard nor the per-sample matrix is available
     (the proteoform variant has no shipped shard yet, so it always takes this path)."""
-    shard = _shard_dir(dataset, proteoform=proteoform) / f"{code}.parquet"
+    shard = _shard_dir(dataset, proteoform=proteoform, scope=scope) / f"{code}.parquet"
     if shard.exists():
         return pd.read_parquet(shard)
     try:
@@ -625,12 +665,12 @@ def cohort_gene_percentiles(
 #: source of truth shared with the generator, so the read side and write side can't drift.
 
 
-def available_within_sample_cohorts(*, proteoform: bool = False) -> list[str]:
+def available_within_sample_cohorts(*, proteoform: bool = False, scope: str = "cta") -> list[str]:
     """Cohort codes that ship a within-sample top-fraction shard (sorted).
 
     With ``proteoform=True``, the proteoform-summed variant (identical-protein
-    members collapsed before ranking — see :func:`within_sample_top_fraction`)."""
-    return _available_cohorts(_WITHIN_SAMPLE, proteoform=proteoform)
+    members collapsed before ranking, in ``scope`` — see :func:`within_sample_top_fraction`)."""
+    return _available_cohorts(_WITHIN_SAMPLE, proteoform=proteoform, scope=scope)
 
 
 def within_sample_top_fraction(

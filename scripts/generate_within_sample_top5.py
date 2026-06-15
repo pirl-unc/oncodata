@@ -40,12 +40,12 @@ Run:
 
 Pass ``--proteoform`` to additionally sum identical-protein paralogs (CTAG1A+
 CTAG1B, the CT47A family, …) to proteoform level *before* the within-sample
-ranking, written to a parallel ``…-within-sample-top5-proteoform`` directory — so
-a duplicated antigen ranks as one proteoform rather than several
-individually-diluted genes.
+ranking, written to a parallel scope-specific
+``…-within-sample-top5-proteoform-<scope>`` directory — so a duplicated antigen
+ranks as one proteoform rather than several individually-diluted genes.
 
 After building, add ``cancer-reference-expression-within-sample-top5`` (and, if
-built, ``…-within-sample-top5-proteoform``) to ``data_bundle.DOWNLOADABLE_PATHS``,
+built, ``…-within-sample-top5-proteoform-<scope>``) to ``data_bundle.DOWNLOADABLE_PATHS``,
 rebuild + upload the data tarball, and bump ``DATA_VERSION`` (never bump it before
 the tarball is uploaded — a 404 hangs fetch).
 """
@@ -61,10 +61,18 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from cancerdata._build import sample_columns, within_sample_top_fractions
+from cancerdata.expression import SHARD_DATASETS
 
-_DATA_DIR = Path(__file__).resolve().parents[1] / "cancerdata" / "data"
-OUT_DIR = _DATA_DIR / "cancer-reference-expression-within-sample-top5"
-PROTEOFORM_OUT_DIR = _DATA_DIR / "cancer-reference-expression-within-sample-top5-proteoform"
+_DATASET = SHARD_DATASETS["within_sample"]  # the reader's record — derive dirs from it so
+_DATA_DIR = (
+    Path(__file__).resolve().parents[1] / "cancerdata" / "data"
+)  # producer/reader can't drift
+OUT_DIR = _DATA_DIR / _DATASET.gene_dir
+
+
+def _proteoform_out_dir(scope: str) -> Path:
+    """The scope-specific proteoform shard directory the reader expects."""
+    return _DATA_DIR / _DATASET.subdir(proteoform=True, scope=scope)
 
 
 def _load_drop_genes(path: Path | None) -> set[str]:
@@ -79,17 +87,19 @@ def build(
     drop_genes: set[str],
     out_dir: Path | None = None,
     proteoform: bool = False,
+    scope: str = "cta",
 ) -> None:
     """Build the within-sample top-fraction artifact for each cohort.
 
     With ``proteoform=True``, each cohort's per-sample matrix is collapsed to
-    proteoform level (identical-protein members summed) *before* the within-
-    sample ranking, so a duplicated antigen ranks as one proteoform rather than
-    several individually-diluted genes. Output lands in a parallel
-    ``…-within-sample-top5-proteoform`` directory.
+    proteoform level (identical-protein members summed, in ``scope``) *before* the
+    within-sample ranking, so a duplicated antigen ranks as one proteoform rather than
+    several individually-diluted genes. Output lands in the scope-specific
+    ``…-within-sample-top5-proteoform-<scope>`` directory the reader expects (see
+    :meth:`cancerdata.expression.ShardDataset.subdir`).
     """
     if out_dir is None:
-        out_dir = PROTEOFORM_OUT_DIR if proteoform else OUT_DIR
+        out_dir = _proteoform_out_dir(scope) if proteoform else OUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     shards = sorted(input_dir.glob("*.parquet"))
     if not shards:
@@ -109,7 +119,7 @@ def build(
             # collapsed antigen axis (one reusable collapse + proteoform_id identity).
             from cancerdata.proteoforms import collapse_to_proteoforms
 
-            df = collapse_to_proteoforms(df, sample_cols=cols)
+            df = collapse_to_proteoforms(df, scope=scope, sample_cols=cols)
             cols = sample_columns(df)
         out = within_sample_top_fractions(df, cols)
         out.to_parquet(out_dir / f"{code}.parquet", index=False, compression="zstd")
@@ -135,8 +145,19 @@ def main(argv=None) -> None:
         action="store_true",
         help="Sum identical-protein paralogs to proteoform level before ranking",
     )
+    p.add_argument(
+        "--scope",
+        default="cta",
+        choices=("cta", "genome"),
+        help="Proteoform-collapse scope (only with --proteoform); writes a scope-specific dir",
+    )
     args = p.parse_args(argv)
-    build(args.input, drop_genes=_load_drop_genes(args.drop_genes), proteoform=args.proteoform)
+    build(
+        args.input,
+        drop_genes=_load_drop_genes(args.drop_genes),
+        proteoform=args.proteoform,
+        scope=args.scope,
+    )
 
 
 if __name__ == "__main__":

@@ -77,6 +77,8 @@ from .cta import (
     cta_dataframe,
 )
 from .expression import (
+    SHARD_DATASETS,
+    ShardDataset,
     available_percentile_cohorts,
     available_representative_cohorts,
     available_within_sample_cohorts,
@@ -103,7 +105,7 @@ from .expression import (
     representative_cohort_samples,
     within_sample_top_fraction,
 )
-from .expression_engine import aggregate_transcripts_to_genes
+from .expression_engine import aggregate_transcripts_to_genes, id_columns, sample_columns
 from .expression_registry import (
     ExpressionSource,
     expression_source,
@@ -197,6 +199,7 @@ __all__ = [
     # ontology / registry
     "CANCER_TYPE_ALIASES",
     "CANCER_TYPE_NAMES",
+    "SHARD_DATASETS",
     # cancer-testis antigens
     "CTA_evidence",
     "CTA_excluded_gene_names",
@@ -211,6 +214,7 @@ __all__ = [
     # expression sources + per-sample curation
     "ExpressionSource",
     "GeneQcClass",
+    "ShardDataset",
     "__version__",
     # expression (read accessors over the downloadable bundle)
     "addressable_fraction",
@@ -302,6 +306,7 @@ __all__ = [
     # HPA normal-tissue reference data
     "hpa_rna_consensus",
     "hpa_single_cell",
+    "id_columns",
     "is_expression_value_col",
     "is_mixture_cohort",
     "is_rescue_feature",
@@ -343,6 +348,7 @@ __all__ = [
     "response_signature_genes",
     "response_signature_names",
     "response_signatures_df",
+    "sample_columns",
     "sample_counts_by_cancer_code",
     "sample_manifest",
     "samples_for_cancer_code",
