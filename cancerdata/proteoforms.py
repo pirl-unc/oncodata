@@ -58,7 +58,7 @@ This module is the read surface over the curated registry
 ``scripts/generate_proteoform_groups.py`` from pyensembl protein sequences). It
 owns *which genes sum together*; the per-sample TPM summation itself lives in
 :func:`cancerdata.expression.proteoform_representative_samples` (runtime, over the
-shipped medoid samples) and :func:`cancerdata._build.sum_proteoform_tpm` (the
+shipped medoid samples) and :func:`cancerdata.expression_builders.sum_proteoform_tpm` (the
 pure build-time core, ready for the offline percentile/within-sample generators
 to apply before ranking when proteoform-summed artifacts are added to the bundle).
 
@@ -295,7 +295,7 @@ def collapse_to_proteoforms(
     Use this instead of calling ``sum_proteoform_tpm`` + ``proteoform_group_map``
     directly, so coverage, the medoid/within-sample generators, and any future
     consumer share one collapse + one identity scheme."""
-    from ._build import sum_proteoform_tpm
+    from .expression_builders import sum_proteoform_tpm
 
     gmap = proteoform_group_map(scope=scope)
     group_symbols = {label: proteoform_symbol(label) for label in gmap}

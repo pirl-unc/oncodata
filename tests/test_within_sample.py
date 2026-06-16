@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cancerdata import _build, expression
+from cancerdata import expression, expression_builders
 
 
 def _matrix(genes, samples, values):
@@ -24,7 +24,7 @@ def test_within_sample_top_fractions_core():
     genes = ["ENSG1", "ENSG2", "ENSG3", "ENSG4"]
     vals = np.array([[1.0, 1.0], [2.0, 2.0], [3.0, 3.0], [100.0, 100.0]])
     df = _matrix(genes, ["s1", "s2"], vals)
-    out = _build.within_sample_top_fractions(df, thresholds=[0.95])
+    out = expression_builders.within_sample_top_fractions(df, thresholds=[0.95])
     # gene 4 ranks top (pct=1.0 >= 0.95) in both samples -> 1.0
     assert out.loc[out["Ensembl_Gene_ID"] == "ENSG4", "frac_samples_top5pct"].iloc[0] == 1.0
     # gene 1 is lowest -> 0.0
@@ -38,14 +38,14 @@ def test_within_sample_top_fractions_partial_prevalence():
     # sample s1: B is top; sample s2: A is top
     vals = np.array([[1.0, 100.0], [100.0, 1.0]])
     df = _matrix(genes, ["s1", "s2"], vals)
-    out = _build.within_sample_top_fractions(df, thresholds=[0.95])
+    out = expression_builders.within_sample_top_fractions(df, thresholds=[0.95])
     assert out["frac_samples_top5pct"].tolist() == [0.5, 0.5]
 
 
 def test_within_sample_top_fractions_requires_samples():
     df = pd.DataFrame({"Ensembl_Gene_ID": ["A"], "Symbol": ["G0"]})
     with pytest.raises(ValueError, match="no per-sample columns"):
-        _build.within_sample_top_fractions(df)
+        expression_builders.within_sample_top_fractions(df)
 
 
 @pytest.fixture

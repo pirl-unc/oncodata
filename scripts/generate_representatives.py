@@ -16,7 +16,7 @@ The packaged cohort references are aggregates (median/percentile vectors); some
 consumers need a few *real* joint per-sample vectors per cohort — e.g. to show
 co-expression that an aggregate washes out. For each cohort this keeps ``k``
 medoid samples: the cohort medoid (most central tumor) first, then farthest-first
-picks that span the within-cohort variation (see ``_build.cohort_medoids``).
+picks that span the within-cohort variation (see ``expression_builders.cohort_medoids``).
 
 Computed from the full per-sample matrices, which are never shipped (see
 ``source_matrices`` for the per-cohort fetch). The kept columns store the
@@ -55,7 +55,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from cancerdata._build import cohort_medoids, sample_columns
+from cancerdata.expression_builders import cohort_medoids, sample_columns
 
 _DATA_DIR = Path(__file__).resolve().parents[1] / "cancerdata" / "data"
 OUT_DIR = _DATA_DIR / "cancer-reference-expression-representatives"

@@ -54,8 +54,8 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from cancerdata._build import cohort_percentile_vectors, sample_columns
 from cancerdata.expression import SHARD_DATASETS
+from cancerdata.expression_builders import cohort_percentile_vectors, sample_columns
 
 _DATASET = SHARD_DATASETS["percentiles"]  # the reader's record — derive dirs from it so
 _DATA_DIR = (

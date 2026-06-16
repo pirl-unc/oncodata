@@ -59,8 +59,12 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from cancerdata._build import cohort_medoids, cohort_percentile_vectors, within_sample_top_fractions
 from cancerdata.expression import SHARD_DATASETS
+from cancerdata.expression_builders import (
+    cohort_medoids,
+    cohort_percentile_vectors,
+    within_sample_top_fractions,
+)
 from cancerdata.gene_families import clean_tpm_censored_gene_ids
 from cancerdata.normalization import clean_tpm
 from cancerdata.source_matrices import registry as source_registry
@@ -209,7 +213,7 @@ def rebuild(cache: Path, ref: Path, out: Path, *, limit: int | None, validate: b
         # Proteoform key space: collapse identical-protein members per sample, then
         # build the same percentile + within-sample summaries on the reduced space so
         # every downstream read can compare/quantify/plot on one collapsed key space.
-        from cancerdata._build import sample_columns
+        from cancerdata.expression_builders import sample_columns
         from cancerdata.proteoforms import collapse_to_proteoforms
 
         bio_pf = collapse_to_proteoforms(bio_df, scope=_PROTEOFORM_SCOPE, sample_cols=samples)
