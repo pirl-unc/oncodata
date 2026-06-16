@@ -120,3 +120,26 @@ def test_gene_id_to_name():
     m = cta.CTA_gene_id_to_name()
     assert len(m) == len(cta.CTA_gene_ids())
     assert all(not k.count(".") for k in m)  # unversioned keys
+
+
+def test_cta_candidate_references_registry():
+    # Top-of-funnel referenced candidate watchlist: every row carries an Ensembl
+    # ID, a citation, and an HPA-restriction flag; none overlaps the curated set.
+    cand = cta.cta_candidate_references()
+    assert len(cand) >= 10
+    required = {
+        "Symbol",
+        "Ensembl_Gene_ID",
+        "candidate_source",
+        "pmids",
+        "hpa_testis_ntpm",
+        "hpa_testis_restricted",
+    }
+    assert required <= set(cand.columns)
+    assert cand["Ensembl_Gene_ID"].str.startswith("ENSG").all()
+    assert cand["pmids"].astype(str).str.strip().ne("").all()  # every candidate cited
+    # Watchlist genes are genuinely ABSENT from the table — not merely filtered
+    # out of the passing view. Assert against every row's id (passing or not), so
+    # a gene already sitting non-passing in the table can't sneak in here.
+    table_ids = set(cta.cta_dataframe()["Ensembl_Gene_ID"].astype(str).str.split(".").str[0])
+    assert not (set(cand["Ensembl_Gene_ID"]) & table_ids)

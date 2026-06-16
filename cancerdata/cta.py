@@ -182,6 +182,23 @@ def CTA_evidence() -> pd.DataFrame:
     return cta_dataframe()
 
 
+def cta_candidate_references() -> pd.DataFrame:
+    """Top-of-funnel CTA *candidates* with literature references — overlooked
+    cancer-testis / cancer-germline antigens (paralog-family members, meiosis/
+    germline genes, recently described CTAs) that are **not yet promoted** into the
+    curated :func:`cta_dataframe` table.
+
+    This is a referenced watchlist, not the filtered set: each row carries its
+    ``candidate_source`` (paralog/literature/meiosis/registry), ``ct_designation``
+    (CTdatabase CT-number where one exists), ``pmids`` (semicolon-joined), the
+    ``family`` it belongs to, and the HPA v23 status (``hpa_testis_ntpm``,
+    ``hpa_max_somatic_ntpm``, ``hpa_max_somatic_tissue``, ``hpa_testis_restricted``)
+    so a curator can see at a glance which are clean testis-restricted promotions
+    vs. which carry somatic signal that needs a cross-reactivity/leakiness call
+    before entering the curated table. Returns a defensive copy."""
+    return get_data("cta-candidate-references").copy()
+
+
 def passes_filters_mask(df: pd.DataFrame) -> pd.Series:
     """Boolean mask for rows passing the HPA curation filter (reproductive
     restriction). Accepts the legacy ``filtered`` column too."""

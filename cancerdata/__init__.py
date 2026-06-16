@@ -74,6 +74,7 @@ from .cta import (
     CTA_never_expressed_gene_names,
     CTA_unfiltered_gene_ids,
     CTA_unfiltered_gene_names,
+    cta_candidate_references,
     cta_dataframe,
 )
 from .expression import (
@@ -281,6 +282,7 @@ __all__ = [
     "cohort_registry_df",
     "cohort_stats",
     "collapse_to_proteoforms",
+    "cta_candidate_references",
     "cta_dataframe",
     "cta_patient_fractions",
     "cta_specific_9mer_counts",

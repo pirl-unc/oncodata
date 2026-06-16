@@ -1,0 +1,15 @@
+Symbol,Ensembl_Gene_ID,candidate_source,ct_designation,family,hpa_testis_ntpm,hpa_max_somatic_ntpm,hpa_max_somatic_tissue,hpa_testis_restricted,pmids,rationale
+DDX43,ENSG00000080007,literature_cta,CT13,DDX/helicase,19.0,1.8,salivary gland,True,12399967,"HAGE DEAD-box helicase; testis-restricted, re-expressed CML and many solid tumors"
+MAGEB4,ENSG00000120289,paralog_cta,CT3.4,MAGE-B,8.6,0.1,breast,True,11454705,MAGE-B cluster; tumor-associated
+DPPA4,ENSG00000121570,paralog_cta,-,pluripotency,4.1,0.6,liver,True,34767751,Tandem paralog of DPPA2(CTA) sharing OCT4/SOX2/NANOG enhancer; embryonal carcinoma/seminoma
+SSX7,ENSG00000187754,paralog_cta,CT5.7,SSX,0.0,0.6,retina,True,12216073,Protein-coding SSX member; testis + tumor subset (bulk under-detects)
+PRAMEF12,ENSG00000116726,paralog_cta,-,PRAMEF,0.0,0.1,choroid plexus,True,31729367,"PRAMEF-cluster paralog of PRAME; spermatogonia-restricted, glioma re-expression"
+SYCE1,ENSG00000171772,meiosis_cta,-,synaptonemal,68.9,17.5,cerebellum,False,24970476,SC central element; ~80% lung adenocarcinoma
+PIWIL2,ENSG00000197181,literature_cta,-,piRNA,27.9,5.8,duodenum,False,27602489,HILI PIWI; reactivated in cervical cancer
+OIP5,ENSG00000104147,meiosis_cta,CT86,centromere,20.3,9.9,skeletal muscle,False,17151793;28184024,"CENP-A loader; ~47% gastric cancer, HCC"
+TEX12,ENSG00000150783,meiosis_cta,-,synaptonemal,20.1,8.4,retina,False,34880391,SC central element; tumor centrosome amplification
+ZNF165,ENSG00000197279,literature_cta,CT53,ZSCAN,19.2,6.2,parathyroid gland,False,32515734;15354214,ZSCAN7; SMAD3 cofactor oncogenic TGFb in TNBC; HCC/gastric/NSCLC
+PAGE4,ENSG00000101951,literature_cta,CT16,PAGE,5.5,166.6,prostate,False,21357425;27270343,"Prostate-cancer associated; intrinsically disordered (prostate-expressed, not strictly testis)"
+PNMA2,ENSG00000240694,literature_cta,-,PNMA,1.6,113.4,cerebral cortex,False,10362822,Ma2/Ta paraneoplastic onconeural antigen; seminoma-linked (strong CNS signal)
+MAGEC3,ENSG00000165509,paralog_cta,CT7.2,MAGE-C,1.0,3.6,spinal cord,False,10861452,MAGE-C member; tumor-specific (HPA shows some CNS signal — verify)
+TEX15,ENSG00000133636,registry_cta,CT42,TEX,0.3,161.0,small intestine,False,18283110,Meiotic recombination; CTdatabase CT42 (bulk under-detects testis)
