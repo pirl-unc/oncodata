@@ -24,6 +24,8 @@ given.
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from .apd1 import cancer_apd1_response
 from .cancer_types import cancer_type_registry, format_cancer_code_label
 from .cta import CTA_gene_id_to_name, CTA_gene_ids
@@ -66,14 +68,36 @@ def _family_by_code() -> dict[str, str]:
     return dict(zip(reg["code"].astype(str), reg["family"].astype(str)))
 
 
-def _family_colors(codes):
-    """Map each code to an RGBA color by registry family (stable tab20 palette)."""
+@lru_cache(maxsize=1)
+def _stable_palette() -> tuple:
+    """A long, fixed list of distinct RGBA colors (tab20 + tab20b + tab20c = 60),
+    so a family/group keeps the SAME color across every plot."""
     plt = _plt()
+    out: list = []
+    for name in ("tab20", "tab20b", "tab20c"):
+        out.extend(plt.get_cmap(name).colors)
+    return tuple(out)
+
+
+@lru_cache(maxsize=1)
+def _family_color_map() -> dict:
+    """Stable ``{registry family -> color}`` over the FULL registry, assigned in
+    sorted-family order so the color is deterministic and identical in every plot
+    (not dependent on which subset of cancers a given plot happens to show)."""
+    palette = _stable_palette()
+    families = sorted({*_family_by_code().values(), "?"})
+    return {f: palette[i % len(palette)] for i, f in enumerate(families)}
+
+
+def _family_colors(codes):
+    """``({code -> color}, {family -> color})`` by registry family. Colors are a
+    stable, deterministic per-family assignment (see :func:`_family_color_map`); the
+    returned family map carries only the families present in ``codes`` (for legends)."""
     fam_by_code = _family_by_code()
-    families = sorted({fam_by_code.get(c, "?") for c in codes})
-    cmap = plt.get_cmap("tab20")
-    fam_color = {f: cmap(i % 20) for i, f in enumerate(families)}
-    return {c: fam_color[fam_by_code.get(c, "?")] for c in codes}, fam_color
+    full = _family_color_map()
+    present = sorted({fam_by_code.get(c, "?") for c in codes})
+    fam_color = {f: full[f] for f in present}
+    return {c: full[fam_by_code.get(c, "?")] for c in codes}, fam_color
 
 
 def _save(fig, save):
@@ -232,14 +256,24 @@ def _antigen_family(symbol) -> str:
     return best[1] if best else "other"
 
 
+@lru_cache(maxsize=1)
+def _antigen_family_color_map() -> dict:
+    """Stable ``{antigen family -> color}`` over the full antigen-family vocabulary,
+    so e.g. MAGE-A is the same color in every plot."""
+    palette = _stable_palette()
+    families = sorted({fam for _, fam in _ANTIGEN_FAMILY_PREFIXES} | {"other"})
+    return {f: palette[i % len(palette)] for i, f in enumerate(families)}
+
+
 def _antigen_family_colors(symbols):
-    """``({symbol -> color}, {family -> color})`` keyed by antigen family (tab20)."""
-    plt = _plt()
+    """``({symbol -> color}, {family -> color})`` keyed by antigen family, with a
+    stable per-family color assignment (see :func:`_antigen_family_color_map`). The
+    returned family map carries only the families present in ``symbols``."""
     fam_by_sym = {s: _antigen_family(s) for s in symbols}
-    families = sorted(set(fam_by_sym.values()))
-    cmap = plt.get_cmap("tab20")
-    fam_color = {f: cmap(i % 20) for i, f in enumerate(families)}
-    return {s: fam_color[f] for s, f in fam_by_sym.items()}, fam_color
+    full = _antigen_family_color_map()
+    present = sorted(set(fam_by_sym.values()))
+    fam_color = {f: full[f] for f in present}
+    return {s: full[f] for s, f in fam_by_sym.items()}, fam_color
 
 
 def _stacked_barh(rows, *, xlabel, title, legend=None, annotate=True, save=None):
@@ -248,21 +282,25 @@ def _stacked_barh(rows, *, xlabel, title, legend=None, annotate=True, save=None)
     ``legend`` is an optional ``{label: color}`` shown as a colour key. Segments wide
     enough are annotated with their ``seg_label``. The shared stacked-bar scaffold."""
     plt = _plt()
-    fig, ax = plt.subplots(figsize=(10, max(4, 0.42 * len(rows))))
+    fig, ax = plt.subplots(figsize=(12, max(4, 0.5 * len(rows))))
     total = max((sum(v for _, v, _ in segs) for _, segs in rows), default=1.0) or 1.0
     for i, (_, segs) in enumerate(rows):
         left = 0.0
         for seg_label, value, color in segs:
             ax.barh(i, value, left=left, color=color, edgecolor="white", linewidth=0.4)
-            if annotate and value > 0.06 * total:
+            # Label every segment wide enough to fit text — denser than a fixed cut so
+            # the carrying antigens are readable (the first segment is always labeled).
+            if annotate and (value > 0.018 * total or left == 0.0):
                 ax.text(
                     left + value / 2,
                     i,
                     seg_label,
                     ha="center",
                     va="center",
-                    fontsize=5,
+                    fontsize=4.5,
+                    rotation=90 if value < 0.04 * total else 0,
                     color="white",
+                    clip_on=True,
                 )
             left += value
     ax.set_yticks(range(len(rows)))
@@ -659,6 +697,7 @@ def cta_coverage_curves(
     *,
     threshold_tpm=10.0,
     max_genes=20,
+    n_label=5,
     save=None,
 ):
     """Greedy **antigen-coverage curves** — for each cohort, the cumulative fraction
@@ -667,34 +706,63 @@ def cta_coverage_curves(
     panel need to reach most patients of this cancer".
 
     ``cancer_types`` is a code or iterable of codes (each needs a cached per-sample
-    matrix); the curve starts at 0 antigens / 0 coverage and steps up per added CTA,
-    truncated at ``max_genes``."""
+    matrix). Rendered as **small multiples** — one panel per cohort, sorted by final
+    coverage (broadest first) — with the leading antigens labeled on each curve, so
+    you can read *which* CTAs carry the coverage and how fast it plateaus. ``n_label``
+    caps how many antigen names are annotated per panel."""
     import numpy as np
 
     from .coverage import greedy_coverage
 
     codes = [cancer_types] if isinstance(cancer_types, str) else list(cancer_types)
     plt = _plt()
-    fig, ax = plt.subplots(figsize=(8, 5))
-    plotted = 0
+
+    curves = []  # (code, x, y, symbols)
     for code in codes:
         gc = greedy_coverage(code, threshold_tpm=threshold_tpm, max_genes=max_genes)
         if gc.empty:
             continue
         x = np.concatenate([[0], gc["rank"].to_numpy()])
         y = np.concatenate([[0.0], gc["cumulative_fraction"].to_numpy()])
-        ax.step(x, y, where="post", marker="o", markersize=3, label=format_cancer_code_label(code))
-        plotted += 1
-    if not plotted:
+        curves.append((code, x, y, [str(s) for s in gc["Symbol"]]))
+    if not curves:
         raise ValueError(
             "no coverage curve could be drawn — are the cohorts' per-sample matrices "
             "cached, and does any CTA clear the threshold?"
         )
-    ax.set_xlabel("number of CTAs in panel (greedy set cover)")
-    ax.set_ylabel(f"fraction of patients covered (≥1 CTA > {threshold_tpm:g} TPM)")
-    ax.set_ylim(0, 1)
-    ax.set_title("CTA antigen-coverage curves")
-    ax.legend(fontsize=7, loc="lower right")
+    curves.sort(key=lambda t: t[2][-1], reverse=True)  # broadest coverage first
+
+    ncol = min(4, len(curves))
+    nrow = (len(curves) + ncol - 1) // ncol
+    fig, axes = plt.subplots(
+        nrow, ncol, figsize=(ncol * 3.0, nrow * 2.4), sharex=True, sharey=True, squeeze=False
+    )
+    axes = axes.ravel()
+    fam_color, _ = _antigen_family_colors({s for _, _, _, syms in curves for s in syms})
+    for ax, (code, x, y, syms) in zip(axes, curves):
+        ax.step(x, y, where="post", color="#3b4cc0", lw=1.3)
+        ax.fill_between(x, y, step="post", alpha=0.12, color="#3b4cc0")
+        for rank, sym in enumerate(syms[:n_label], start=1):
+            ax.annotate(
+                sym,
+                (x[rank], y[rank]),
+                fontsize=5,
+                rotation=40,
+                textcoords="offset points",
+                xytext=(2, 2),
+                color=fam_color.get(sym, "#333333"),
+            )
+            ax.plot(x[rank], y[rank], "o", ms=3, color=fam_color.get(sym, "#333333"))
+        ax.set_title(f"{format_cancer_code_label(code)}  ({y[-1]:.0%})", fontsize=8)
+        ax.set_ylim(0, 1)
+        ax.set_xlim(0, max(max_genes, x[-1]))
+        ax.grid(True, alpha=0.25)
+        ax.tick_params(labelsize=6)
+    for ax in axes[len(curves) :]:
+        ax.set_visible(False)
+    fig.supxlabel("number of CTAs in panel (greedy set cover)", fontsize=9)
+    fig.supylabel(f"fraction of patients covered (≥1 CTA > {threshold_tpm:g} TPM)", fontsize=9)
+    fig.suptitle(f"CTA antigen-coverage curves ({len(curves)} cohorts)", fontsize=11)
     fig.tight_layout()
     return _save(fig, save)
 
