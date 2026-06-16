@@ -106,6 +106,30 @@ def _save(fig, save):
     return fig
 
 
+@lru_cache(maxsize=1)
+def _cohort_sample_counts() -> dict:
+    """``{cancer_code: n_samples}`` from the per-sample matrix registry — the
+    cohort size used to rank cohorts in the by-cohort figures."""
+    from . import source_matrices
+
+    reg = source_matrices.registry()
+    counts: dict[str, int] = {}
+    for code, n in zip(reg["cancer_code"].astype(str), reg["n_samples"]):
+        counts[code] = max(counts.get(code, 0), int(n))  # largest source if several
+    return counts
+
+
+def _top_cohorts_by_samples(codes, top_n):
+    """The ``top_n`` of ``codes`` by cohort sample count (largest first); all of them
+    if ``top_n`` is ``None`` or there are no more than ``top_n``. Ties / unknown counts
+    fall back to a stable code order so the selection is deterministic."""
+    codes = list(codes)
+    if top_n is None or len(codes) <= top_n:
+        return codes
+    counts = _cohort_sample_counts()
+    return sorted(codes, key=lambda c: (-counts.get(c, 0), c))[:top_n]
+
+
 # ---------- shared plot primitives (the centralized rendering layer) ----------
 #
 # Every cancer-type plot reduces to one of three shapes: a per-cancer scatter, a
@@ -775,6 +799,7 @@ def cta_coverage_curves(
     threshold_tpm=10.0,
     max_genes=20,
     n_label=5,
+    top_n=40,
     save=None,
 ):
     """Greedy **antigen-coverage curves** — for each cohort, the cumulative fraction
@@ -786,12 +811,17 @@ def cta_coverage_curves(
     matrix). Rendered as **small multiples** — one panel per cohort, sorted by final
     coverage (broadest first) — with the leading antigens labeled on each curve, so
     you can read *which* CTAs carry the coverage and how fast it plateaus. ``n_label``
-    caps how many antigen names are annotated per panel."""
+    caps how many antigen names are annotated per panel. ``top_n`` (default 40) keeps
+    only the largest cohorts by sample count so the grid stays legible; pass
+    ``top_n=None`` for every cohort."""
     import numpy as np
 
     from .coverage import greedy_coverage
 
     codes = [cancer_types] if isinstance(cancer_types, str) else list(cancer_types)
+    requested = len(codes)
+    codes = _top_cohorts_by_samples(codes, top_n)
+    capped = len(codes) < requested
     plt = _plt()
 
     curves = []  # (code, x, y, symbols)
@@ -839,7 +869,10 @@ def cta_coverage_curves(
         ax.set_visible(False)
     fig.supxlabel("number of CTAs in panel (greedy set cover)", fontsize=9)
     fig.supylabel(f"fraction of patients covered (≥1 CTA > {threshold_tpm:g} TPM)", fontsize=9)
-    fig.suptitle(f"CTA antigen-coverage curves ({len(curves)} cohorts)", fontsize=11)
+    suffix = (
+        f"top {len(curves)} of {requested} by sample count" if capped else f"{len(curves)} cohorts"
+    )
+    fig.suptitle(f"CTA antigen-coverage curves ({suffix})", fontsize=11)
     fig.tight_layout()
     return _save(fig, save)
 
@@ -849,6 +882,7 @@ def cta_coverage_stacked_bars(
     *,
     threshold_tpm=10.0,
     max_genes=12,
+    top_n=40,
     save=None,
 ):
     """Greedy **coverage plateau** as a stacked bar per cohort — one horizontal bar
@@ -859,10 +893,14 @@ def cta_coverage_stacked_bars(
 
     Complements :func:`cta_coverage_curves` (cumulative step curve) by showing *which*
     antigens carry the coverage. ``cancer_types`` is a code or iterable; each needs a
-    cached per-sample matrix. ``max_genes`` caps the segments per cohort."""
+    cached per-sample matrix. ``max_genes`` caps the segments per cohort; ``top_n``
+    (default 40) keeps only the largest cohorts by sample count (pass ``None`` for all)."""
     from .coverage import greedy_coverage
 
     codes = [cancer_types] if isinstance(cancer_types, str) else list(cancer_types)
+    requested = len(codes)
+    codes = _top_cohorts_by_samples(codes, top_n)
+    capped = len(codes) < requested
     coverage_by_code = {}
     for code in codes:
         gc = greedy_coverage(code, threshold_tpm=threshold_tpm, max_genes=max_genes)
@@ -884,10 +922,11 @@ def cta_coverage_stacked_bars(
             for r in gc.itertuples()
         ]
         rows.append((f"{format_cancer_code_label(code)}  ({covered:.0%})", segs))
+    suffix = f"top {len(rows)} of {requested} by sample count" if capped else f"{len(rows)} cohorts"
     return _stacked_barh(
         rows,
         xlabel=f"fraction of patients covered (≥1 CTA > {threshold_tpm:g} TPM)",
-        title=f"CTA greedy coverage by antigen — {len(rows)} cohorts",
+        title=f"CTA greedy coverage by antigen — {suffix}",
         legend=fam_color,
         save=save,
     )

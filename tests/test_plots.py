@@ -433,3 +433,17 @@ def test_regenerate_plots_runner_references_real_functions():
     for family, name, fn_attr, kwargs in jobs:
         assert family and name and isinstance(kwargs, dict)
         assert callable(getattr(plots, fn_attr, None)), f"{fn_attr} is not a plots function"
+
+
+def test_top_cohorts_by_samples_caps_and_ranks():
+    from cancerdata import plots
+
+    # top_n=None or fewer codes than the cap -> unchanged (order preserved)
+    assert plots._top_cohorts_by_samples(["A", "B"], None) == ["A", "B"]
+    assert plots._top_cohorts_by_samples(["A", "B"], 5) == ["A", "B"]
+    # caps to the largest cohorts by sample count, deterministically
+    counts = plots._cohort_sample_counts()
+    big = sorted(counts, key=lambda c: counts[c], reverse=True)[:50]
+    top = plots._top_cohorts_by_samples(big, 10)
+    assert len(top) == 10
+    assert top == sorted(big, key=lambda c: (-counts[c], c))[:10]
