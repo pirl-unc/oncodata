@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 # Version of the downloadable data bundle (the heavy per-cohort expression
 # tarball). Bump ONLY when the reference data changes — it pins the bundle
