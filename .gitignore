@@ -25,3 +25,6 @@ site/
 *.swo
 *~
 .DS_Store
+
+# generated figure runs
+outputs/

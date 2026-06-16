@@ -412,3 +412,24 @@ def test_apd1_response_signature_scatter_no_data(monkeypatch):
 def test_apd1_response_signature_bad_name():
     with pytest.raises(ValueError, match="unknown signature"):
         plots.apd1_response_signature_scatter("not_a_signature")
+
+
+def test_regenerate_plots_runner_references_real_functions():
+    # Guard: every (family, name, fn_attr, kwargs) job in the batch runner must
+    # name a real callable on cancerdata.plots — catches typos like a removed or
+    # renamed figure before a full run does.
+    import importlib.util
+    from pathlib import Path
+
+    from cancerdata import plots
+
+    runner = Path(__file__).resolve().parent.parent / "scripts" / "regenerate_plots.py"
+    spec = importlib.util.spec_from_file_location("_regen_plots", runner)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    jobs = mod._jobs()
+    assert jobs, "runner produced no jobs"
+    for family, name, fn_attr, kwargs in jobs:
+        assert family and name and isinstance(kwargs, dict)
+        assert callable(getattr(plots, fn_attr, None)), f"{fn_attr} is not a plots function"
