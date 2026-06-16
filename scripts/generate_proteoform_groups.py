@@ -118,7 +118,9 @@ def _genes_for_scope(data, gene_ids: list[str] | None):
             continue
 
 
-def build_proteoform_groups(gene_ids: list[str] | None, ensembl_release: int, min_members: int):
+def build_proteoform_groups(
+    gene_ids: list[str] | None, ensembl_release: int, min_members: int
+):
     import pyensembl
 
     data = pyensembl.EnsemblRelease(ensembl_release)
