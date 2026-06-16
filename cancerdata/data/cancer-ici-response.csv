@@ -1,0 +1,105 @@
+cancer_code,regimen,orr_pct,drug,trial,setting,pmid_doi,confidence,notes
+ACC,PD-1+CTLA-4,14.0,nivolumab+ipilimumab,DART/SWOG S1609,advanced adrenocortical,PMID:39067873,high,dual checkpoint ORR 14% (3/21); iORR 19%; no anti-PD-1 monotherapy ORR
+ACINIC,PD-1,4.6,pembrolizumab,KEYNOTE-158,advanced salivary gland carcinoma,PMID:35777186,low,pan-salivary ORR 4.6% (5/109); not acinic-isolated; non-ACC salivary dual ipi+nivo ~16%
+ADCC,PD-1+CTLA-4,6.0,nivolumab+ipilimumab,phase 2 ipi+nivo salivary,adenoid cystic carcinoma,DOI:10.1038/s41591-023-02518-x,medium,dual checkpoint ORR 6% (2/32); pan-salivary pembro ~4.6%; checkpoint-resistant
+ANSC,PD-1,24.0,nivolumab,NCI9673,refractory metastatic anal SCC,PMID:28223062,high,nivo mono ORR 24% (9/37); pembro KEYNOTE-158 anal ~11%
+ATC,PD-1+CTLA-4,30.0,nivolumab+ipilimumab,NCT03246958 (ASCO 2020 abstr 6513),anaplastic thyroid carcinoma,DOI:10.1200/JCO.2020.38.15_suppl.6513,low,dual checkpoint ORR 30% (3/10); abstract-level; lenvatinib+pembrolizumab ~52% (ATLEP combo; not monotherapy); no single-agent anti-PD-1 ORR
+BCC,PD-1,31.0,cemiplimab,NCT03132636,locally advanced post-hedgehog,PMID:33812497,high,laBCC ORR 31% (26/84); metastatic BCC ~24%; cemiplimab is anti-PD-1
+BLCA,PD-1,28.6,pembrolizumab,KEYNOTE-052,first-line cisplatin-ineligible; all-comers,PMID:32552471,high,Mature KEYNOTE-052 final ORR 28.6% (Vuky 2020); CPS>=10 ~47%; 2017 interim was 24%; CheckMate-275 pretreated ~20%
+BLCA,PD-L1,23.0,atezolizumab,IMvigor210 C1,1L cisplatin-ineligible,PMID:27939400,high,Balar 2017 n=119; 2L cohort (PMID:26952546) 15%; durva 17.8% (PMID:28817753); avelumab 17% (PMID:29217288)
+BRCA_Basal,PD-1,5.0,pembrolizumab,KEYNOTE-086,pretreated metastatic TNBC; all-comers,PMID:30475950,medium,Cohort A (pretreated) ~5%; PD-L1+ untreated cohort B ~21%
+BRCA_Basal,PD-L1,10.0,atezolizumab,PCD4989g (Emens),metastatic TNBC all-comers (1L ~24%),PMID:30242306,high,phase 1; 1L subset 24% (n=21)
+CESC,PD-1,15.0,pembrolizumab,KEYNOTE-158,pretreated; PD-L1+ (CPS>=1) selected,PMID:30943124,high,All responders were PD-L1+; all-comer ~12%
+CESC,PD-L1,15.6,atezolizumab,SKYSCRAPER-04 mono arm,2L/3L PD-L1+ R/M,DOI:10.1016/j.ijgc.2024.01.020,medium,reference arm of a combo trial
+CHOL,PD-1,6.0,pembrolizumab,KEYNOTE-158,advanced biliary,PMID:32319072,medium,biliary ORR 5.8% (6/104)
+CHOL,PD-L1,4.8,durvalumab,phase1 Asian expansion,advanced BTC mono,PMID:35611499,low,BTC monotherapy data thin (2/42)
+CLL,PD-1,0.0,pembrolizumab,Mayo phase 2,relapsed CLL,DOI:10.1182/blood-2017-02-765685,high,0/16 in CLL proper; Richter transformation responds (~44%) but is DLBCL-like
+COAD,PD-1,5.0,pembrolizumab,KEYNOTE-177/-164,all-comers (response is MSI-dependent),PMID:33264544,medium,All-comer ~5%; only the ~13% MSI-H/dMMR respond (MSI-H ~45%; MSS ~0%)
+COAD_MSI,PD-1,45.0,pembrolizumab,KEYNOTE-177,first-line; MSI-H/dMMR,PMID:33264544,high,MSI-H/dMMR colon; immune-hot; the canonical aPD1-responsive subtype
+COAD_MSI,PD-1+CTLA-4,55.0,nivolumab+ipilimumab,CheckMate-142,pretreated MSI-H/dMMR,PMID:29355075,high,Overman 2018 n=119; 1L (Lenz PMID:34637336) ~69%
+COAD_MSS,PD-1,0.0,pembrolizumab,KEYNOTE-016/-028,MSS,PMID:26028255,high,Microsatellite-stable colon; immune-cold; ~0% response
+CTCL,PD-1,38.0,pembrolizumab,CITN-10,mycosis fungoides / Sezary,PMID:31532724,high,ORR 38% (9/24); 2 CR + 7 PR; durable
+DIPG,PD-1,0.0,nivolumab,CheckMate-908,diffuse midline glioma,PMID:36808285,high,0/45; no objective responses
+DLBC,PD-1,10.0,nivolumab,CheckMate-139,relapsed/refractory DLBCL post-ASCT,PMID:30620669,medium,auto-HCT-failed ORR 10% (3/34); transplant-ineligible 3%; PMBCL exception (pembro ~41% KEYNOTE-170)
+EPN,PD-1,0.0,nivolumab,CheckMate-908,relapsed/refractory ependymoma,PMID:36808285,high,0/22; immune-cold
+ESCA,PD-1,18.0,nivolumab,ATTRACTION-3,pretreated; esophageal SCC,PMID:31582355,medium,nivo ~19%; KEYNOTE-181 ESCC subgroup ~17%
+ESCA,PD-1+CTLA-4,27.0,nivolumab+ipilimumab,CheckMate-648,1L advanced ESCC; all-comers,PMID:35108470,high,Doki 2022; 35% in PD-L1 TC>=1%
+FL,PD-1,4.0,nivolumab,CheckMate-140,relapsed/refractory follicular,DOI:10.1182/blood.2019004753,high,ORR 4% (4/92); checkpoint monotherapy largely inactive
+GBC,PD-1,5.8,pembrolizumab,KEYNOTE-158,advanced biliary (pan-biliary),DOI:10.1002/ijc.33013,medium,pan-biliary cohort ORR 5.8% (6/104); not gallbladder-isolated; MSI-H biliary ~41%
+GBM,PD-1,8.0,nivolumab,CheckMate-143,recurrent; all-comers,PMID:32437507,high,Near-zero anchor; vs bevacizumab 23%
+HL,PD-1,71.0,nivolumab,CheckMate-205,relapsed/refractory post-ASCT,PMID:29584546,high,Very high responder; KEYNOTE-087 pembro ~69%
+HNSC,PD-1,19.0,pembrolizumab,KEYNOTE-048,first-line R/M; CPS>=1; monotherapy arm,PMID:33052747,high,CPS>=20 ~23%; total population ~17%; HPV+/HPV- differential not cleanly established in KN-048
+HNSC,PD-L1,16.2,durvalumab,HAWK,2L+ R/M PD-L1-high,DOI:10.1016/j.ejca.2018.11.015,high,PD-L1-high selected; CONDOR low/neg arm 9.2% (PMID:30383184)
+HNSC_HPVneg,PD-1,16.0,pembrolizumab,KEYNOTE-012,R/M HNSCC HPV-,PMID:27646946,medium,HPV- subgroup
+HNSC_HPVpos,PD-1,24.0,pembrolizumab,KEYNOTE-012,R/M HNSCC HPV+,PMID:27646946,medium,HPV+ subgroup; pooled monotherapy HPV+ > HPV- (overall KN-012 ORR 18%)
+KICH,PD-1,10.0,pembrolizumab,KEYNOTE-427 cohort B,chromophobe RCC 1L,PMID:34272311,low,chromophobe ORR 9.5% (small n)
+KIRC,PD-1,25.0,nivolumab,CheckMate-025,pretreated (post-VEGF TKI); all-comers,PMID:26406148,high,vs everolimus 5%
+KIRC,PD-1+CTLA-4,42.0,nivolumab+ipilimumab,CheckMate-214,1L IMDC intermediate/poor-risk,PMID:29562145,high,Motzer 2018; intermediate/poor-risk co-primary (not ITT); CR 9%
+KIRC,PD-L1,25.0,atezolizumab,IMmotion150 (atezo arm),1L metastatic mono arm,PMID:29867230,high,mono missed PFS vs sunitinib; combo arm 32%
+KIRP,PD-1,25.0,pembrolizumab,KEYNOTE-427 cohort B,papillary RCC 1L,PMID:34272311,medium,papillary nccRCC ORR 25.4%
+LIHC,PD-1,17.0,nivolumab,CheckMate-040,sorafenib-naive & -experienced,PMID:28434648,medium,Reported 15-20% across dose-escalation/expansion
+LIHC,PD-1+CTLA-4,32.0,nivolumab+ipilimumab,CheckMate-040 armA,sorafenib-experienced,PMID:33001135,high,Yau 2020; arm A approved dose
+LIHC,PD-L1,17.0,durvalumab,HIMALAYA (durva arm),1L unresectable mono arm,DOI:10.1056/EVIDoa2100070,medium,mono OS non-inferior to sorafenib; STRIDE combo 20.1%
+LUAD,PD-1,19.0,nivolumab,CheckMate-057,pretreated non-squamous; PD-L1 unselected (all-comer),PMID:26412456,high,All-comer mono ORR 19.2% (Borghaei 2015); PD-L1>=1% ~31% / >=50% ~36%; KEYNOTE-024 PD-L1 TPS>=50% 1L was 45% (PMID:27718847) — population-matched to all-comer TMB/expression per audit
+LUAD,PD-1+CTLA-4,35.9,nivolumab+ipilimumab,CheckMate-227 Part1,1L PD-L1>=1%,PMID:31562797,high,Hellmann 2019; PD-L1>=1% population; vs chemo 30%
+LUAD,PD-L1,38.3,atezolizumab,IMpower110,1L PD-L1-high (TC3/IC3) EGFR/ALK-WT,PMID:32997907,medium,Herbst 2020; OAK all-comer 2L ~14% (PMID:27979383)
+LUAD_STK11,PD-1,10.0,pembrolizumab,KEYNOTE-042 subgroup,STK11/KEAP1-mutant immune-cold subset,PMID:30955977,low,Approximate; STK11/KEAP1-mutant LUAD is immune-cold with markedly lower aPD1 benefit (reported mainly as PFS/OS HRs)
+LUSC,PD-1,20.0,nivolumab,CheckMate-017,pretreated squamous; PD-L1 unselected (all-comer),PMID:26028407,high,All-comer mono ORR 20% (Brahmer 2015); PD-L1-independent in squamous; KEYNOTE-024 PD-L1>=50% 1L was 45% (PMID:27718847)
+LUSC,PD-L1,38.3,atezolizumab,IMpower110,1L PD-L1-high (TC3/IC3),PMID:32997907,low,IMpower110 squamous subset; representative anti-PD-L1 anchor
+MBL,PD-1,0.0,nivolumab,CheckMate-908,relapsed/refractory medulloblastoma,PMID:36808285,high,0/30 (nivo and nivo+ipi); immune-cold
+MDS,PD-1,3.6,pembrolizumab,KEYNOTE-013,post-HMA myelodysplastic syndrome,DOI:10.1080/10428194.2022.2034155,medium,1/28 PR (3.6%); marrow-CR 11%; essentially inactive
+MENINGIOMA,PD-1,0.0,pembrolizumab,NCT03279692,recurrent high-grade meningioma,PMID:35289329,high,0/25 objective responses; PFS-6 48% but no PR/CR
+MESO,PD-1,10.0,pembrolizumab,KEYNOTE-158,pretreated; all-comers,PMID:33125908,low,Reported ~8-20% across studies
+MESO,PD-1+CTLA-4,40.0,nivolumab+ipilimumab,CheckMate-743,1L unresectable; all-comers,PMID:33485464,medium,Baas 2021; ORR from trial body; benefit is OS not ORR (<=chemo ~43%)
+MESO,PD-L1,9.0,avelumab,JAVELIN Solid Tumor,2L+ unresectable,PMID:30605211,high,low ORR but durable (mDOR 15.2 mo)
+MM,PD-1,0.0,pembrolizumab,KEYNOTE-013,relapsed/refractory myeloma,PMID:30937889,high,0/27; monotherapy inactive; combos halted for excess mortality
+NBL,PD-1,0.0,pembrolizumab,KEYNOTE-051,relapsed/refractory neuroblastoma,PMID:31812554,high,no responses; immune-cold; low MHC-I
+NEC_LUNG_LARGECELL,PD-1,3.4,pembrolizumab,pooled high-grade NEN,advanced high-grade NEC,DOI:10.1038/s41416-020-0775-0,low,pembro mono ORR 3.4% (1/29) in mixed high-grade NEN; not LCNEC-isolated; dual ipi+nivo higher (~26%)
+NEC_MERKEL,PD-1,56.0,pembrolizumab,KEYNOTE-017,first-line advanced; all-comers,PMID:30726175,high,Very high responder; CR ~24%
+NEC_MERKEL,PD-L1,31.8,avelumab,JAVELIN Merkel 200 A,2L+ chemo-refractory,PMID:27592805,high,Kaufman 2016 n=88; 1L Part B ~62% interim (PMID:29566106)
+NET_LUNG,PD-1+CTLA-4,0.0,nivolumab+ipilimumab,DART/SWOG S1609,lung typical/atypical carcinoid (low-grade),PMID:31969335,low,low/intermediate-grade NET 0/14 in DART nonpancreatic NET cohort (pooled; not site-isolated)
+NET_MIDGUT,PD-1+CTLA-4,0.0,nivolumab+ipilimumab,DART/SWOG S1609,midgut/small-bowel carcinoid (low-grade),PMID:31969335,low,low/intermediate-grade NET 0/14 in DART nonpancreatic NET cohort (pooled; not site-isolated); high-grade NEN respond ~44%
+NET_PANCREAS,PD-1+CTLA-4,11.0,nivolumab+ipilimumab,DART/SWOG S1609,advanced pancreatic NET,PMID:40588371,high,dual checkpoint ORR 11% (2/19); benefit in higher-grade; no anti-PD-1 monotherapy ORR
+NPC,PD-1,25.0,pembrolizumab,KEYNOTE-028,pretreated; PD-L1+ selected,PMID:28837405,medium,KN-028 NPC cohort ~26%
+OV,PD-1,8.0,pembrolizumab,KEYNOTE-100,recurrent ovarian (all-comers),PMID:31218020,medium,pembro monotherapy ORR 8.0%
+OV,PD-L1,9.6,avelumab,JAVELIN Solid Tumor,recurrent post-platinum,PMID:30676622,high,heavily pretreated; modest
+PAAD,PD-1,1.0,pembrolizumab,pooled/basket,pretreated; MSS,,low,Near-zero anchor (~0-3%); no single clean monotherapy trial; rare dMMR/MSI-H PDAC responds (~37%) but is a tiny subset
+PCPG,PD-1,9.0,pembrolizumab,NCT02721732,metastatic pheochromocytoma/paraganglioma,DOI:10.3390/cancers12082307,medium,ORR 9% (1/11); non-progression 27wk 40%; CBR 73%
+PMBCL,PD-1,41.5,pembrolizumab,KEYNOTE-170,relapsed/refractory primary mediastinal B-cell lymphoma,PMID:37130017,high,ORR 41.5% (22/53); CR 20.8%; 9p24.1/PD-L1 amplification; FDA-approved; the checkpoint-sensitive exception within DLBCL
+PRAD,PD-1,4.0,pembrolizumab,KEYNOTE-199,pretreated mCRPC,PMID:31774688,high,Near-zero anchor; ~5% PD-L1+ / ~3% PD-L1-
+READ,PD-1,5.0,pembrolizumab,KEYNOTE-177/-164,all-comers (response is MSI-dependent),PMID:33264544,medium,All-comer ~5%; MSI-H ~45% and MSS ~0%
+READ_MSI,PD-1,45.0,pembrolizumab,KEYNOTE-177,first-line; MSI-H/dMMR,PMID:33264544,medium,MSI-H/dMMR rectal; small subset; same biology as COAD_MSI
+READ_MSS,PD-1,0.0,pembrolizumab,KEYNOTE-016,MSS,PMID:26028255,high,Microsatellite-stable rectal; immune-cold
+SARC_ANGIO,PD-1+CTLA-4,25.0,nivolumab+ipilimumab,DART/SWOG S1609 cohort 51,metastatic/unresectable angiosarcoma,PMID:34380663,medium,dual checkpoint ORR 25% (4/16); cutaneous scalp/face 60% (3/5); no anti-PD-1 monotherapy ORR
+SARC_ASPS,PD-L1,37.0,atezolizumab,ML39345 (NCT03141684),advanced ASPS,PMID:37672694,medium,alveolar soft part sarcoma; PD-L1 proxy (no anti-PD-1 monotherapy data); atezolizumab FDA-approved 2022; ORR 19/52
+SARC_CHON,PD-1,0.0,pembrolizumab,SARC028,advanced/metastatic bone cohort,PMID:28988646,low,chondrosarcoma 0/5
+SARC_CHOR,PD-1,12.0,pembrolizumab,AcSe Pembrolizumab,advanced chordoma,PMID:37429302,medium,chordoma ORR 12% (4/34)
+SARC_DDLPS,PD-1,10.0,pembrolizumab,SARC028,advanced/metastatic 2L+,PMID:28988646,low,dedifferentiated liposarcoma; SARC028 STS subset
+SARC_DSRCT,PD-1,12.5,pembrolizumab,AcSe Pembrolizumab,desmoplastic small round cell tumor,PMID:37429302,low,1/8 PR; otherwise immune-cold
+SARC_EPITH,PD-1,16.7,pembrolizumab,AcSe Pembrolizumab,advanced epithelioid sarcoma,PMID:37429302,low,1/6 PR; small n; consistent with KEYNOTE-051 single PR
+SARC_EWS,PD-1,0.0,pembrolizumab,SARC028,advanced/metastatic bone cohort,PMID:28988646,low,Ewing sarcoma 0/13; immune-cold
+SARC_GIST,PD-1,0.0,nivolumab,Alliance A091401,advanced GIST,PMID:39343511,medium,0/9 nivo and 0/9 nivo+ipi; immune-cold; ICI inactive
+SARC_KS,PD-1,62.1,pembrolizumab,CITN-12,HIV-associated Kaposi sarcoma,PMID:39356983,high,ORR 62.1% (18/29); treatment-naive subset ~88%; strong responder
+SARC_LMS,PD-1,0.0,pembrolizumab,SARC028,advanced/metastatic 2L+,PMID:28988646,low,leiomyosarcoma 0/10; immune-cold
+SARC_OS,PD-1,5.0,pembrolizumab,SARC028,advanced/metastatic bone cohort,PMID:28988646,low,osteosarcoma 1/22 in the bone cohort
+SARC_SMARCA4,PD-1,25.0,pembrolizumab,AcSe Pembrolizumab,SMARCA4/SMARCB1-deficient sarcoma,PMID:37429302,medium,ORR 25% (3/12); rhabdoid/SMARCA4-deficient immunogenic despite low TMB
+SARC_SYN,PD-1,10.0,pembrolizumab,SARC028,advanced/metastatic 2L+,PMID:28988646,low,synovial sarcoma 1/10; translocation sarcoma; immune-cold
+SARC_UPS,PD-1,23.0,pembrolizumab,SARC028,advanced/metastatic 2L+,PMID:28988646,medium,undifferentiated pleomorphic sarcoma; most ICI-responsive STS; expansion cohort ~23% (Burgess 2019)
+SCLC,PD-1,13.0,nivolumab,CheckMate-032,pretreated; all-comers,PMID:27269732,medium,~10-19%; nivo mono ~10%; KEYNOTE-028 PD-L1-selected was higher (~33%) but not representative
+SCLC,PD-1+CTLA-4,23.0,nivolumab+ipilimumab,CheckMate-032,recurrent >=1 prior,PMID:27269741,high,Antonia 2016 Lancet Oncol; nivo1+ipi3
+SCLC,PD-L1,2.3,atezolizumab,IFCT-1603,2L post-platinum,PMID:30664989,high,single-agent anti-PD-L1 essentially inactive in SCLC
+SKCM,PD-1,42.0,nivolumab,CheckMate-067,first-line advanced; nivo monotherapy arm,PMID:28889792,high,Nivo mono ~42-45% (CheckMate-067); pembro KEYNOTE-006 primary 33-37% / longer-FU ~42% (PMID:25891173); aPD1 monotherapy ~40-45% in melanoma
+SKCM,PD-1+CTLA-4,57.6,nivolumab+ipilimumab,CheckMate-067,1L untreated; all-comers,PMID:26027431,high,Larkin 2015; vs nivo-mono 43.7% / ipi-mono 19.0%
+STAD,PD-1,12.0,pembrolizumab,KEYNOTE-059,third-line; all-comers,PMID:29260193,medium,CPS>=1 ~16%; monotherapy indication later withdrawn
+STAD,PD-L1,10.0,avelumab,JAVELIN Solid Tumor JPN,dose-expansion pretreated,PMID:30515672,medium,intl cohort 6.7%; PD-L1+ 27%
+TGCT,PD-1,0.0,pembrolizumab,Hoosier GU14-206,platinum-refractory germ cell,PMID:29045540,high,0/12; checkpoint monotherapy inactive in GCT
+THCA,PD-1,6.8,pembrolizumab,KEYNOTE-158,advanced differentiated thyroid,DOI:10.1002/cncr.34657,high,differentiated thyroid ORR 6.8% (7/103); anaplastic ATC higher with TKI combos (not monotherapy)
+THYM,PD-L1,29.0,avelumab,NCI phase 1 (Rajan),relapsed thymoma,PMID:31639039,medium,tiny n=7; high irAE
+THYMCA,PD-1,22.5,pembrolizumab,NCT02364076,advanced thymic carcinoma,PMID:29395863,medium,thymic carcinoma ORR 22.5% (9/40); thymoma (THYM) itself avoided due to severe irAEs
+UCEC,PD-1,8.0,pembrolizumab,KEYNOTE-158,all-comers (response is MMR-dependent),PMID:34990208,medium,dMMR/MSI-H ~50% vs pMMR ~6% (KN-158); all-comer is a weighted blend
+UCEC_CNH,PD-1,6.0,pembrolizumab,KEYNOTE-158,pMMR/MSS p53-abnormal,PMID:34990208,medium,non-MSI-H ORR ~7%; p53-abnormal most immune-cold
+UCEC_CNL,PD-1,6.0,pembrolizumab,KEYNOTE-158,pMMR/MSS NSMP,PMID:34990208,medium,non-MSI-H ORR ~7% (3-14); MSS NSMP arm
+UCEC_MSI,PD-1,50.0,pembrolizumab,KEYNOTE-158,dMMR/MSI-H advanced EC,PMID:34990208,high,ORR 50% (95% CI 40-61); MSI-H/dMMR cohort n=94
+UVM,PD-1,4.0,nivolumab,pooled uveal series,metastatic uveal melanoma,PMID:27533448,low,uveal anti-PD-1 monotherapy ORR ~3-6% (checkpoint-refractory)
+VSCC,PD-1,10.9,pembrolizumab,KEYNOTE-158,advanced vulvar SCC,PMID:35361487,high,ORR 10.9% (11/101); durable (mDOR 20.4 mo)
+cSCC,PD-1,34.3,pembrolizumab,KEYNOTE-629,recurrent/metastatic cSCC,PMID:32673170,high,R/M cutaneous SCC ORR 34.3% (36/105); cemiplimab EMPOWER-CSCC-1 ~47%

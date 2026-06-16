@@ -376,6 +376,39 @@ def apd1_orr_bars(*, save=None):
     )
 
 
+def ici_response_by_regimen(*, save=None, only_multi=True):
+    """Grouped horizontal bars of ICI ORR by cancer type, one bar per **regimen**
+    (anti-PD-1 / anti-PD-L1 / anti-PD-1+anti-CTLA-4) — so the regimens are shown as
+    distinct response sources and can be compared within a cancer. With ``only_multi``
+    (default) only cancers with more than one regimen are shown (where the comparison
+    is meaningful); set ``False`` to include every cancer with any ICI value."""
+    from .ici import REGIMEN_FALLBACK, REGIMEN_LABELS, cancer_ici_response
+
+    by_regimen = {r: cancer_ici_response(regimen=r) for r in REGIMEN_FALLBACK}
+    codes = {c for m in by_regimen.values() for c in m}
+    if only_multi:
+        codes = {c for c in codes if sum(c in by_regimen[r] for r in REGIMEN_FALLBACK) > 1}
+    if not codes:
+        raise ValueError("no cancer types to plot")
+    # Order rows by best available ORR (descending), top at the top.
+    best = {c: max(by_regimen[r][c] for r in REGIMEN_FALLBACK if c in by_regimen[r]) for c in codes}
+    ordered = sorted(codes, key=lambda c: best[c], reverse=True)
+
+    palette = _stable_palette()
+    reg_color = {r: palette[i] for i, r in enumerate(REGIMEN_FALLBACK)}
+    series = [
+        (REGIMEN_LABELS[r], [by_regimen[r].get(c, 0.0) for c in ordered], reg_color[r])
+        for r in REGIMEN_FALLBACK
+    ]
+    return _grouped_barh(
+        [format_cancer_code_label(c) for c in ordered],
+        series,
+        xlabel="Objective response rate (%)",
+        title=f"ICI response by regimen ({len(ordered)} cancer types)",
+        save=save,
+    )
+
+
 def incidence_vs_mortality(*, region="us", save=None):
     """Scatter of mortality-share vs incidence-share (%) per burden category for
     a region (``"us"`` or ``"world"``). The diagonal separates high-lethality
@@ -732,7 +765,7 @@ def cta_coverage_curves(
         )
     curves.sort(key=lambda t: t[2][-1], reverse=True)  # broadest coverage first
 
-    ncol = min(4, len(curves))
+    ncol = min(6, len(curves))
     nrow = (len(curves) + ncol - 1) // ncol
     fig, axes = plt.subplots(
         nrow, ncol, figsize=(ncol * 3.0, nrow * 2.4), sharex=True, sharey=True, squeeze=False

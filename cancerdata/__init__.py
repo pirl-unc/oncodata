@@ -140,6 +140,14 @@ from .hpa import (
     hpa_rna_consensus,
     hpa_single_cell,
 )
+from .ici import (
+    REGIMEN_FALLBACK,
+    REGIMEN_LABELS,
+    cancer_ici_regimen,
+    cancer_ici_response,
+    cancer_ici_response_df,
+    ici_regimens,
+)
 from .incidence import (
     burden_category,
     cancer_burden,
@@ -208,6 +216,8 @@ __all__ = [
     "CANCER_TYPE_ALIASES",
     "CANCER_TYPE_NAMES",
     "OTHER_TECHNICAL_FRACTION",
+    "REGIMEN_FALLBACK",
+    "REGIMEN_LABELS",
     "RIBOSOMAL_PROTEIN_FRACTION",
     "SHARD_DATASETS",
     "TECHNICAL_FRACTION",
@@ -246,6 +256,9 @@ __all__ = [
     "cancer_code_burden_map",
     "cancer_fusions",
     "cancer_fusions_df",
+    "cancer_ici_regimen",
+    "cancer_ici_response",
+    "cancer_ici_response_df",
     "cancer_lineage_group",
     "cancer_lineage_group_overrides",
     "cancer_lineage_groups",
@@ -319,6 +332,7 @@ __all__ = [
     # HPA normal-tissue reference data
     "hpa_rna_consensus",
     "hpa_single_cell",
+    "ici_regimens",
     "id_columns",
     "is_expression_value_col",
     "is_mixture_cohort",
