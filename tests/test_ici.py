@@ -40,3 +40,21 @@ def test_maps_and_alias():
     pdl1 = ici.cancer_ici_response(regimen="PD-L1")
     assert len(full) > len(pdl1) >= 10
     assert all(isinstance(v, float) for v in full.values())
+
+
+def test_whole_table_per_regimen_mapping():
+    # cancer_type=None with fallback=False -> {code: {regimen: orr}} for every cancer.
+    per = ici.cancer_ici_response(fallback=False)
+    assert isinstance(per["SKCM"], dict)
+    assert per["SKCM"] == {"PD-1": 42.0, "PD-1+CTLA-4": 57.6}
+    # single-regimen cancers carry a one-entry mapping
+    assert set(per["SARC_ASPS"]) == {"PD-L1"}
+    # the PD-L1 members match the pinned PD-L1 map
+    assert {c for c, m in per.items() if "PD-L1" in m} == set(
+        ici.cancer_ici_response(regimen="PD-L1")
+    )
+
+
+def test_regimen_maps_cached():
+    # _regimen_maps is memoized (same object back from the cache).
+    assert ici._regimen_maps() is ici._regimen_maps()

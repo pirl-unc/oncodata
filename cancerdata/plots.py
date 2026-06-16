@@ -396,8 +396,10 @@ def ici_response_by_regimen(*, save=None, only_multi=True):
 
     palette = _stable_palette()
     reg_color = {r: palette[i] for i, r in enumerate(REGIMEN_FALLBACK)}
+    # Absent regimen -> NaN (no bar drawn), so a missing estimate is not confused
+    # with a true 0% ORR (matplotlib draws nothing for a NaN-width bar).
     series = [
-        (REGIMEN_LABELS[r], [by_regimen[r].get(c, 0.0) for c in ordered], reg_color[r])
+        (REGIMEN_LABELS[r], [by_regimen[r].get(c, float("nan")) for c in ordered], reg_color[r])
         for r in REGIMEN_FALLBACK
     ]
     return _grouped_barh(

@@ -36,8 +36,10 @@ full per-regimen mapping.
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from .cancer_types import cancer_type_registry, resolve_cancer_type
-from .load_dataset import get_data
+from .load_dataset import _register_derived_cache, get_data
 
 #: Regimen tags in preference order — the default fallback when no regimen is pinned:
 #: anti-PD-1 monotherapy first, then anti-PD-L1, then the anti-PD-1+anti-CTLA-4 doublet.
@@ -64,13 +66,18 @@ def ici_regimens() -> tuple[str, ...]:
     return REGIMEN_FALLBACK
 
 
+@lru_cache(maxsize=1)
 def _regimen_maps() -> dict[str, dict[str, float]]:
-    """``{regimen: {cancer_code: orr_pct}}`` from the curated table."""
+    """``{regimen: {cancer_code: orr_pct}}`` from the curated table. Cached; callers
+    must treat the result as read-only (copy before mutating)."""
     df = cancer_ici_response_df().dropna(subset=["orr_pct"])
     out: dict[str, dict[str, float]] = {r: {} for r in REGIMEN_FALLBACK}
     for code, regimen, orr in zip(df["cancer_code"], df["regimen"], df["orr_pct"]):
         out.setdefault(str(regimen), {})[str(code)] = float(orr)
     return out
+
+
+_register_derived_cache(_regimen_maps.cache_clear)
 
 
 def _resolve_with_fallback(code: str, maps: dict[str, dict[str, float]], order):
@@ -106,8 +113,11 @@ def cancer_ici_response(cancer_type=None, *, regimen=None, fallback=True, inheri
     if cancer_type is None:
         if regimen is not None:
             return dict(maps.get(regimen, {}))
-        # Fallback pick per cancer across the union of covered codes.
         codes = {c for m in maps.values() for c in m}
+        if not fallback:
+            # Per-regimen mapping for every covered cancer: {code: {regimen: orr}}.
+            return {c: {r: maps[r][c] for r in REGIMEN_FALLBACK if c in maps[r]} for c in codes}
+        # Fallback pick per cancer across the union of covered codes.
         out = {}
         for c in codes:
             val, _ = _resolve_with_fallback(c, maps, REGIMEN_FALLBACK)
