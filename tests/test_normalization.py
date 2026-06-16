@@ -46,12 +46,12 @@ def _matrix():
 
 def test_clean_tpm_technical_compartment_budget():
     # _matrix() has 2 technical (mito) + 3 biological genes, no ribosomal -> the technical
-    # compartment is pinned to TECHNICAL_FRACTION (9%), biology to 75%; the empty ribosomal
+    # compartment is pinned to OTHER_TECHNICAL_FRACTION (9%), biology to 75%; the empty ribosomal
     # compartment contributes 0.
     gt, vals = _matrix()
     clean = norm.clean_tpm(vals, gt)
     rem = norm._censored_mask(gt, exclude_ribosomal_proteins=True).to_numpy()
-    assert np.allclose(clean.loc[rem].sum(), norm.TECHNICAL_FRACTION * 1e6)  # 90k
+    assert np.allclose(clean.loc[rem].sum(), norm.OTHER_TECHNICAL_FRACTION * 1e6)  # 90k
     assert np.allclose(clean.loc[~rem].sum(), norm.BIOLOGICAL_FRACTION * 1e6)  # 750k
     # within-biology ratios preserved (300:400:500)
     bio = clean.loc[~rem, "s1"].to_numpy()
@@ -71,7 +71,7 @@ def test_clean_tpm_three_compartments():
     vals = pd.DataFrame({"s1": [5000.0, 5000.0, 300.0, 700.0]}, index=gt.index)
     clean = norm.clean_tpm(vals, gt)
     assert clean.loc[0, "s1"] == pytest.approx(norm.RIBOSOMAL_PROTEIN_FRACTION * 1e6)  # 160k
-    assert clean.loc[1, "s1"] == pytest.approx(norm.TECHNICAL_FRACTION * 1e6)  # 90k
+    assert clean.loc[1, "s1"] == pytest.approx(norm.OTHER_TECHNICAL_FRACTION * 1e6)  # 90k
     assert clean.loc[[2, 3], "s1"].sum() == pytest.approx(norm.BIOLOGICAL_FRACTION * 1e6)  # 750k
 
 
@@ -79,10 +79,12 @@ def test_clean_tpm_compartment_fractions_public_and_sum_to_one():
     import cancerdata as cd
 
     # The applied compartment budgets are public constants (no re-hardcoding the magic
-    # numbers), and ribosomal + technical + biology partition the 1e6 budget.
-    assert (cd.RIBOSOMAL_PROTEIN_FRACTION, cd.TECHNICAL_FRACTION) == (0.16, 0.09)
-    assert cd.BIOLOGICAL_FRACTION == 0.75
-    assert cd.RIBOSOMAL_PROTEIN_FRACTION + cd.TECHNICAL_FRACTION + cd.BIOLOGICAL_FRACTION == 1.0
+    # numbers). Per-compartment splits + the combined TECHNICAL_FRACTION (matches pirlygenes:
+    # the constant is the *combined* 25%, with RIBOSOMAL/OTHER_TECHNICAL the 16/9 split).
+    assert (cd.RIBOSOMAL_PROTEIN_FRACTION, cd.OTHER_TECHNICAL_FRACTION) == (0.16, 0.09)
+    assert cd.TECHNICAL_FRACTION == 0.25 and cd.BIOLOGICAL_FRACTION == 0.75
+    assert cd.RIBOSOMAL_PROTEIN_FRACTION + cd.OTHER_TECHNICAL_FRACTION == cd.TECHNICAL_FRACTION
+    assert cd.TECHNICAL_FRACTION + cd.BIOLOGICAL_FRACTION == 1.0
 
 
 def test_normalize_expression_records_applied_fractions():
@@ -93,7 +95,7 @@ def test_normalize_expression_records_applied_fractions():
     )
     _, stats = norm.normalize_expression(df, value_cols=["s1_TPM"], censored_fill="fixed_fraction")
     assert stats["ribosomal_protein_fraction"] == norm.RIBOSOMAL_PROTEIN_FRACTION
-    assert stats["technical_fraction"] == norm.TECHNICAL_FRACTION
+    assert stats["other_technical_fraction"] == norm.OTHER_TECHNICAL_FRACTION
     assert stats["biological_fraction"] == pytest.approx(0.75)
 
 
@@ -130,10 +132,10 @@ def test_clean_tpm_no_technical_mass():
 
 def test_clean_tpm_validates():
     gt, vals = _matrix()
-    with pytest.raises(ValueError, match="technical_fraction"):
-        norm.clean_tpm(vals, gt, technical_fraction=1.5)
+    with pytest.raises(ValueError, match="other_technical_fraction"):
+        norm.clean_tpm(vals, gt, other_technical_fraction=1.5)
     with pytest.raises(ValueError, match="biology needs a budget"):
-        norm.clean_tpm(vals, gt, ribosomal_protein_fraction=0.7, technical_fraction=0.5)
+        norm.clean_tpm(vals, gt, ribosomal_protein_fraction=0.7, other_technical_fraction=0.5)
     with pytest.raises(ValueError, match="gene_table"):
         norm.clean_tpm(vals)
 

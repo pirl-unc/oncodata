@@ -15,9 +15,9 @@
 The headline transform is **clean TPM** (:func:`clean_tpm`): a **multi-compartment**
 renormalization. Each non-biological compartment is pinned, per sample, to a fixed
 fraction of the 1e6 budget — **ribosomal proteins → 16%** (:data:`RIBOSOMAL_PROTEIN_FRACTION`),
-**technical → 9%** (:data:`TECHNICAL_FRACTION`; mtDNA, NUMT, rRNA + pseudogenes,
+**other-technical → 9%** (:data:`OTHER_TECHNICAL_FRACTION`; mtDNA, NUMT, rRNA + pseudogenes,
 ribosomal-protein pseudogenes, polyA-bias lncRNA), **biology → 75%**
-(:data:`BIOLOGICAL_FRACTION`). The variable, pipeline-driven technical/ribosomal
+(:data:`BIOLOGICAL_FRACTION`). The variable, pipeline-driven other-technical/ribosomal
 fractions no longer inflate real genes, so biological clean TPM is directly comparable
 across samples and sources.
 
@@ -85,11 +85,17 @@ def _censored_mask(gene_table: pd.DataFrame, *, exclude_ribosomal_proteins: bool
 # instead of re-hardcoding the magic number, and the value survives future re-calibration.
 #: Clean-TPM budget for the canonical ribosomal-protein compartment (RPL/RPS).
 RIBOSOMAL_PROTEIN_FRACTION = 0.16
-#: Clean-TPM budget for the technical compartment (mtDNA, NUMT, rRNA + pseudogenes,
-#: ribosomal-protein pseudogenes, polyA-bias lncRNA).
-TECHNICAL_FRACTION = 0.09
+#: Clean-TPM budget for the **other-technical** compartment (mtDNA, NUMT, rRNA +
+#: pseudogenes, ribosomal-protein pseudogenes, polyA-bias lncRNA) — everything censored
+#: except the canonical ribosomal proteins.
+OTHER_TECHNICAL_FRACTION = 0.09
+#: Combined censored budget (ribosomal + other-technical = 25%). The two compartments are
+#: pinned separately, but this is the total non-biological fraction — matches pirlygenes'
+#: ``TECHNICAL_FRACTION`` semantics (the constant is the *combined* 25%; the per-compartment
+#: splits are RIBOSOMAL_PROTEIN_FRACTION / OTHER_TECHNICAL_FRACTION).
+TECHNICAL_FRACTION = round(RIBOSOMAL_PROTEIN_FRACTION + OTHER_TECHNICAL_FRACTION, 10)  # 0.25
 #: Clean-TPM budget for the biological compartment (everything else) — the remainder.
-BIOLOGICAL_FRACTION = round(1.0 - RIBOSOMAL_PROTEIN_FRACTION - TECHNICAL_FRACTION, 10)  # 0.75
+BIOLOGICAL_FRACTION = round(1.0 - TECHNICAL_FRACTION, 10)  # 0.75
 
 
 def _compartment_masks(
@@ -129,7 +135,7 @@ def clean_tpm(
     *,
     exclude_ribosomal_proteins: bool = True,
     ribosomal_protein_fraction: float = RIBOSOMAL_PROTEIN_FRACTION,
-    technical_fraction: float = TECHNICAL_FRACTION,
+    other_technical_fraction: float = OTHER_TECHNICAL_FRACTION,
 ) -> pd.DataFrame:
     """Multi-compartment **clean TPM** on a gene×sample matrix.
 
@@ -138,8 +144,8 @@ def clean_tpm(
     compartment is rescaled, **per sample**, to a fixed fraction of the 1e6 budget:
 
       - **ribosomal proteins** (canonical RPL/RPS) → ``ribosomal_protein_fraction`` (16%);
-      - **technical** (mtDNA, NUMT, rRNA + pseudogenes, ribosomal-protein pseudogenes,
-        polyA-bias lncRNA) → ``technical_fraction`` (9%);
+      - **other-technical** (mtDNA, NUMT, rRNA + pseudogenes, ribosomal-protein pseudogenes,
+        polyA-bias lncRNA) → ``other_technical_fraction`` (9%);
       - **biology** (everything else) → the remainder (75%).
 
     **Why two censored compartments, not one.** The fractions are calibrated to the
@@ -158,13 +164,13 @@ def clean_tpm(
     and only the technical-RNA set is censored (the legacy single-technical view)."""
     for name, frac in (
         ("ribosomal_protein_fraction", ribosomal_protein_fraction),
-        ("technical_fraction", technical_fraction),
+        ("other_technical_fraction", other_technical_fraction),
     ):
         if not 0.0 <= frac < 1.0:
             raise ValueError(f"{name} must be in [0, 1)")
-    if ribosomal_protein_fraction + technical_fraction >= 1.0:
+    if ribosomal_protein_fraction + other_technical_fraction >= 1.0:
         raise ValueError(
-            "ribosomal_protein_fraction + technical_fraction must be < 1 (biology needs a budget)"
+            "ribosomal_protein_fraction + other_technical_fraction must be < 1 (biology needs a budget)"
         )
     if gene_table is None:
         raise ValueError(
@@ -176,12 +182,12 @@ def clean_tpm(
     )
     rm, tm = ribosomal.to_numpy(), technical.to_numpy()
     bm = ~(rm | tm)
-    bio_fraction = 1.0 - ribosomal_protein_fraction - technical_fraction
+    bio_fraction = 1.0 - ribosomal_protein_fraction - other_technical_fraction
 
     clean = values.astype(float).copy()
     for mask, fraction in (
         (rm, ribosomal_protein_fraction),
-        (tm, technical_fraction),
+        (tm, other_technical_fraction),
         (bm, bio_fraction),
     ):
         if not mask.any():
@@ -395,7 +401,7 @@ def normalize_expression(
     group_cols=None,
     censored_fill: str = "zero",
     ribosomal_protein_fraction: float = RIBOSOMAL_PROTEIN_FRACTION,
-    technical_fraction: float = TECHNICAL_FRACTION,
+    other_technical_fraction: float = OTHER_TECHNICAL_FRACTION,
     exclude_ribosomal_proteins: bool = True,
     remove_groups=_TECHNICAL_RNA_GROUPS,
 ) -> tuple[pd.DataFrame, dict]:
@@ -410,7 +416,7 @@ def normalize_expression(
         normalizes within each group independently (e.g. per cohort in a long table).
       - any other value — apply the two-compartment reference :func:`clean_tpm`
         (clean_tpm_v4) over the value columns instead (the basis the packaged
-        references ship on); ``technical_fraction`` / ``exclude_ribosomal_proteins``
+        references ship on); ``other_technical_fraction`` / ``exclude_ribosomal_proteins``
         tune it.
 
     Classification is ENSG-first when ``id_col`` is present, else symbol-only.
@@ -438,7 +444,7 @@ def normalize_expression(
             gene_table=gene_table,
             exclude_ribosomal_proteins=exclude_ribosomal_proteins,
             ribosomal_protein_fraction=ribosomal_protein_fraction,
-            technical_fraction=technical_fraction,
+            other_technical_fraction=other_technical_fraction,
         )
         out[value_cols] = clean
         # Stamp the *applied* compartment budgets into the metadata (#446-analog) so a
@@ -448,8 +454,8 @@ def normalize_expression(
             "reason": "clean_tpm (multi-compartment)",
             "mode": censored_fill,
             "ribosomal_protein_fraction": ribosomal_protein_fraction,
-            "technical_fraction": technical_fraction,
-            "biological_fraction": 1.0 - ribosomal_protein_fraction - technical_fraction,
+            "other_technical_fraction": other_technical_fraction,
+            "biological_fraction": 1.0 - ribosomal_protein_fraction - other_technical_fraction,
             "exclude_ribosomal_proteins": bool(exclude_ribosomal_proteins),
         }
 
@@ -490,7 +496,7 @@ def normalize_technical_rna_columns(
     label_col: str = "Symbol",
     value_cols=None,
     censored_fill: str = "zero",
-    technical_fraction: float = TECHNICAL_FRACTION,
+    other_technical_fraction: float = OTHER_TECHNICAL_FRACTION,
 ) -> tuple[pd.DataFrame, dict]:
     """Technical-RNA normalization over a wide gene×sample frame — thin wrapper on
     :func:`normalize_expression` (no grouping, no noncoding removal)."""
@@ -499,7 +505,7 @@ def normalize_technical_rna_columns(
         label_col=label_col,
         value_cols=value_cols,
         censored_fill=censored_fill,
-        technical_fraction=technical_fraction,
+        other_technical_fraction=other_technical_fraction,
     )
 
 
@@ -510,7 +516,7 @@ def normalize_technical_rna_long_table(
     group_cols=("cancer_code", "subtype"),
     value_cols=("tumor_tpm_median", "tumor_tpm_q1", "tumor_tpm_q3"),
     censored_fill: str = "zero",
-    technical_fraction: float = TECHNICAL_FRACTION,
+    other_technical_fraction: float = OTHER_TECHNICAL_FRACTION,
 ) -> tuple[pd.DataFrame, dict]:
     """Technical-RNA normalization applied **within each long-table cohort group** —
     thin wrapper on :func:`normalize_expression` with ``group_cols``."""
@@ -520,7 +526,7 @@ def normalize_technical_rna_long_table(
         group_cols=group_cols,
         value_cols=value_cols,
         censored_fill=censored_fill,
-        technical_fraction=technical_fraction,
+        other_technical_fraction=other_technical_fraction,
     )
 
 

@@ -147,6 +147,7 @@ from .incidence import (
 )
 from .normalization import (
     BIOLOGICAL_FRACTION,
+    OTHER_TECHNICAL_FRACTION,
     RIBOSOMAL_PROTEIN_FRACTION,
     TECHNICAL_FRACTION,
     clean_tpm,
@@ -205,6 +206,7 @@ __all__ = [
     # ontology / registry
     "CANCER_TYPE_ALIASES",
     "CANCER_TYPE_NAMES",
+    "OTHER_TECHNICAL_FRACTION",
     "RIBOSOMAL_PROTEIN_FRACTION",
     "SHARD_DATASETS",
     "TECHNICAL_FRACTION",
