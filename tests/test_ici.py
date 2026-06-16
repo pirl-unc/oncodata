@@ -4,7 +4,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-from cancerdata import ici
+from oncodata import ici
 
 
 def test_regimens_and_table():

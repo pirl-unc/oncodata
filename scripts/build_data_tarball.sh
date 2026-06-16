@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Build the cancerdata expression-data tarball for upload to a GitHub Release.
+# Build the oncodata expression-data tarball for upload to a GitHub Release.
 #
 # The wheel ships only the small curated tables; the heavy per-cohort expression
 # artifacts (data_bundle.DOWNLOADABLE_PATHS) are distributed as a version-pinned
-# tarball attached to the pirl-unc/cancerdata release. This script packages those
+# tarball attached to the pirl-unc/oncodata release. This script packages those
 # paths from a source directory that already contains them — e.g. a populated
-# cache dir (`cancerdata fetch` then `cancerdata status` for the path) or a
+# cache dir (`oncodata fetch` then `oncodata status` for the path) or a
 # pirlygenes data checkout during the migration.
 #
 # Usage:
 #   scripts/build_data_tarball.sh <source-dir> [output-dir]
 #
-# Then: upload <output-dir>/cancerdata-data-v<DATA_VERSION>.tar.gz to the
-# `v<DATA_VERSION>` release on pirl-unc/cancerdata, and only THEN bump DATA_VERSION
+# Then: upload <output-dir>/oncodata-data-v<DATA_VERSION>.tar.gz to the
+# `v<DATA_VERSION>` release on pirl-unc/oncodata, and only THEN bump DATA_VERSION
 # (never before the upload — a 404 on the primary URL falls back to pirlygenes,
 # but a version with neither published hangs the fetch).
 set -euo pipefail
@@ -32,9 +32,9 @@ OUT_DIR="$(cd "${OUT_DIR%/}" && pwd)"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-DATA_VERSION="$(python -c 'from cancerdata.version import DATA_VERSION; print(DATA_VERSION)')"
-read -r -a PATHS <<<"$(python -c 'from cancerdata.data_bundle import DOWNLOADABLE_PATHS; print(" ".join(DOWNLOADABLE_PATHS))')"
-OUT="${OUT_DIR%/}/cancerdata-data-v${DATA_VERSION}.tar.gz"
+DATA_VERSION="$(python -c 'from oncodata.version import DATA_VERSION; print(DATA_VERSION)')"
+read -r -a PATHS <<<"$(python -c 'from oncodata.data_bundle import DOWNLOADABLE_PATHS; print(" ".join(DOWNLOADABLE_PATHS))')"
+OUT="${OUT_DIR%/}/oncodata-data-v${DATA_VERSION}.tar.gz"
 
 missing=()
 for p in "${PATHS[@]}"; do
@@ -51,5 +51,5 @@ tar -czf "$OUT" -C "$SRC" "${PATHS[@]}"
 SIZE="$(du -h "$OUT" | cut -f1)"
 echo "wrote $OUT ($SIZE)"
 echo
-echo "next: gh release upload v${DATA_VERSION} '$OUT' --repo pirl-unc/cancerdata"
+echo "next: gh release upload v${DATA_VERSION} '$OUT' --repo pirl-unc/oncodata"
 echo "      (create the v${DATA_VERSION} release first if it doesn't exist)"

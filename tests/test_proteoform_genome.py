@@ -8,7 +8,7 @@
 
 import pytest
 
-from cancerdata.proteoforms import (
+from oncodata.proteoforms import (
     proteoform_group_map,
     proteoform_groups,
     proteoform_symbol_map,

@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""``cancerdata`` command-line interface.
+"""``oncodata`` command-line interface.
 
 Reference lookups over the bundled tables (cancer-type / TMB / burden) plus the
 data-bundle fetch/cache surface (fetch / status / cache-dir / prune) for the
@@ -48,7 +48,7 @@ def _fmt_bytes(n: int) -> str:
 
 
 def _cmd_version(args: argparse.Namespace) -> int:
-    print(f"cancerdata v{__version__}")
+    print(f"oncodata v{__version__}")
     return 0
 
 
@@ -102,7 +102,7 @@ def _cmd_data(args: argparse.Namespace) -> int:
     from . import catalog
 
     if args.action == "list":
-        # The full inventory: every cancerdata-domain dataset and how it's held.
+        # The full inventory: every oncodata-domain dataset and how it's held.
         # `Cohorts` is the per-cohort file count held *inside* a directory dataset.
         print(
             f"{'Dataset':<46} {'Held':<8} {'Avail':<6} {'Cohorts':>8} {'Category':<14} Description"
@@ -347,7 +347,7 @@ def _cmd_expression_sources(args: argparse.Namespace) -> int:
         print(
             f"{s.id:<26} {s.source_type:<20} {(s.unit or ''):<7} {len(s.cancer_codes):<6} {codes}"
         )
-    print(f"\n{len(srcs)} sources. Registry: cancerdata/data/expression_sources.yaml")
+    print(f"\n{len(srcs)} sources. Registry: oncodata/data/expression_sources.yaml")
     return 0
 
 
@@ -389,12 +389,12 @@ def _cmd_burden(args: argparse.Namespace) -> int:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="cancerdata",
+        prog="oncodata",
         description="Curated cancer reference data: ontology, TMB, incidence/mortality, expression.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("version", help="Print the installed cancerdata version").set_defaults(
+    sub.add_parser("version", help="Print the installed oncodata version").set_defaults(
         func=_cmd_version
     )
 

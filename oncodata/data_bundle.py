@@ -19,17 +19,17 @@ GitHub Release.
 
 Cache layout (version-pinned so upgrades trigger a re-fetch):
 
-  ~/.cache/cancerdata/bundled_data/v<DATA_VERSION>/
+  ~/.cache/oncodata/bundled_data/v<DATA_VERSION>/
     cancer-reference-expression/...
     cancer-reference-expression-percentiles/...
     pan-cancer-expression.csv
     hpa-cell-type-expression.csv
 
-cancerdata now owns the bundle: new downloads land under ``~/.cache/cancerdata``
-and prefer the ``pirl-unc/cancerdata`` release. To avoid a forced re-download
+oncodata now owns the bundle: new downloads land under ``~/.cache/oncodata``
+and prefer the ``pirl-unc/oncodata`` release. To avoid a forced re-download
 during the migration, an already-populated legacy ``~/.cache/pirlygenes`` cache
 for the current version is reused as-is, and the fetch falls back to the
-``pirl-unc/pirlygenes`` release if cancerdata hasn't published this version's
+``pirl-unc/pirlygenes`` release if oncodata hasn't published this version's
 tarball yet. The ``PIRLYGENES_BUNDLED_DATA`` env var is still honored;
 ``CANCERDATA_BUNDLED_DATA`` takes precedence when set.
 
@@ -61,12 +61,12 @@ def _release_url(repo: str, filename: str) -> str:
     return f"https://github.com/{repo}/releases/download/v{DATA_VERSION}/{filename}"
 
 
-# cancerdata owns the bundle: its own release is tried first. The historical
+# oncodata owns the bundle: its own release is tried first. The historical
 # pirlygenes release is kept as a fallback for one migration release so a version
-# whose cancerdata tarball isn't uploaded yet still fetches (a 404 from the
+# whose oncodata tarball isn't uploaded yet still fetches (a 404 from the
 # primary falls through to the fallback rather than hanging the user).
-GITHUB_REPO = "pirl-unc/cancerdata"
-TARBALL_FILENAME = f"cancerdata-data-v{DATA_VERSION}.tar.gz"
+GITHUB_REPO = "pirl-unc/oncodata"
+TARBALL_FILENAME = f"oncodata-data-v{DATA_VERSION}.tar.gz"
 RELEASE_URL = _release_url(GITHUB_REPO, TARBALL_FILENAME)
 
 FALLBACK_GITHUB_REPO = "pirl-unc/pirlygenes"
@@ -81,9 +81,9 @@ CACHE_DIR_ENV_VAR = "CANCERDATA_BUNDLED_DATA"
 #: Back-compat env var honored when this package's own override is unset.
 LEGACY_CACHE_DIR_ENV_VAR = "PIRLYGENES_BUNDLED_DATA"
 
-#: Default cache parents. New downloads go under the cancerdata root; an existing
+#: Default cache parents. New downloads go under the oncodata root; an existing
 #: pirlygenes cache for the current version is reused to avoid a re-download.
-_DEFAULT_CACHE_PARENT = Path.home() / ".cache" / "cancerdata" / "bundled_data"
+_DEFAULT_CACHE_PARENT = Path.home() / ".cache" / "oncodata" / "bundled_data"
 _LEGACY_CACHE_PARENT = Path.home() / ".cache" / "pirlygenes" / "bundled_data"
 
 # Names that live in the downloadable tarball (relative to the cache root) and
@@ -104,7 +104,7 @@ def _cache_override() -> str | None:
 def cache_root() -> Path:
     """Parent of all version-pinned cache dirs (``v<version>/`` lives inside).
 
-    Defaults to the cancerdata cache root, but if *this* version was already
+    Defaults to the oncodata cache root, but if *this* version was already
     downloaded under the legacy pirlygenes root (and not yet under the new one),
     that legacy root is returned so the migration doesn't force a re-download.
     """
@@ -171,7 +171,7 @@ def _download_and_extract(url: str, root: Path, *, verbose: bool) -> None:
         with urllib.request.urlopen(url) as resp, tmp_path.open("wb") as h:
             shutil.copyfileobj(resp, h, length=1024 * 1024)
         if verbose:
-            sys.stderr.write("cancerdata: extracting...\n")
+            sys.stderr.write("oncodata: extracting...\n")
             sys.stderr.flush()
         with tarfile.open(tmp_path) as tf:
             # filter=data is Python 3.12+; fall back to the older API.
@@ -195,8 +195,8 @@ def _download_and_extract(url: str, root: Path, *, verbose: bool) -> None:
 def fetch(*, verbose: bool = True) -> Path:
     """Download + extract the bundle for this version into the cache.
 
-    Tries each URL in :data:`RELEASE_URLS` (cancerdata first, pirlygenes fallback)
-    until one succeeds, so a version not yet published on the cancerdata release
+    Tries each URL in :data:`RELEASE_URLS` (oncodata first, pirlygenes fallback)
+    until one succeeds, so a version not yet published on the oncodata release
     transparently falls back. Always overwrites — safe to call to repair a corrupt
     cache. Returns the cache directory.
     """
@@ -206,7 +206,7 @@ def fetch(*, verbose: bool = True) -> Path:
     for url in RELEASE_URLS:
         if verbose:
             sys.stderr.write(
-                f"cancerdata: downloading data bundle for v{DATA_VERSION} "
+                f"oncodata: downloading data bundle for v{DATA_VERSION} "
                 "(~350 MB, one-time)\n"
                 f"  from {url}\n"
                 f"  to   {root}\n"
@@ -219,15 +219,15 @@ def fetch(*, verbose: bool = True) -> Path:
             # an HTML error page served with 200 — fall back to the next source.
             errors.append(f"{url}: {e}")
             if verbose:
-                sys.stderr.write(f"cancerdata: {url} unavailable ({e}); trying next source\n")
+                sys.stderr.write(f"oncodata: {url} unavailable ({e}); trying next source\n")
                 sys.stderr.flush()
             continue
         if verbose:
-            sys.stderr.write(f"cancerdata: data bundle ready at {root}\n")
+            sys.stderr.write(f"oncodata: data bundle ready at {root}\n")
             sys.stderr.flush()
         return root
     raise RuntimeError(
-        "cancerdata: could not download the data bundle from any release source:\n  "
+        "oncodata: could not download the data bundle from any release source:\n  "
         + "\n  ".join(errors)
     )
 
@@ -243,14 +243,13 @@ def ensure_local(*, auto_fetch: bool = True, verbose: bool = True) -> Path:
         return cache_dir()
     if not auto_fetch:
         raise FileNotFoundError(
-            f"cancerdata data bundle not found at {cache_dir()}. "
-            "Run `cancerdata fetch` to download it."
+            f"oncodata data bundle not found at {cache_dir()}. Run `oncodata fetch` to download it."
         )
     return fetch(verbose=verbose)
 
 
 def status() -> dict:
-    """Snapshot of cache state — used by ``cancerdata status``."""
+    """Snapshot of cache state — used by ``oncodata status``."""
     root = cache_dir()
     items: dict[str, dict] = {}
     for p in DOWNLOADABLE_PATHS:
@@ -310,7 +309,7 @@ def list_cache_versions() -> list[dict]:
     """Enumerate every version-pinned cache dir under :func:`cache_root`.
 
     Returns ``{"version", "path", "size_bytes", "is_current"}`` dicts sorted by
-    version label. Used by ``cancerdata prune`` to find upgrade leftovers.
+    version label. Used by ``oncodata prune`` to find upgrade leftovers.
     """
     root = cache_root()
     if not root.exists():

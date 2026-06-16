@@ -10,7 +10,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from cancerdata.expression import (
+from oncodata.expression import (
     available_within_sample_cohorts,
     within_sample_top_fraction,
 )
@@ -131,7 +131,7 @@ def test_accessor_proteoform_missing_shard_and_matrix_raises(
 ):
     # No proteoform shard AND no cached per-sample matrix -> a clear error, not a
     # silent failure (the on-the-fly path needs the matrix).
-    from cancerdata import expression
+    from oncodata import expression
 
     def _no_matrix(*a, **k):
         raise FileNotFoundError("not cached")
@@ -144,8 +144,8 @@ def test_accessor_proteoform_missing_shard_and_matrix_raises(
 def test_accessor_proteoform_computed_on_the_fly(proteoform_within_sample_cache, monkeypatch):
     # No proteoform shard for LUAD -> the proteoform within-sample vector is recomputed
     # on the fly from the (stubbed) per-sample matrix: members collapse before ranking.
-    import cancerdata.proteoforms as pmod
-    from cancerdata import expression
+    import oncodata.proteoforms as pmod
+    from oncodata import expression
 
     fake = pd.DataFrame(
         {

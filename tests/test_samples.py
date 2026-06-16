@@ -6,7 +6,7 @@
 
 """Per-sample curation manifest — incl. alias resolution (#22)."""
 
-from cancerdata import sample_manifest, samples_for_cancer_code
+from oncodata import sample_manifest, samples_for_cancer_code
 
 
 def _a_present_code_with_alias():

@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cancerdata import expression, expression_builders
+from oncodata import expression, expression_builders
 
 
 def _matrix(genes, samples, values):

@@ -6,8 +6,8 @@
 
 """Per-type gene biology + fusion-rule tables (#35, R-onto)."""
 
-from cancerdata import cancer_genes as cg
-from cancerdata import fusions as f
+from oncodata import cancer_genes as cg
+from oncodata import fusions as f
 
 
 def test_viral_antigens():

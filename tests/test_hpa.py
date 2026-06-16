@@ -6,7 +6,7 @@
 
 import pytest
 
-from cancerdata import hpa
+from oncodata import hpa
 
 
 def _seed(cache_root, name, version, filename, text):
@@ -77,7 +77,7 @@ def test_gene_protein_tissues_detected_only(hpa_cache):
 
 
 def test_cli_sources_list(hpa_cache, capsys):
-    from cancerdata import cli
+    from oncodata import cli
 
     assert cli.main(["sources", "list"]) == 0
     out = capsys.readouterr().out
@@ -85,7 +85,7 @@ def test_cli_sources_list(hpa_cache, capsys):
 
 
 def test_cli_sources_path_uses_cache(hpa_cache, capsys):
-    from cancerdata import cli
+    from oncodata import cli
 
     # already seeded -> ensure() returns the path without a network fetch
     assert cli.main(["sources", "path", "hpa_rna_consensus"]) == 0
@@ -96,7 +96,7 @@ def test_hpa_parquet_cache(monkeypatch, tmp_path):
     # _read_hpa caches a parquet next to the TSV and reads it on the next call.
     import pandas as pd
 
-    from cancerdata import hpa, reference_data
+    from oncodata import hpa, reference_data
 
     tsv = tmp_path / "rna_tissue_consensus.tsv"
     tsv.write_text("Gene\tTissue\tnTPM\nENSG1\tliver\t12.5\nENSG2\tlung\t3.0\n")

@@ -15,8 +15,8 @@
 
 Re-derives every RNA / protein / restriction / filter column for every existing
 row from the current pinned HPA release (v23: ``rna_tissue_consensus`` for RNA,
-``normal_tissue`` for IHC), using :func:`cancerdata.cta_regen.regenerate_cta_columns`.
-The HPA tables are downloaded + cached on first use via the cancerdata accessors.
+``normal_tissue`` for IHC), using :func:`oncodata.cta_regen.regenerate_cta_columns`.
+The HPA tables are downloaded + cached on first use via the oncodata accessors.
 
 The gene list and identity/annotation columns (Symbol, Ensembl_Gene_ID, Aliases,
 Full_Name, Function, source_databases, Canonical_Transcript_ID, biotype) are
@@ -43,13 +43,13 @@ import pandas as pd
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
-from cancerdata.cta_regen import (  # noqa: E402
+from oncodata.cta_regen import (  # noqa: E402
     PRESERVED_COLUMNS,
     RECOMPUTED_COLUMNS,
     regenerate_cta_columns,
 )
 
-CSV_PATH = _REPO_ROOT / "cancerdata" / "data" / "cancer-testis-antigens.csv"
+CSV_PATH = _REPO_ROOT / "oncodata" / "data" / "cancer-testis-antigens.csv"
 
 
 def _report(old: pd.DataFrame, new: pd.DataFrame, columns: list[str]) -> None:

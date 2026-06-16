@@ -14,7 +14,7 @@
 
 A CTA is a gene whose normal expression is restricted to reproductive tissues
 (testis / ovary / placenta) and which reactivates in tumors — a tissue-restriction
-call over HPA normal-tissue expression, i.e. cancer **reference data**. cancerdata
+call over HPA normal-tissue expression, i.e. cancer **reference data**. oncodata
 owns the definition: the bundled ``cancer-testis-antigens.csv`` carries the
 candidate list (from 5 source databases) plus the HPA-derived per-tissue
 restriction columns and filter flags.
@@ -23,7 +23,7 @@ The MS-evidence restriction tiers and peptide/MHC presentation that build on top
 of this list are the target-selection layer's domain and are intentionally NOT
 here. ``restriction`` and ``restriction_confidence`` in the bundled table are the
 **HPA-only** synthesis (protein + RNA modalities; see :func:`synthesize_restriction`)
-— no MS contribution — so the values match the data cancerdata owns.
+— no MS contribution — so the values match the data oncodata owns.
 """
 
 from __future__ import annotations
@@ -104,7 +104,7 @@ def synthesize_restriction(row) -> tuple[str, str]:
     MODERATE / LOW / NO_DATA from per-modality agreement and HPA reliability.
     This is the **HPA-only** synthesis — the MS-evidence contribution that the
     target-selection layer adds is intentionally excluded, so the value's
-    provenance matches the data cancerdata owns.
+    provenance matches the data oncodata owns.
     """
     protein_r = str(row.get("protein_restriction", "") or "")
     protein_rel = str(row.get("protein_reliability", "") or "")

@@ -7,7 +7,7 @@
 import pandas as pd
 import pytest
 
-from cancerdata import peptides
+from oncodata import peptides
 
 
 class _FakeTr:
@@ -133,7 +133,7 @@ def test_weight_by_proteoform_key_covers_group_via_any_member(monkeypatch):
 def test_specific_9mer_load_joins_on_proteoform_key(fake_proteome, monkeypatch):
     # The load joins on proteoform_key (the uniform key), NOT Symbol/ENSG: a stub whose
     # Symbol/ENSG don't match the weight key still resolves via proteoform_key.
-    from cancerdata import coverage
+    from oncodata import coverage
 
     def fake_fractions(code, *, threshold_tpm):
         return pd.DataFrame(
@@ -151,7 +151,7 @@ def test_specific_9mer_load_joins_on_proteoform_key(fake_proteome, monkeypatch):
 
 
 def test_specific_9mer_load_empty_cohort(fake_proteome, monkeypatch):
-    from cancerdata import coverage
+    from oncodata import coverage
 
     monkeypatch.setattr(coverage, "cta_patient_fractions", lambda code, **k: pd.DataFrame())
     assert peptides.cta_specific_9mer_load("X", k=3) == 0.0

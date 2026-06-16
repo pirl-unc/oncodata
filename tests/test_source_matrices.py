@@ -10,8 +10,8 @@ import urllib.error
 
 import pytest
 
-from cancerdata import catalog
-from cancerdata import source_matrices as sm
+from oncodata import catalog
+from oncodata import source_matrices as sm
 
 
 def test_registry_and_available_cohorts():
@@ -88,7 +88,7 @@ def test_catalog_per_sample_addressing(monkeypatch, tmp_path):
 
 
 def test_catalog_fetch_groups(monkeypatch):
-    from cancerdata import data_bundle, reference_data
+    from oncodata import data_bundle, reference_data
 
     # hpa group -> only HPA sources downloaded
     monkeypatch.setattr(

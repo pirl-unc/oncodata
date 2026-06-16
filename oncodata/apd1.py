@@ -38,7 +38,7 @@ def cancer_apd1_response(cancer_type=None, *, inherit=True):
     :func:`resolve_cancer_type`; with ``inherit`` (default) a code with no
     curated row of its own inherits its nearest ancestor's value via the registry
     ``parent_code`` chain. Returns ``None`` if neither the code nor any ancestor
-    has a value. Mirrors :func:`cancerdata.cancer_tmb`."""
+    has a value. Mirrors :func:`oncodata.cancer_tmb`."""
     df = cancer_apd1_response_df()
     vals = df.dropna(subset=["apd1_orr_pct"])
     mapping = dict(zip(vals["cancer_code"].astype(str), vals["apd1_orr_pct"].astype(float)))

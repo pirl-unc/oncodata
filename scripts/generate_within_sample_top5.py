@@ -31,7 +31,7 @@ basis the percentile artifact uses).
 
 Output
 ------
-``cancerdata/data/cancer-reference-expression-within-sample-top5/<CODE>.parquet``
+``oncodata/data/cancer-reference-expression-within-sample-top5/<CODE>.parquet``
 with ``Ensembl_Gene_ID, Symbol, frac_samples_top1pct, frac_samples_top5pct,
 frac_samples_top10pct, n_samples``.
 
@@ -60,13 +60,11 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from cancerdata.expression import SHARD_DATASETS
-from cancerdata.expression_builders import sample_columns, within_sample_top_fractions
+from oncodata.expression import SHARD_DATASETS
+from oncodata.expression_builders import sample_columns, within_sample_top_fractions
 
 _DATASET = SHARD_DATASETS["within_sample"]  # the reader's record — derive dirs from it so
-_DATA_DIR = (
-    Path(__file__).resolve().parents[1] / "cancerdata" / "data"
-)  # producer/reader can't drift
+_DATA_DIR = Path(__file__).resolve().parents[1] / "oncodata" / "data"  # producer/reader can't drift
 OUT_DIR = _DATA_DIR / _DATASET.gene_dir
 
 
@@ -96,7 +94,7 @@ def build(
     within-sample ranking, so a duplicated antigen ranks as one proteoform rather than
     several individually-diluted genes. Output lands in the scope-specific
     ``…-within-sample-top5-proteoform-<scope>`` directory the reader expects (see
-    :meth:`cancerdata.expression.ShardDataset.subdir`).
+    :meth:`oncodata.expression.ShardDataset.subdir`).
     """
     if out_dir is None:
         out_dir = _proteoform_out_dir(scope) if proteoform else OUT_DIR
@@ -117,7 +115,7 @@ def build(
         if proteoform:
             # Sum identical-protein members per sample first, then rank within the
             # collapsed antigen axis (one reusable collapse + proteoform_id identity).
-            from cancerdata.proteoforms import collapse_to_proteoforms
+            from oncodata.proteoforms import collapse_to_proteoforms
 
             df = collapse_to_proteoforms(df, scope=scope, sample_cols=cols)
             cols = sample_columns(df)

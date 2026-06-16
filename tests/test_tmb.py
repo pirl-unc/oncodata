@@ -4,7 +4,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-from cancerdata import cancer_types, tmb
+from oncodata import cancer_types, tmb
 
 
 def test_tmb_map_nonempty_floats():

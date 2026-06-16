@@ -13,10 +13,10 @@
 """A small curated set of anti-PD-1 response/resistance expression signatures.
 
 Cancer-type-level reference describing the *biology* of checkpoint response — the
-companion to the aPD1 ORR table cancerdata already owns. Deliberately a **few**
+companion to the aPD1 ORR table oncodata already owns. Deliberately a **few**
 foundational, well-cited signatures (T-cell-inflamed / IFN-γ, cytotoxic effector,
 MHC-I antigen presentation, TGF-β immune exclusion), not pirlygenes' full
-therapy-signature catalog: cancerdata stays the base layer, not the analysis layer.
+therapy-signature catalog: oncodata stays the base layer, not the analysis layer.
 
 ``cancer-response-signatures.csv``: ``signature, gene_symbol, direction``
 (``positive`` = response-associated, ``negative`` = resistance-associated),
@@ -71,7 +71,7 @@ def signature_score(cancer_type, name: str, *, statistic: str = "mean") -> float
     """Score a cohort for a signature: the average (``statistic``) of its member
     genes' **log clean-TPM** cohort expression across the cohort's patients.
 
-    Built on :func:`cancerdata.expression.cohort_mean_expression` (so it needs the
+    Built on :func:`oncodata.expression.cohort_mean_expression` (so it needs the
     cohort's per-sample matrix). Genes absent from the cohort are skipped; ``nan`` if
     none of the signature's genes are present. Higher = more of that program; pair
     with :func:`response_signature_direction` for the response interpretation."""

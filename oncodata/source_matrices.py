@@ -18,7 +18,7 @@ from. They total ~21 GB across 118 cohorts, so each cohort's matrix is an
 individually fetchable release asset: pull only the cohorts you need rather than
 one monolithic blob.
 
-    from cancerdata import source_matrices as sm
+    from oncodata import source_matrices as sm
     sm.available_cohorts()            # the 118 cohorts with a per-sample matrix
     sm.ensure("LUAD")                 # download LUAD's matrix -> Path
     pd.read_parquet(sm.ensure("LUAD"))
@@ -26,7 +26,7 @@ one monolithic blob.
 A shipped registry (``source-matrices.csv``: cancer_code, source_cohort,
 n_samples) lists what's available without any download. Cache layout:
 
-    ~/.cache/cancerdata/source-matrices/v<DATA_VERSION>/<CODE>.parquet
+    ~/.cache/oncodata/source-matrices/v<DATA_VERSION>/<CODE>.parquet
 """
 
 from __future__ import annotations
@@ -45,8 +45,8 @@ from .cancer_types import resolve_cancer_type
 from .load_dataset import get_data
 from .version import DATA_VERSION
 
-#: Per-cohort matrices are release assets on a dedicated tag of cancerdata's repo.
-GITHUB_REPO = "pirl-unc/cancerdata"
+#: Per-cohort matrices are release assets on a dedicated tag of oncodata's repo.
+GITHUB_REPO = "pirl-unc/oncodata"
 RELEASE_TAG = f"source-v{DATA_VERSION}"
 
 #: Env var overriding the per-cohort cache root.
@@ -93,7 +93,7 @@ def cache_dir() -> Path:
     base = (
         Path(override).expanduser()
         if override
-        else (Path.home() / ".cache" / "cancerdata" / "source-matrices")
+        else (Path.home() / ".cache" / "oncodata" / "source-matrices")
     )
     out = base / f"v{DATA_VERSION}"
     out.mkdir(parents=True, exist_ok=True)
@@ -125,7 +125,7 @@ def fetch(code: str, *, force: bool = False, verbose: bool = True) -> Path:
     url = release_url(code)
     tmp = dest.with_suffix(".parquet.part")
     if verbose:
-        sys.stderr.write(f"cancerdata: downloading per-sample matrix {dest.stem} ({url})\n")
+        sys.stderr.write(f"oncodata: downloading per-sample matrix {dest.stem} ({url})\n")
         sys.stderr.flush()
     try:
         with urllib.request.urlopen(url) as resp, tmp.open("wb") as h:

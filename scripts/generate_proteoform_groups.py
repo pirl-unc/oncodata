@@ -36,12 +36,12 @@ shifts many more genes' expression than the focused CTA subset, so it is offered
 not shipped as the default for the percentile/within-sample artifacts.
 
 pyensembl is a BUILD-TIME tool only — it is deliberately not a runtime dependency
-of cancerdata (cf. the within-sample/percentile generators). Run:
+of oncodata (cf. the within-sample/percentile generators). Run:
 
     python scripts/generate_proteoform_groups.py               # CTA-scoped (default)
     python scripts/generate_proteoform_groups.py --scope genome  # genome-wide
 
-Output: ``cancerdata/data/proteoform-groups.csv`` (cta) or
+Output: ``oncodata/data/proteoform-groups.csv`` (cta) or
 ``…/proteoform-groups-genome.csv`` (genome). The label is the slash-joined, sorted
 member symbols (``SSX4/SSX4B``), matching the grouped-CTA labels used by the
 downstream target-selection layer.
@@ -56,9 +56,9 @@ from pathlib import Path
 import pandas as pd
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_DEFAULT_CTA_CSV = _REPO_ROOT / "cancerdata" / "data" / "cancer-testis-antigens.csv"
-_DEFAULT_OUTPUT = _REPO_ROOT / "cancerdata" / "data" / "proteoform-groups.csv"
-_DEFAULT_GENOME_OUTPUT = _REPO_ROOT / "cancerdata" / "data" / "proteoform-groups-genome.csv"
+_DEFAULT_CTA_CSV = _REPO_ROOT / "oncodata" / "data" / "cancer-testis-antigens.csv"
+_DEFAULT_OUTPUT = _REPO_ROOT / "oncodata" / "data" / "proteoform-groups.csv"
+_DEFAULT_GENOME_OUTPUT = _REPO_ROOT / "oncodata" / "data" / "proteoform-groups-genome.csv"
 
 #: Known identical-protein partners that may not yet be curated into the CTA
 #: table (e.g. the ``*B`` paralog whose ``*A``/base sibling is present). Seeding
@@ -118,9 +118,7 @@ def _genes_for_scope(data, gene_ids: list[str] | None):
             continue
 
 
-def build_proteoform_groups(
-    gene_ids: list[str] | None, ensembl_release: int, min_members: int
-):
+def build_proteoform_groups(gene_ids: list[str] | None, ensembl_release: int, min_members: int):
     import pyensembl
 
     data = pyensembl.EnsemblRelease(ensembl_release)

@@ -8,7 +8,7 @@
 
 import pytest
 
-from cancerdata import genome as gx
+from oncodata import genome as gx
 
 
 class _Tx:

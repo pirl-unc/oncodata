@@ -9,8 +9,8 @@ import urllib.error
 
 import pytest
 
-from cancerdata import data_bundle
-from cancerdata.version import DATA_VERSION
+from oncodata import data_bundle
+from oncodata.version import DATA_VERSION
 
 
 def test_is_downloadable_distinguishes_bundle_from_wheel():
@@ -80,12 +80,12 @@ def test_prune_keeps_current(monkeypatch, tmp_path):
     assert versions == {"v1.0.0"}  # current (v2.0.0) is kept
 
 
-def test_release_urls_prefer_cancerdata_then_pirlygenes():
+def test_release_urls_prefer_oncodata_then_pirlygenes():
     assert data_bundle.RELEASE_URLS == (
         data_bundle.RELEASE_URL,
         data_bundle.FALLBACK_RELEASE_URL,
     )
-    assert "pirl-unc/cancerdata" in data_bundle.RELEASE_URL
+    assert "pirl-unc/oncodata" in data_bundle.RELEASE_URL
     assert "pirl-unc/pirlygenes" in data_bundle.FALLBACK_RELEASE_URL
     assert f"v{DATA_VERSION}" in data_bundle.RELEASE_URL
 
@@ -138,7 +138,7 @@ def test_cache_root_reuses_legacy_pirlygenes_dir(monkeypatch, tmp_path):
     # No env override; legacy cache already has THIS version, new root does not.
     monkeypatch.delenv("CANCERDATA_BUNDLED_DATA", raising=False)
     monkeypatch.delenv("PIRLYGENES_BUNDLED_DATA", raising=False)
-    new_root = tmp_path / "cancerdata" / "bundled_data"
+    new_root = tmp_path / "oncodata" / "bundled_data"
     legacy_root = tmp_path / "pirlygenes" / "bundled_data"
     (legacy_root / f"v{DATA_VERSION}").mkdir(parents=True)
     monkeypatch.setattr(data_bundle, "_DEFAULT_CACHE_PARENT", new_root)
@@ -150,10 +150,10 @@ def test_cache_root_reuses_legacy_pirlygenes_dir(monkeypatch, tmp_path):
     assert data_bundle.cache_root() == new_root
 
 
-def test_cache_root_defaults_to_cancerdata_when_no_cache(monkeypatch, tmp_path):
+def test_cache_root_defaults_to_oncodata_when_no_cache(monkeypatch, tmp_path):
     monkeypatch.delenv("CANCERDATA_BUNDLED_DATA", raising=False)
     monkeypatch.delenv("PIRLYGENES_BUNDLED_DATA", raising=False)
-    new_root = tmp_path / "cancerdata" / "bundled_data"
+    new_root = tmp_path / "oncodata" / "bundled_data"
     legacy_root = tmp_path / "pirlygenes" / "bundled_data"
     monkeypatch.setattr(data_bundle, "_DEFAULT_CACHE_PARENT", new_root)
     monkeypatch.setattr(data_bundle, "_LEGACY_CACHE_PARENT", legacy_root)

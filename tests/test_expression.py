@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cancerdata import expression
+from oncodata import expression
 
 _BREAKPOINTS = [0, 1, 5, 10, 50, 90, 95, 99, 100]
 
@@ -114,7 +114,7 @@ def test_cohort_gene_percentiles_proteoform_computed_on_the_fly(
 ):
     # LUAD has no proteoform shard -> the percentile vector is recomputed on the fly
     # from the (stubbed) per-sample matrix: members collapse before the percentiles.
-    import cancerdata.proteoforms as pmod
+    import oncodata.proteoforms as pmod
 
     fake = pd.DataFrame(
         {
@@ -138,7 +138,7 @@ def test_cohort_gene_percentiles_proteoform_computed_on_the_fly(
 def test_cohort_gene_percentiles_threads_scope(proteoform_percentile_cache, monkeypatch):
     # scope= reaches the on-the-fly collapse: the cta universe leaves A1/A2 separate,
     # the genome universe groups them. Previously scope was silently fixed.
-    import cancerdata.proteoforms as pmod
+    import oncodata.proteoforms as pmod
 
     fake = pd.DataFrame(
         {
@@ -179,20 +179,20 @@ def test_proteoform_shard_selection_is_scope_specific(proteoform_percentile_cach
 
 def test_shard_dataset_registry_is_public_and_scope_aware():
     # ShardDataset + SHARD_DATASETS are public; the proteoform shard dir is scope-specific.
-    import cancerdata
+    import oncodata
 
-    assert set(cancerdata.SHARD_DATASETS) == {"representatives", "percentiles", "within_sample"}
-    pct = cancerdata.SHARD_DATASETS["percentiles"]
-    assert isinstance(pct, cancerdata.ShardDataset)
+    assert set(oncodata.SHARD_DATASETS) == {"representatives", "percentiles", "within_sample"}
+    pct = oncodata.SHARD_DATASETS["percentiles"]
+    assert isinstance(pct, oncodata.ShardDataset)
     assert pct.subdir(proteoform=False) == "cancer-reference-expression-percentiles"
     assert pct.subdir(proteoform=True, scope="cta").endswith("-proteoform-cta")
     assert pct.subdir(proteoform=True, scope="genome").endswith("-proteoform-genome")
     assert pct.fetches(proteoform=False) is True and pct.fetches(proteoform=True) is False
     # an artifact with no proteoform variant rejects the request
     with pytest.raises(ValueError, match="no proteoform variant"):
-        cancerdata.SHARD_DATASETS["representatives"].subdir(proteoform=True)
+        oncodata.SHARD_DATASETS["representatives"].subdir(proteoform=True)
     # the column-vocabulary helpers are now package-public too
-    assert callable(cancerdata.id_columns) and callable(cancerdata.sample_columns)
+    assert callable(oncodata.id_columns) and callable(oncodata.sample_columns)
 
 
 def test_proteoform_summary_wrappers_thread_scope_and_default_autofetch_true(monkeypatch):
@@ -252,7 +252,7 @@ def test_per_sample_matrix_cache_size_is_tunable():
 
 
 def test_per_sample_cache_size_tolerates_malformed_env(monkeypatch):
-    # A tuning knob must never break `import cancerdata`: a malformed/empty value
+    # A tuning knob must never break `import oncodata`: a malformed/empty value
     # falls back to the default rather than raising at parse time.
     for bad in ("", "abc", "2.5"):
         monkeypatch.setenv("CANCERDATA_PER_SAMPLE_CACHE", bad)
@@ -287,7 +287,7 @@ def test_per_sample_expression_normalize_modes(tmp_path, monkeypatch):
 
 
 def test_housekeeping_normalize_divides_by_panel_geomean(monkeypatch):
-    import cancerdata.gene_families as gf
+    import oncodata.gene_families as gf
 
     monkeypatch.setattr(gf, "housekeeping_gene_ids", lambda: frozenset({"ENSG_HK"}))
     df = pd.DataFrame(
@@ -301,7 +301,7 @@ def test_housekeeping_normalize_divides_by_panel_geomean(monkeypatch):
 def test_per_sample_expression_gene_and_proteoform_levels(tmp_path, monkeypatch):
     # ENSG1+ENSG2 are an identical-protein group; per_sample_expression(proteoform=True)
     # sums them per sample. Gene-level and proteoform-level are both available.
-    import cancerdata.proteoforms as pmod
+    import oncodata.proteoforms as pmod
 
     path = _raw_matrix(tmp_path)
     monkeypatch.setattr(expression.source_matrices, "ensure", lambda code: path)
@@ -321,7 +321,7 @@ def test_per_sample_expression_gene_and_proteoform_levels(tmp_path, monkeypatch)
 
 def test_per_sample_expression_proteoform_log_sums_in_linear_space(tmp_path, monkeypatch):
     # log1p + proteoform must sum members in LINEAR TPM then log1p — NOT sum the logs.
-    import cancerdata.proteoforms as pmod
+    import oncodata.proteoforms as pmod
 
     path = _raw_matrix(tmp_path)
     monkeypatch.setattr(expression.source_matrices, "ensure", lambda code: path)
@@ -384,7 +384,7 @@ def test_cohort_mean_expression(monkeypatch):
 def test_cohort_mean_expression_threads_proteoform_and_scope(monkeypatch):
     # cohort_mean delegates the collapse to per_sample_expression — it must pass
     # proteoform= and scope= through.
-    from cancerdata import expression_level
+    from oncodata import expression_level
 
     seen = {}
 

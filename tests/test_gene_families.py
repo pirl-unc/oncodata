@@ -8,7 +8,7 @@
 
 import pytest
 
-from cancerdata import gene_families as gf
+from oncodata import gene_families as gf
 
 
 def test_families_load_with_ids():

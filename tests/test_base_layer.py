@@ -4,7 +4,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-"""cancerdata is the base of the dependency pyramid.
+"""oncodata is the base of the dependency pyramid.
 
 It is the upstream source of truth for cancer reference data (expression, HPA
 protein/RNA, the CTA definition, the cancer-type ontology, anti-PD-1 ORR, TMB) and
@@ -15,9 +15,9 @@ fails the build if any consumer leaks into the shipped package.
 import ast
 from pathlib import Path
 
-_PACKAGE = Path(__file__).resolve().parents[1] / "cancerdata"
+_PACKAGE = Path(__file__).resolve().parents[1] / "oncodata"
 
-# Downstream consumers that depend on cancerdata; importing any of them would
+# Downstream consumers that depend on oncodata; importing any of them would
 # invert the dependency pyramid.
 _CONSUMERS = {"pirlygenes", "tsarina", "hitlist", "trufflepig"}
 
@@ -42,4 +42,4 @@ def test_package_imports_no_consumer():
         for mod in _imported_top_level_modules(py):
             if mod in _CONSUMERS:
                 offenders.append(f"{py.relative_to(_PACKAGE)} imports {mod}")
-    assert not offenders, "cancerdata must not import its consumers:\n  " + "\n  ".join(offenders)
+    assert not offenders, "oncodata must not import its consumers:\n  " + "\n  ".join(offenders)

@@ -13,7 +13,7 @@
 """Versioned reference-data sources fetched on demand (Human Protein Atlas).
 
 These are per-file downloads (each a ``.zip`` that extracts to one ``.tsv``),
-distinct from the heavy per-cohort expression bundle (:mod:`cancerdata.data_bundle`,
+distinct from the heavy per-cohort expression bundle (:mod:`oncodata.data_bundle`,
 a single tarball). They back the CTA tissue-restriction definition and the
 protein-level / single-cell normal-tissue comparisons.
 
@@ -24,7 +24,7 @@ Cache layout (one subdir per source+version):
 
     <cache>/sources/<name>/<version>/<filename>
 
-The cache root is ``~/.cache/cancerdata/sources`` (override with
+The cache root is ``~/.cache/oncodata/sources`` (override with
 ``CANCERDATA_DATA_DIR``). A ``manifest.json`` records URL / size / sha256 /
 download time for provenance.
 """
@@ -84,7 +84,7 @@ class ReferenceDataError(RuntimeError):
 def cache_dir() -> Path:
     """Reference-data cache directory (``<root>/sources``), created on demand."""
     override = os.environ.get(CACHE_DIR_ENV_KEY)
-    base = Path(override).expanduser() if override else Path.home() / ".cache" / "cancerdata"
+    base = Path(override).expanduser() if override else Path.home() / ".cache" / "oncodata"
     sources = base / "sources"
     sources.mkdir(parents=True, exist_ok=True)
     return sources
@@ -194,7 +194,7 @@ def download(name: str, version: str | None = None, *, force: bool = False) -> P
     tmp_zip = dest.parent / (spec["filename"] + ".zip.part")
     tmp_tsv = dest.parent / (spec["filename"] + ".part")
     try:
-        sys.stderr.write(f"cancerdata: downloading {name} ({url})\n")
+        sys.stderr.write(f"oncodata: downloading {name} ({url})\n")
         sys.stderr.flush()
         with urllib.request.urlopen(url) as resp, tmp_zip.open("wb") as h:
             shutil.copyfileobj(resp, h, length=1024 * 1024)

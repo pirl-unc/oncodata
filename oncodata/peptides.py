@@ -21,13 +21,13 @@ off-target reactivity). This mirrors pirlygenes' definition exactly:
     **longest** protein-coding transcript per gene (stop codon stripped);
   - 9-mers are the distinct sliding-window (stride 1) substrings of a protein;
   - the **background** is the union of 9-mers over every non-CTA protein (the full
-    CTA *universe* — :func:`cancerdata.cta.CTA_unfiltered_gene_ids` — is excluded so
+    CTA *universe* — :func:`oncodata.cta.CTA_unfiltered_gene_ids` — is excluded so
     borderline CTAs don't poison the background);
   - a CTA's ``n_specific_9mers`` is how many of its 9-mers miss that background.
 
 Building the background scans the whole proteome (~20k genes, a minute or two), so
 :func:`cta_specific_9mer_counts` caches its per-CTA table to a CSV under the
-cancerdata cache, keyed by Ensembl release. Needs a downloaded human release with
+oncodata cache, keyed by Ensembl release. Needs a downloaded human release with
 protein sequences (``pyensembl install --release N --species homo_sapiens``).
 """
 
@@ -213,7 +213,7 @@ def cta_specific_9mer_load(
 
     By linearity this equals ``Σ over antigens (fraction_expressing ×
     n_specific_9mers)``, so it is built directly on
-    :func:`cancerdata.coverage.cta_patient_fractions` (proteoform-summed) — no second
+    :func:`oncodata.coverage.cta_patient_fractions` (proteoform-summed) — no second
     pass over the per-sample matrix. Needs the cohort's per-sample matrix cached.
 
     The join is on ``proteoform_key`` — the uniform identity shared by the per-patient

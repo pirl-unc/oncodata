@@ -7,7 +7,7 @@
 import pandas as pd
 import pytest
 
-from cancerdata import (
+from oncodata import (
     gene_to_proteoform,
     proteoform_aliases,
     proteoform_for_gene,
@@ -17,8 +17,8 @@ from cancerdata import (
     proteoform_symbol,
     proteoform_symbol_map,
 )
-from cancerdata.expression_builders import sum_proteoform_tpm
-from cancerdata.proteoforms import _contract_members
+from oncodata.expression_builders import sum_proteoform_tpm
+from oncodata.proteoforms import _contract_members
 
 # Known identical-protein groups that must be in the shipped registry.
 _KNOWN = {
@@ -62,7 +62,7 @@ def test_ct47_family_is_a_single_large_group():
 
 
 def test_expression_level_marker():
-    from cancerdata import expression_level
+    from oncodata import expression_level
 
     gene = pd.DataFrame({"Ensembl_Gene_ID": ["E1"], "Symbol": ["A"], "s1": [1.0]})
     assert expression_level(gene) == "gene"
@@ -93,7 +93,7 @@ def test_proteoform_symbol_prefers_curated_alias():
 def test_collapse_decreases_key_count_no_duplicate_keys():
     # The reduction invariant: collapsing identical-protein members yields fewer keys
     # (members merge), and the surviving Symbol/ENSG keys are unique.
-    from cancerdata.proteoforms import collapse_to_proteoforms
+    from oncodata.proteoforms import collapse_to_proteoforms
 
     gmap = proteoform_group_map()
     members = next(ids for ids in gmap.values() if len(ids) > 1)
@@ -243,7 +243,7 @@ def test_proteoform_representative_samples_sums_members(representatives_cache):
 
 def test_gene_to_proteoform_id_is_total():
     # Every gene maps to a class: grouped -> label, singleton -> symbol (or ENSG).
-    from cancerdata.proteoforms import gene_to_proteoform_id
+    from oncodata.proteoforms import gene_to_proteoform_id
 
     genes = ["ENSG00000268009", "ENSG00000269791", "ENSG00000185686"]
     m = gene_to_proteoform_id(genes)
@@ -256,7 +256,7 @@ def test_gene_to_proteoform_id_is_total():
 
 
 def test_proteoform_key_ensg_for_unique_symbol_for_group():
-    from cancerdata.proteoforms import proteoform_key
+    from oncodata.proteoforms import proteoform_key
 
     # Group member -> proteoform symbol; unique gene -> its own ENSG.
     assert proteoform_key("ENSG00000184033") == "NY-ESO-1"  # CTAG1B (aliased group)
@@ -275,7 +275,7 @@ def test_contract_members_dedupes_identical_symbols():
 def test_collapse_to_proteoforms_keeps_ensembl_id_real():
     # The reusable collapse entry point: ENSG column stays a real Ensembl id, the
     # sorted members are in proteoform_members, and the key count drops to 1.
-    from cancerdata.proteoforms import (
+    from oncodata.proteoforms import (
         collapse_to_proteoforms,
         proteoform_group_map,
         proteoform_symbol,

@@ -9,7 +9,7 @@ initial copy (Literature-audit corrections). These guard against silently
 shipping stale reference data.
 """
 
-from cancerdata import cancer_burden, cancer_tmb, cancer_tmb_df
+from oncodata import cancer_burden, cancer_tmb, cancer_tmb_df
 
 
 def test_tmb_has_n_samples_column():

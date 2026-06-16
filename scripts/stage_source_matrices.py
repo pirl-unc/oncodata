@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Stage the per-cohort source matrices for ``cancerdata.source_matrices``.
+"""Stage the per-cohort source matrices for ``oncodata.source_matrices``.
 
 For each cancer code in ``source-matrices.csv``, find its single selected source
 cohort's raw per-sample matrix in a local matrix cache and copy it to:
@@ -28,7 +28,7 @@ multi-source code stages exactly the one matrix the shipped artifacts were built
 
 Run:
     python scripts/stage_source_matrices.py --cache ~/.cache/pirlygenes/expression \
-        [--release-dir ~/cancerdata-source-upload] [--codes LUAD,SKCM] [--limit N]
+        [--release-dir ~/oncodata-source-upload] [--codes LUAD,SKCM] [--limit N]
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from cancerdata import source_matrices as sm
+from oncodata import source_matrices as sm
 
 
 def _source_key(name: str) -> str:

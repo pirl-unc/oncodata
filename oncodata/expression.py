@@ -21,7 +21,7 @@ rather than by accident.
 **Axis 1 — expression level** (``proteoforms.py``). Every value is available at
 *gene* level (one row per Ensembl gene) or *proteoform* level (identical-protein
 paralogs summed per sample — CTAG1A+CTAG1B → NY-ESO-1 — keyed by ``proteoform_key``;
-see :mod:`cancerdata.proteoforms`). The base functions take ``proteoform=``/``scope=``
+see :mod:`oncodata.proteoforms`). The base functions take ``proteoform=``/``scope=``
 flags; each also has an explicit ``gene_*`` / ``proteoform_*`` wrapper so the level is
 legible at the call site and discoverable by name. The wrappers are deliberately
 thin — the collapse logic lives in exactly one place (the base function).
@@ -92,7 +92,7 @@ class ShardDataset:
         (``f"{proteoform_stem}-{scope}"``) because identical-protein members group
         differently under ``"cta"`` vs ``"genome"``, so each scope is its own shard set.
       - ``proteoform_fetches`` — whether proteoform shards ship (none do yet).
-      - ``build_attr`` — name of the :mod:`cancerdata.expression_builders` core that regenerates a
+      - ``build_attr`` — name of the :mod:`oncodata.expression_builders` core that regenerates a
         missing shard from the per-sample matrix (the same core that produced the shipped
         shards, so on-the-fly and shipped values agree).
 
@@ -171,7 +171,7 @@ _PER_SAMPLE_CACHE_SIZE = _per_sample_cache_size()
 
 
 def _bundle_subdir(name: str, *, auto_fetch: bool = True) -> Path:
-    """Locate a bundle shard directory: an in-repo checkout (``cancerdata/data/…``)
+    """Locate a bundle shard directory: an in-repo checkout (``oncodata/data/…``)
     wins, else the downloaded bundle cache; the bundle is fetched if absent.
 
     ``auto_fetch=False`` skips the (potentially 340 MB) download — used for
@@ -277,7 +277,7 @@ def per_sample_expression(
     consumer can ask per-patient questions a summary can't answer ("in what
     fraction of patients is this gene expressed", greedy antigen co-occurrence
     coverage, …). It fetches the cohort's per-sample matrix via
-    :mod:`cancerdata.source_matrices` (a per-cohort release asset, tens of MB) and
+    :mod:`oncodata.source_matrices` (a per-cohort release asset, tens of MB) and
     normalizes it.
 
     ``normalize``:
@@ -289,9 +289,9 @@ def per_sample_expression(
       - ``"tpm_raw"`` — the matrix as shipped (raw TPM), no normalization.
 
     With ``proteoform=True``, identical-protein paralogs are **summed per sample** to
-    proteoform level (:func:`cancerdata.proteoforms.collapse_to_proteoforms`, ``scope``
+    proteoform level (:func:`oncodata.proteoforms.collapse_to_proteoforms`, ``scope``
     = ``"cta"``/``"genome"``) — a **proteoform-level** frame carrying ``proteoform_key``
-    (see :func:`cancerdata.proteoforms.expression_level`). The sum is always taken in
+    (see :func:`oncodata.proteoforms.expression_level`). The sum is always taken in
     **linear** TPM and the ``log1p`` transform (if any) applied *after*, so the
     proteoform value is ``log1p(Σ member TPM)``, not the meaningless ``Σ log1p``.
     (``scope`` is ignored when ``proteoform=False``.)
@@ -384,10 +384,10 @@ def cohort_mean_expression(
     ``"tpm_clean_log1p"`` to average in log space). A **gene-level** frame.
 
     With ``proteoform=True``, identical-protein paralogs are summed per sample
-    (:func:`cancerdata.proteoforms.collapse_to_proteoforms`) **before** the
+    (:func:`oncodata.proteoforms.collapse_to_proteoforms`) **before** the
     across-patient reduction, so the summary is over the reduced proteoform key space
     (rows carry ``proteoform_key`` — a **proteoform-level** frame, see
-    :func:`cancerdata.proteoforms.expression_level`). ``scope`` selects the gene
+    :func:`oncodata.proteoforms.expression_level`). ``scope`` selects the gene
     universe to collapse: ``"cta"`` (focused) or ``"genome"`` (every protein-coding
     gene). Returns ``Ensembl_Gene_ID``, ``Symbol`` (plus the proteoform identity
     columns when collapsed) and one ``expression`` column."""
@@ -468,7 +468,7 @@ def cohort_stats(
 
     ``proteoform=True`` summarizes the reduced proteoform key space (members summed per
     sample first, ``scope`` ``"cta"``/``"genome"``) — a proteoform-level frame carrying
-    ``proteoform_key`` (see :func:`cancerdata.proteoforms.expression_level`). Returns the
+    ``proteoform_key`` (see :func:`oncodata.proteoforms.expression_level`). Returns the
     id columns plus one column per statistic."""
     df = per_sample_expression(
         cancer_type, normalize=normalize, auto_fetch=auto_fetch, proteoform=proteoform, scope=scope
@@ -611,7 +611,7 @@ def _read_shard_or_recompute(
         ) from e
     from importlib import import_module
 
-    build_core = getattr(import_module("cancerdata.expression_builders"), dataset.build_attr)
+    build_core = getattr(import_module("oncodata.expression_builders"), dataset.build_attr)
     return build_core(bio, sample_columns(bio))
 
 
@@ -661,7 +661,7 @@ def cohort_gene_percentiles(
 # ---------- within-sample percentile prevalence (signal a) ----------
 
 #: within-sample percentile-rank threshold -> output column: ``_WITHIN_SAMPLE_THRESHOLD_COLS``
-#: (imported above from :data:`cancerdata.expression_builders.WITHIN_SAMPLE_THRESHOLDS`) is the single
+#: (imported above from :data:`oncodata.expression_builders.WITHIN_SAMPLE_THRESHOLDS`) is the single
 #: source of truth shared with the generator, so the read side and write side can't drift.
 
 
@@ -736,7 +736,7 @@ def proteoform_representative_samples(
     Always operates on linear ``clean TPM`` (summing log1p values would be
     wrong); ``log1p`` afterward if you need it. This is the runtime,
     every-cohort proteoform view over the shipped medoid samples; the same
-    :func:`cancerdata.expression_builders.sum_proteoform_tpm` core can run inside the offline
+    :func:`oncodata.expression_builders.sum_proteoform_tpm` core can run inside the offline
     percentile/within-sample generators to ship proteoform-summed artifacts.
     """
     from .proteoforms import collapse_to_proteoforms
@@ -753,7 +753,7 @@ def proteoform_representative_samples(
 # Every expression dataset is exposed as a matched pair whose name carries the level —
 # no boolean flag to read. ``gene_*`` is one row per Ensembl gene; ``proteoform_*``
 # sums identical-protein paralogs to one row per proteoform key (see
-# :func:`cancerdata.proteoforms.expression_level`). Both are thin wrappers over the one
+# :func:`oncodata.proteoforms.expression_level`). Both are thin wrappers over the one
 # base accessor, so the collapse logic lives in exactly one place; the unprefixed base
 # names (``per_sample_expression`` etc.) remain the gene-level implementation.
 #

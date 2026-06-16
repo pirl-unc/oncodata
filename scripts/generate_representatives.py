@@ -31,7 +31,7 @@ and one column per sample (clean TPM).
 
 Output
 ------
-``cancerdata/data/cancer-reference-expression-representatives/<CODE>.parquet``
+``oncodata/data/cancer-reference-expression-representatives/<CODE>.parquet``
 with ``Ensembl_Gene_ID, Symbol`` and up to ``k`` representative columns named
 ``<CODE>__rep{i}`` (medoid first), plus a shared ``_provenance.csv`` mapping each
 ``representative_id`` to its source sample, cohort, and cohort size — the columns
@@ -55,9 +55,9 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from cancerdata.expression_builders import cohort_medoids, sample_columns
+from oncodata.expression_builders import cohort_medoids, sample_columns
 
-_DATA_DIR = Path(__file__).resolve().parents[1] / "cancerdata" / "data"
+_DATA_DIR = Path(__file__).resolve().parents[1] / "oncodata" / "data"
 OUT_DIR = _DATA_DIR / "cancer-reference-expression-representatives"
 _BASE = ["Ensembl_Gene_ID", "Symbol"]
 #: Columns representative_cohort_samples(include_provenance=True) merges back in.
@@ -74,14 +74,14 @@ def _cohort_provenance(code: str) -> tuple[str, str]:
     """
     source_cohort, source_project = code, ""
     try:
-        from cancerdata.source_matrices import cohort_info
+        from oncodata.source_matrices import cohort_info
 
         info = cohort_info(code)
         source_cohort = str(info.get("source_cohort") or code)
     except Exception:
         return source_cohort, source_project
     try:
-        from cancerdata.cancer_types import cohort_registry
+        from oncodata.cancer_types import cohort_registry
 
         entry = cohort_registry().get(source_cohort, {})
         source_project = str(entry.get("source_project") or "")

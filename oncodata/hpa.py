@@ -13,7 +13,7 @@
 """Loaders over the Human Protein Atlas normal-tissue reference data.
 
 These fetch (once, cached) and parse the HPA tables registered in
-:mod:`cancerdata.reference_data`:
+:mod:`oncodata.reference_data`:
 
 - ``hpa_rna_consensus`` — per-tissue RNA nTPM (``Gene``, ``Gene name``,
   ``Tissue``, ``nTPM``).

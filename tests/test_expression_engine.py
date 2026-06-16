@@ -7,7 +7,7 @@
 import pandas as pd
 import pytest
 
-from cancerdata import expression_engine as ee
+from oncodata import expression_engine as ee
 
 
 def test_aggregate_sums_transcripts_per_gene():
@@ -53,8 +53,8 @@ def test_expanded_tx_map_versionless():
     assert m["ENST9"] == "G"  # versionless key added
 
 
-def test_default_map_is_cancerdata_extra_tx():
-    # The default map comes from cancerdata's curated extra-tx-mappings.
+def test_default_map_is_oncodata_extra_tx():
+    # The default map comes from oncodata's curated extra-tx-mappings.
     df = pd.DataFrame({"transcript_id": ["ENST00000264036"], "tpm": [99.0]})
     out = ee.aggregate_transcripts_to_genes(df)
     assert "MCAM" in set(out["gene"])  # ENST00000264036 -> MCAM in extra-tx-mappings

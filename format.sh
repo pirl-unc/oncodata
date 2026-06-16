@@ -1,3 +1,3 @@
 #!/bin/bash
-ruff format cancerdata tests
+ruff format oncodata tests
 echo "Formatting complete!"

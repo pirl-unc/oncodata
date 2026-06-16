@@ -12,7 +12,7 @@
 
 """Gene-id and symbol resolution references.
 
-cancerdata data comes from many pipelines on different Ensembl/HGNC bases. These
+oncodata data comes from many pipelines on different Ensembl/HGNC bases. These
 curated maps reconcile them: alt-haplotype Ensembl gene ids → their primary-contig
 id, NCBI symbol synonyms → the official symbol, plus supplemental transcript→gene
 mappings and the cDNA-identical / proteoform-collapse-override grouping refinements.

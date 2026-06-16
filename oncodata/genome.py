@@ -13,7 +13,7 @@
 """Ensembl-reference gene/transcript resolution (the ``pyensembl``-backed layer).
 
 This is the genome-reference resolver that the curated pandas ID layer
-(:mod:`cancerdata.gene_ids`, curated CSV aliases) can't do: mapping an *arbitrary*
+(:mod:`oncodata.gene_ids`, curated CSV aliases) can't do: mapping an *arbitrary*
 Ensembl transcript or gene ID to a gene, and a symbol to its canonical Ensembl gene
 ID, against the installed Ensembl release(s).
 
@@ -24,7 +24,7 @@ than raising.
 
 Resolution order for a symbol mirrors pirlygenes: each installed release (newest
 first) by name + curated display aliases, then the bundled NCBI symbol-synonym
-snapshot (:func:`cancerdata.gene_ids.resolve_symbol`). Gene/transcript IDs resolve
+snapshot (:func:`oncodata.gene_ids.resolve_symbol`). Gene/transcript IDs resolve
 against the newest release first, falling back to older installed releases.
 """
 
@@ -72,7 +72,7 @@ def genomes():
 
 def strip_version(gene_id: str) -> str:
     """``ENSG00000251562.5`` → ``ENSG00000251562`` (idempotent on bare ids). Alias of
-    :func:`cancerdata.gene_ids.unversioned`, the one shared normalizer."""
+    :func:`oncodata.gene_ids.unversioned`, the one shared normalizer."""
     return unversioned(gene_id)
 
 
@@ -265,7 +265,7 @@ def canonical_gene_ids_and_names(names):
 def aggregate_gene_expression(df, tx_to_gene_name=None, **kwargs):
     """Full transcript→gene aggregation with Ensembl-reference resolution.
 
-    Like :func:`cancerdata.expression_engine.aggregate_transcripts_to_genes`, but
+    Like :func:`oncodata.expression_engine.aggregate_transcripts_to_genes`, but
     resolves transcripts NOT in ``tx_to_gene_name`` against the installed Ensembl
     release(s) (via :func:`find_gene_name_from_ensembl_transcript_id`) instead of
     bucketing them as ``unresolved`` — the faithful drop-in for pirlygenes'

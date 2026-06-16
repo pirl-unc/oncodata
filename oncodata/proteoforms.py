@@ -57,8 +57,8 @@ This module is the read surface over the curated registry
 (``proteoform-groups.csv``, derived offline by
 ``scripts/generate_proteoform_groups.py`` from pyensembl protein sequences). It
 owns *which genes sum together*; the per-sample TPM summation itself lives in
-:func:`cancerdata.expression.proteoform_representative_samples` (runtime, over the
-shipped medoid samples) and :func:`cancerdata.expression_builders.sum_proteoform_tpm` (the
+:func:`oncodata.expression.proteoform_representative_samples` (runtime, over the
+shipped medoid samples) and :func:`oncodata.expression_builders.sum_proteoform_tpm` (the
 pure build-time core, ready for the offline percentile/within-sample generators
 to apply before ranking when proteoform-summed artifacts are added to the bundle).
 

@@ -23,10 +23,10 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Lint with ruff
-        run: ruff check cancerdata tests
+        run: ruff check oncodata tests
 
       - name: Check formatting with ruff
-        run: ruff format --check cancerdata tests
+        run: ruff format --check oncodata tests
 
   test:
     runs-on: ubuntu-latest
@@ -51,4 +51,4 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run unit tests
-        run: pytest tests/ -v --cov=cancerdata --cov-report=xml
+        run: pytest tests/ -v --cov=oncodata --cov-report=xml

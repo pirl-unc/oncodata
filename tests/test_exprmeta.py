@@ -8,8 +8,8 @@
 
 import pytest
 
-from cancerdata import cancer_type_registry, tmb
-from cancerdata.expression_registry import expression_source_candidates
+from oncodata import cancer_type_registry, tmb
+from oncodata.expression_registry import expression_source_candidates
 
 
 def test_frameshift_burden():

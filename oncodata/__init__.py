@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""cancerdata — curated cancer reference data (ontology, TMB, incidence/
+"""oncodata — curated cancer reference data (ontology, TMB, incidence/
 mortality, and expression) with a single fetch/cache surface.
 
 Bottom-of-stack: depends only on pandas/numpy/pyarrow, never on the analysis

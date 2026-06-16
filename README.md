@@ -1,16 +1,16 @@
-# cancerdata
+# oncodata
 
-[![Tests](https://github.com/pirl-unc/cancerdata/actions/workflows/tests.yml/badge.svg)](https://github.com/pirl-unc/cancerdata/actions/workflows/tests.yml)
-[![PyPI](https://img.shields.io/pypi/v/cancerdata.svg)](https://pypi.org/project/cancerdata/)
+[![Tests](https://github.com/pirl-unc/oncodata/actions/workflows/tests.yml/badge.svg)](https://github.com/pirl-unc/oncodata/actions/workflows/tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/oncodata.svg)](https://pypi.org/project/oncodata/)
 
 Curated cancer reference data — cancer-type ontology, tumor mutational burden
 (TMB), incidence/mortality, anti-PD-1 response, per-cohort RNA-seq expression,
 and cancer-testis antigens — behind one small Python API, a data fetch/cache
 CLI, and a set of reference plots.
 
-## cancerdata is the base layer
+## oncodata is the base layer
 
-`cancerdata` is the **foundation of the openvax/PIRL dependency pyramid** — the
+`oncodata` is the **foundation of the openvax/PIRL dependency pyramid** — the
 single upstream **source of truth** for cancer reference data. It depends only on
 pandas / numpy / pyarrow / PyYAML, and it **never imports its consumers**: data
 and logic flow only downward. It does not mirror these definitions from anywhere;
@@ -29,24 +29,24 @@ Anything that needs to know about
   groupings; and
 - **anti-PD-1 response rates** and **TMB** per cancer type
 
-depends on `cancerdata` — including `pirlygenes` (gene-set curation/analysis),
+depends on `oncodata` — including `pirlygenes` (gene-set curation/analysis),
 `tsarina` (personalized target selection), `hitlist` (panel selection),
 `trufflepig` (sample classification), and anything else downstream.
 
 Everything keys on the cancer-type registry. The small curated tables ship in the
 wheel; the heavy per-cohort expression bundle downloads on first use from
-cancerdata's own GitHub Release.
+oncodata's own GitHub Release.
 
 ## Install
 
 ```bash
-pip install cancerdata
+pip install oncodata
 ```
 
 ## Python API
 
 ```python
-import cancerdata as cd
+import oncodata as cd
 
 cd.resolve_cancer_type("prostate")        # -> "PRAD"
 cd.cancer_type_info("SARC_RMS_ARMS")      # full registry record + burden + tmb
@@ -80,7 +80,7 @@ cd.within_sample_top_fraction("PRAD")     # per-gene frac of samples top-5% (wit
 - **HPA normal tissue** — `hpa_rna_consensus`, `hpa_normal_tissue` (IHC),
   `hpa_single_cell`, and per-gene lookups (`gene_tissue_ntpm`,
   `gene_protein_tissues`, `gene_cell_type_ntpm`) over HPA v23, fetched on demand
-  (`cancerdata sources fetch`).
+  (`oncodata sources fetch`).
 - **Genome reference** — `canonical_gene_id_and_name`, `find_gene_id_by_name`,
   `find_gene_name_from_ensembl_{gene,transcript}_id`, `aggregate_gene_expression`
   (pyensembl-backed symbol ↔ Ensembl-ID resolution). pyensembl ships with the
@@ -90,25 +90,25 @@ cd.within_sample_top_fraction("PRAD")     # per-gene frac of samples top-5% (wit
 - **Peptides** — `cta_specific_9mer_counts`, `cta_specific_9mer_load` (per-cohort
   mean per-patient CTA-specific 9-mer load): 9-mers found in a CTA protein but in no
   non-CTA protein, enumerated from the reference proteome and cached per release.
-- **Plots** (`pip install cancerdata[plots]`) — `cancerdata.plots.apd1_vs_tmb`,
+- **Plots** (`pip install oncodata[plots]`) — `oncodata.plots.apd1_vs_tmb`,
   `apd1_orr_bars`, `incidence_vs_mortality`, and the CTA/coverage figures.
 
 ## CLI
 
 ```bash
-cancerdata cancer-type prostate     # registry info as JSON
-cancerdata tmb LUAD_EGFR            # 6.9
-cancerdata apd1 SKCM               # 42
-cancerdata burden pancreas --metric us_mortality_pct
-cancerdata cta --count             # number of expressed CTAs
-cancerdata plot apd1-vs-tmb --out apd1_vs_tmb.png
+oncodata cancer-type prostate     # registry info as JSON
+oncodata tmb LUAD_EGFR            # 6.9
+oncodata apd1 SKCM               # 42
+oncodata burden pancreas --metric us_mortality_pct
+oncodata cta --count             # number of expressed CTAs
+oncodata plot apd1-vs-tmb --out apd1_vs_tmb.png
 
 # data bundle (per-cohort expression):
-cancerdata fetch                   # download the ~340 MB bundle
-cancerdata status                  # which bundle paths are cached (no download)
-cancerdata cache-dir               # where the data bundle is cached
-cancerdata prune --yes             # delete stale version caches
-cancerdata version
+oncodata fetch                   # download the ~340 MB bundle
+oncodata status                  # which bundle paths are cached (no download)
+oncodata cache-dir               # where the data bundle is cached
+oncodata prune --yes             # delete stale version caches
+oncodata version
 ```
 
 ## Development

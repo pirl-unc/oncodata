@@ -14,7 +14,7 @@
 stratified type genes, viral antigens, and a few narrative/rule tables.
 
 The curated ontology metadata that hangs off the cancer-type registry. All code
-arguments are alias-resolved via :func:`cancerdata.resolve_cancer_type`.
+arguments are alias-resolved via :func:`oncodata.resolve_cancer_type`.
 """
 
 from __future__ import annotations

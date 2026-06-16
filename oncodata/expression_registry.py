@@ -16,7 +16,7 @@ The bundled ``expression_sources.yaml`` is the single source of truth for which
 upstream datasets feed each cancer cohort — Treehouse, BEAT-AML, GDC/TCGA,
 CLL-map, MMRF CoMMpass, TARGET, GEO series, recount3, … — with the provenance a
 re-runner needs (project/accession/url, native unit, library prep, builder,
-citation, expected size). It drives the legible ``cancerdata sources`` listing
+citation, expected size). It drives the legible ``oncodata sources`` listing
 and (incrementally) the fetch + regeneration of the per-cohort summaries.
 """
 

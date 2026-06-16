@@ -4,7 +4,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-from cancerdata import apd1
+from oncodata import apd1
 
 
 def test_apd1_map_nonempty_floats():

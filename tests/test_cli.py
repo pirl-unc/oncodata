@@ -6,12 +6,12 @@
 
 import json
 
-from cancerdata import cli
+from oncodata import cli
 
 
 def test_version(capsys):
     assert cli.main(["version"]) == 0
-    assert "cancerdata v" in capsys.readouterr().out
+    assert "oncodata v" in capsys.readouterr().out
 
 
 def test_proteoforms_gene_lookup(capsys):

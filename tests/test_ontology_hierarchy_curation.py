@@ -5,9 +5,9 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 
 """NET umbrella + SARC_RMS sub-parenting — the curated hierarchy now that
-cancerdata owns the registry (#27, O1.5)."""
+oncodata owns the registry (#27, O1.5)."""
 
-from cancerdata import (
+from oncodata import (
     cancer_fusions,
     cancer_type_descendants,
     cancer_type_lineage,

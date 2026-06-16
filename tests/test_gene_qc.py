@@ -4,7 +4,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-from cancerdata import gene_qc as qc
+from oncodata import gene_qc as qc
 
 
 def test_symbol_regex_classification():
@@ -40,9 +40,9 @@ def test_is_rescue_feature_is_technical_only():
 
 
 def test_ensembl_id_first_lookup():
-    # A real mitochondrial gene id (from cancerdata's panel) classifies via ENSG
+    # A real mitochondrial gene id (from oncodata's panel) classifies via ENSG
     # even with a mismatched/absent symbol — ENSG-first is rename-stable.
-    from cancerdata import gene_families
+    from oncodata import gene_families
 
     mt_ids = list(gene_families.gene_family_ids("mitochondrial"))
     assert mt_ids

@@ -12,9 +12,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import cancerdata
-from cancerdata import gene_families as gf
-from cancerdata import normalization as norm
+import oncodata
+from oncodata import gene_families as gf
+from oncodata import normalization as norm
 
 
 def test_public_normalization_functions_are_all_exported():
@@ -26,8 +26,8 @@ def test_public_normalization_functions_are_all_exported():
         for name, obj in vars(norm).items()
         if not name.startswith("_") and inspect.isfunction(obj) and obj.__module__ == norm.__name__
     ]
-    missing = [n for n in public if n not in cancerdata.__all__ or not hasattr(cancerdata, n)]
-    assert not missing, f"normalization publics not exported from cancerdata: {missing}"
+    missing = [n for n in public if n not in oncodata.__all__ or not hasattr(oncodata, n)]
+    assert not missing, f"normalization publics not exported from oncodata: {missing}"
 
 
 def _matrix():
@@ -81,7 +81,7 @@ def test_clean_tpm_three_compartments():
 
 
 def test_clean_tpm_compartment_fractions_public_and_sum_to_one():
-    import cancerdata as cd
+    import oncodata as cd
 
     # The applied compartment budgets are public constants (no re-hardcoding the magic
     # numbers). Per-compartment splits + the combined TECHNICAL_FRACTION (matches pirlygenes:
@@ -105,8 +105,8 @@ def test_normalize_expression_records_applied_fractions():
 
 
 def test_technical_rna_groups_and_families_public():
-    import cancerdata as cd
-    from cancerdata import gene_families, gene_qc
+    import oncodata as cd
+    from oncodata import gene_families, gene_qc
 
     # Public names (no _-prefixed import across the package boundary) + back-compat aliases.
     assert cd.TECHNICAL_RNA_GROUPS == gene_qc._TECHNICAL_RNA_GROUPS
@@ -302,7 +302,7 @@ def test_normalize_long_table_groups_independently():
 
 
 def test_tpm_to_housekeeping_normalized():
-    from cancerdata import gene_families
+    from oncodata import gene_families
 
     hk = list(gene_families.housekeeping_gene_ids())[:2]
     df = pd.DataFrame(
@@ -322,7 +322,7 @@ def test_tpm_to_housekeeping_normalized_blanks_column_with_no_panel():
     # A column whose housekeeping panel rows are all NaN can't be put on the
     # ratio-to-baseline scale; it must become NaN, not silently stay raw-TPM
     # alongside normalized siblings (the scale-mixing trap).
-    from cancerdata import gene_families
+    from oncodata import gene_families
 
     hk = list(gene_families.housekeeping_gene_ids())[:2]
     df = pd.DataFrame(
