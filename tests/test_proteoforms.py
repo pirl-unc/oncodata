@@ -17,7 +17,7 @@ from cancerdata import (
     proteoform_symbol,
     proteoform_symbol_map,
 )
-from cancerdata._build import sum_proteoform_tpm
+from cancerdata.expression_builders import sum_proteoform_tpm
 from cancerdata.proteoforms import _contract_members
 
 # Known identical-protein groups that must be in the shipped registry.

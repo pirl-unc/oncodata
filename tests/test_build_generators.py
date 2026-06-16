@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cancerdata import _build
+from cancerdata import expression_builders
 
 _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 
@@ -56,7 +56,7 @@ def test_percentile_vectors_schema_matches_reader():
     # expression.cohort_gene_percentiles reads back.
     genes = ["A", "B"]
     vals = np.array([[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]])
-    out = _build.cohort_percentile_vectors(_matrix(genes, list("wxyz"), vals))
+    out = expression_builders.cohort_percentile_vectors(_matrix(genes, list("wxyz"), vals))
     bp_cols = [c for c in out.columns if c not in ("Ensembl_Gene_ID", "Symbol")]
     assert len(bp_cols) == 26
     assert bp_cols[0] == "p0" and bp_cols[-1] == "p100"
@@ -68,7 +68,7 @@ def test_percentile_vectors_log1p_roundtrip():
     # Stored log1p; expm1 of p0/p50/p100 recovers min/median/max of the gene's
     # across-sample distribution (the reader's as_tpm=True path).
     vals = np.array([[0.0, 10.0, 100.0, 1000.0]])
-    out = _build.cohort_percentile_vectors(_matrix(["A"], list("wxyz"), vals))
+    out = expression_builders.cohort_percentile_vectors(_matrix(["A"], list("wxyz"), vals))
     row = out.iloc[0]
     assert np.isclose(np.expm1(np.float32(row["p0"])), 0.0, atol=1e-1)
     assert np.isclose(np.expm1(np.float32(row["p100"])), 1000.0, rtol=2e-2)
@@ -80,13 +80,13 @@ def test_percentile_vectors_log1p_roundtrip():
 def test_percentile_vectors_ignores_nan():
     # A gene unmeasured in some samples: NaN cells are dropped, not treated as 0.
     vals = np.array([[np.nan, 10.0, 10.0, 10.0]])
-    out = _build.cohort_percentile_vectors(_matrix(["A"], list("wxyz"), vals))
+    out = expression_builders.cohort_percentile_vectors(_matrix(["A"], list("wxyz"), vals))
     assert np.isclose(np.expm1(np.float32(out.iloc[0]["p50"])), 10.0, rtol=2e-2)
 
 
 def test_percentile_vectors_requires_samples():
     with pytest.raises(ValueError):
-        _build.cohort_percentile_vectors(_matrix(["A"], [], np.empty((1, 0))))
+        expression_builders.cohort_percentile_vectors(_matrix(["A"], [], np.empty((1, 0))))
 
 
 # ---------- cohort_medoids ----------
@@ -94,7 +94,7 @@ def test_percentile_vectors_requires_samples():
 
 def test_medoids_returns_base_plus_k():
     rng = np.arange(50.0).reshape(5, 10)  # 5 genes × 10 samples
-    out = _build.cohort_medoids(
+    out = expression_builders.cohort_medoids(
         _matrix([f"g{i}" for i in range(5)], [f"s{j}" for j in range(10)], rng), k=3
     )
     rep_cols = [c for c in out.columns if c not in ("Ensembl_Gene_ID", "Symbol")]
@@ -104,7 +104,7 @@ def test_medoids_returns_base_plus_k():
 
 def test_medoids_small_cohort_keeps_all():
     vals = np.array([[1.0, 2.0]])
-    out = _build.cohort_medoids(_matrix(["A"], ["s1", "s2"], vals), k=5)
+    out = expression_builders.cohort_medoids(_matrix(["A"], ["s1", "s2"], vals), k=5)
     assert [c for c in out.columns if c not in ("Ensembl_Gene_ID", "Symbol")] == ["s1", "s2"]
 
 
@@ -117,7 +117,7 @@ def test_medoids_central_first_then_outlier():
     outlier = np.array([[100.0], [100.0], [100.0], [100.0], [100.0], [100.0]])
     vals = np.hstack([typical, outlier])
     samples = ["t1", "t2", "t3", "t4", "outlier"]
-    out = _build.cohort_medoids(_matrix(genes, samples, vals), k=2)
+    out = expression_builders.cohort_medoids(_matrix(genes, samples, vals), k=2)
     picks = [c for c in out.columns if c not in ("Ensembl_Gene_ID", "Symbol")]
     assert picks[0] != "outlier"  # central medoid from the dense cluster
     assert picks[1] == "outlier"  # farthest-first grabs the outlier
@@ -126,7 +126,7 @@ def test_medoids_central_first_then_outlier():
 def test_medoids_preserve_original_tpm():
     # Distance uses log1p internally, but stored values are the original TPM.
     vals = np.array([[7.0, 8.0, 9.0]])
-    out = _build.cohort_medoids(_matrix(["A"], ["s1", "s2", "s3"], vals), k=3)
+    out = expression_builders.cohort_medoids(_matrix(["A"], ["s1", "s2", "s3"], vals), k=3)
     kept = out[[c for c in out.columns if c not in ("Ensembl_Gene_ID", "Symbol")]].to_numpy()
     assert set(kept.ravel()) == {7.0, 8.0, 9.0}
 
@@ -134,8 +134,8 @@ def test_medoids_preserve_original_tpm():
 def test_medoids_deterministic():
     rng = (np.arange(60.0) * 1.7 % 11).reshape(6, 10)
     df = _matrix([f"g{i}" for i in range(6)], [f"s{j}" for j in range(10)], rng)
-    a = _build.cohort_medoids(df, k=4)
-    b = _build.cohort_medoids(df, k=4)
+    a = expression_builders.cohort_medoids(df, k=4)
+    b = expression_builders.cohort_medoids(df, k=4)
     assert list(a.columns) == list(b.columns)
 
 
@@ -230,7 +230,9 @@ def test_percentiles_reproduce_pirlygenes_reference():
     clean = nz.clean_tpm(raw[samples], gene_table=gene_table)
     clean_df = pd.concat([gene_table, clean], axis=1)
 
-    mine = _build.cohort_percentile_vectors(clean_df, samples).set_index("Ensembl_Gene_ID")
+    mine = expression_builders.cohort_percentile_vectors(clean_df, samples).set_index(
+        "Ensembl_Gene_ID"
+    )
     ref = pd.read_parquet(_ACC_REF).set_index("Ensembl_Gene_ID")
     # Column schema is identical.
     assert [c for c in mine.columns if c != "Symbol"] == [c for c in ref.columns if c != "Symbol"]

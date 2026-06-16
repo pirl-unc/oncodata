@@ -60,8 +60,8 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from cancerdata._build import sample_columns, within_sample_top_fractions
 from cancerdata.expression import SHARD_DATASETS
+from cancerdata.expression_builders import sample_columns, within_sample_top_fractions
 
 _DATASET = SHARD_DATASETS["within_sample"]  # the reader's record — derive dirs from it so
 _DATA_DIR = (

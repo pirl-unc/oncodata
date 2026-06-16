@@ -68,8 +68,8 @@ import numpy as np
 import pandas as pd
 
 from . import data_bundle, source_matrices
-from ._build import WITHIN_SAMPLE_THRESHOLDS as _WITHIN_SAMPLE_THRESHOLD_COLS
 from .cancer_types import cohort_aggregates, resolve_cancer_type
+from .expression_builders import WITHIN_SAMPLE_THRESHOLDS as _WITHIN_SAMPLE_THRESHOLD_COLS
 from .expression_engine import id_columns, sample_columns
 from .load_dataset import _BUNDLED_DATA_DIR, _register_derived_cache, get_data
 from .normalization import clean_tpm
@@ -92,7 +92,7 @@ class ShardDataset:
         (``f"{proteoform_stem}-{scope}"``) because identical-protein members group
         differently under ``"cta"`` vs ``"genome"``, so each scope is its own shard set.
       - ``proteoform_fetches`` — whether proteoform shards ship (none do yet).
-      - ``build_attr`` — name of the :mod:`cancerdata._build` core that regenerates a
+      - ``build_attr`` — name of the :mod:`cancerdata.expression_builders` core that regenerates a
         missing shard from the per-sample matrix (the same core that produced the shipped
         shards, so on-the-fly and shipped values agree).
 
@@ -589,7 +589,7 @@ def _read_shard_or_recompute(
 ) -> pd.DataFrame:
     """Read ``code``'s shard for ``dataset`` (the ``scope``-specific one at proteoform
     level); if no shard is present, recompute it on the fly from the per-sample matrix
-    via the dataset's ``_build`` core (the same core that produced the shipped shards —
+    via the dataset's ``expression_builders`` core (the same core that produced the shipped shards —
     so the on-the-fly and shipped values agree).
 
     The single home of the shard-or-recompute fallback shared by the percentile and
@@ -611,7 +611,7 @@ def _read_shard_or_recompute(
         ) from e
     from importlib import import_module
 
-    build_core = getattr(import_module("cancerdata._build"), dataset.build_attr)
+    build_core = getattr(import_module("cancerdata.expression_builders"), dataset.build_attr)
     return build_core(bio, sample_columns(bio))
 
 
@@ -661,7 +661,7 @@ def cohort_gene_percentiles(
 # ---------- within-sample percentile prevalence (signal a) ----------
 
 #: within-sample percentile-rank threshold -> output column: ``_WITHIN_SAMPLE_THRESHOLD_COLS``
-#: (imported above from :data:`cancerdata._build.WITHIN_SAMPLE_THRESHOLDS`) is the single
+#: (imported above from :data:`cancerdata.expression_builders.WITHIN_SAMPLE_THRESHOLDS`) is the single
 #: source of truth shared with the generator, so the read side and write side can't drift.
 
 
@@ -736,7 +736,7 @@ def proteoform_representative_samples(
     Always operates on linear ``clean TPM`` (summing log1p values would be
     wrong); ``log1p`` afterward if you need it. This is the runtime,
     every-cohort proteoform view over the shipped medoid samples; the same
-    :func:`cancerdata._build.sum_proteoform_tpm` core can run inside the offline
+    :func:`cancerdata.expression_builders.sum_proteoform_tpm` core can run inside the offline
     percentile/within-sample generators to ship proteoform-summed artifacts.
     """
     from .proteoforms import collapse_to_proteoforms
