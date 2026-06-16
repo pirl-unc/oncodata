@@ -409,6 +409,48 @@ def ici_response_by_regimen(*, save=None, only_multi=True):
     )
 
 
+def ici_regimen_comparison(*, save=None, min_regimens=1):
+    """Dumbbell/dot plot of ICI ORR — **every cancer type on its own row, one colored
+    dot per available regimen** (anti-PD-1 / anti-PD-L1 / anti-PD-1+anti-CTLA-4),
+    connected by a line, so all three estimates can be compared side by side and
+    scanned by cancer type. Rows are sorted by best available ORR (highest at top).
+    ``min_regimens`` filters to cancers with at least that many regimens (1 = show
+    every cancer with any ICI value; 2 = only where regimens actually differ)."""
+    from .ici import REGIMEN_FALLBACK, REGIMEN_LABELS, cancer_ici_response
+
+    by_regimen = {r: cancer_ici_response(regimen=r) for r in REGIMEN_FALLBACK}
+    codes = {c for m in by_regimen.values() for c in m}
+    codes = {c for c in codes if sum(c in by_regimen[r] for r in REGIMEN_FALLBACK) >= min_regimens}
+    if not codes:
+        raise ValueError("no cancer types to plot")
+    best = {c: max(by_regimen[r][c] for r in REGIMEN_FALLBACK if c in by_regimen[r]) for c in codes}
+    ordered = sorted(codes, key=lambda c: best[c])  # ascending; highest ends up on top
+
+    plt = _plt()
+    palette = _stable_palette()
+    reg_color = {r: palette[i] for i, r in enumerate(REGIMEN_FALLBACK)}
+    fig, ax = plt.subplots(figsize=(10, max(5, 0.3 * len(ordered))))
+    for y, c in enumerate(ordered):
+        present = [(r, by_regimen[r][c]) for r in REGIMEN_FALLBACK if c in by_regimen[r]]
+        xs = [v for _, v in present]
+        if len(xs) > 1:  # connect the estimates for this cancer
+            ax.plot([min(xs), max(xs)], [y, y], color="#cccccc", lw=1.5, zorder=1)
+        for r, v in present:
+            ax.scatter(v, y, color=reg_color[r], s=48, edgecolor="white", linewidth=0.5, zorder=2)
+    ax.set_yticks(range(len(ordered)))
+    ax.set_yticklabels([format_cancer_code_label(c) for c in ordered], fontsize=6)
+    ax.set_xlabel("Objective response rate (%)")
+    ax.set_title(f"ICI response by regimen and cancer type ({len(ordered)} types)")
+    ax.grid(True, axis="x", alpha=0.3)
+    handles = [
+        plt.Line2D([], [], marker="o", linestyle="", color=reg_color[r], label=REGIMEN_LABELS[r])
+        for r in REGIMEN_FALLBACK
+    ]
+    ax.legend(handles=handles, fontsize=7, loc="lower right", title="regimen")
+    fig.tight_layout()
+    return _save(fig, save)
+
+
 def incidence_vs_mortality(*, region="us", save=None):
     """Scatter of mortality-share vs incidence-share (%) per burden category for
     a region (``"us"`` or ``"world"``). The diagonal separates high-lethality

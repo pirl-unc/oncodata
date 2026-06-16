@@ -64,6 +64,7 @@ def _jobs() -> list[tuple[str, str, str, dict]]:
         ),
         # ICI regimens as distinct response sources
         ("ici", "ici_response_by_regimen", "ici_response_by_regimen", {}),
+        ("ici", "ici_regimen_comparison", "ici_regimen_comparison", {}),
         # incidence / burden
         ("burden", "incidence_vs_mortality_us", "incidence_vs_mortality", {"region": "us"}),
         ("burden", "burden_category_bars_us", "burden_category_bars", {"region": "us"}),
