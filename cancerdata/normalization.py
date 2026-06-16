@@ -17,7 +17,7 @@ renormalization. Each non-biological compartment is pinned, per sample, to a fix
 fraction of the 1e6 budget — **ribosomal proteins → 16%** (:data:`RIBOSOMAL_PROTEIN_FRACTION`),
 **other-technical → 9%** (:data:`OTHER_TECHNICAL_FRACTION`; mtDNA, NUMT, rRNA + pseudogenes,
 ribosomal-protein pseudogenes, polyA-bias lncRNA), **biology → 75%**
-(:data:`BIOLOGICAL_FRACTION`). The variable, pipeline-driven technical/ribosomal
+(:data:`BIOLOGICAL_FRACTION`). The variable, pipeline-driven other-technical/ribosomal
 fractions no longer inflate real genes, so biological clean TPM is directly comparable
 across samples and sources.
 
@@ -144,7 +144,7 @@ def clean_tpm(
     compartment is rescaled, **per sample**, to a fixed fraction of the 1e6 budget:
 
       - **ribosomal proteins** (canonical RPL/RPS) → ``ribosomal_protein_fraction`` (16%);
-      - **technical** (mtDNA, NUMT, rRNA + pseudogenes, ribosomal-protein pseudogenes,
+      - **other-technical** (mtDNA, NUMT, rRNA + pseudogenes, ribosomal-protein pseudogenes,
         polyA-bias lncRNA) → ``other_technical_fraction`` (9%);
       - **biology** (everything else) → the remainder (75%).
 
