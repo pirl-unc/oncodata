@@ -55,6 +55,35 @@ def test_tmb_full_map(capsys):
     assert "\t" in capsys.readouterr().out
 
 
+def test_ici_single_code_fallback(capsys):
+    # melanoma resolves to its anti-PD-1 value under the default fallback.
+    assert cli.main(["ici", "SKCM"]) == 0
+    assert float(capsys.readouterr().out.strip()) > 0
+
+
+def test_ici_all_regimens(capsys):
+    assert cli.main(["ici", "SKCM", "--all-regimens"]) == 0
+    out = capsys.readouterr().out
+    # melanoma carries both anti-PD-1 mono and the ipi+nivo doublet, as distinct rows.
+    assert "PD-1\t" in out and "PD-1+CTLA-4\t" in out
+
+
+def test_ici_pinned_regimen_absent_returns_1(capsys):
+    # SKCM has no anti-PD-L1 row -> pinning that regimen is a clean miss, not a crash.
+    assert cli.main(["ici", "SKCM", "--regimen", "PD-L1"]) == 1
+    assert "No ICI ORR" in capsys.readouterr().err
+
+
+def test_ici_unknown_code_errors(capsys):
+    assert cli.main(["ici", "not_a_real_cancer"]) == 1
+    assert "Error" in capsys.readouterr().err
+
+
+def test_ici_full_map(capsys):
+    assert cli.main(["ici"]) == 0
+    assert "\t" in capsys.readouterr().out
+
+
 def test_burden_full_map(capsys):
     assert cli.main(["burden", "--metric", "us_mortality_pct"]) == 0
     assert "\t" in capsys.readouterr().out
