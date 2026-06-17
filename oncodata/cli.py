@@ -12,9 +12,9 @@
 
 """``oncodata`` command-line interface.
 
-Reference lookups over the bundled tables (cancer-type / TMB / burden) plus the
-data-bundle fetch/cache surface (fetch / status / cache-dir / prune) for the
-heavy per-cohort expression bundle.
+Reference lookups over the bundled tables (cancer-type / TMB / burden / ICI) plus
+the ``cache`` group (fetch / status / dir / prune) for the heavy per-cohort
+expression bundle, and the ``hpa`` / ``expression-sources`` source managers.
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ from . import (
     cta,
     data_bundle,
     expression_registry,
+    ici,
     incidence,
     proteoforms,
     reference_data,
@@ -213,11 +214,39 @@ def _cmd_apd1(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_ici(args: argparse.Namespace) -> int:
+    regimen = args.regimen
+    if args.code is None:
+        mapping = ici.cancer_ici_response(regimen=regimen)
+        for code, value in sorted(mapping.items()):
+            print(f"{code}\t{value:g}")
+        return 0
+    try:
+        if args.all_regimens:
+            per = ici.cancer_ici_response(args.code, fallback=False, inherit=not args.no_inherit)
+            if not per:
+                print(f"No ICI ORR for {args.code!r}", file=sys.stderr)
+                return 1
+            for reg in ici.ici_regimens():
+                if reg in per:
+                    print(f"{reg}\t{per[reg]:g}")
+            return 0
+        value = ici.cancer_ici_response(args.code, regimen=regimen, inherit=not args.no_inherit)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    if value is None:
+        print(f"No ICI ORR for {args.code!r}", file=sys.stderr)
+        return 1
+    print(f"{value:g}")
+    return 0
+
+
 def _cmd_cta(args: argparse.Namespace) -> int:
     if args.unfiltered:
-        genes = cta.CTA_unfiltered_gene_ids() if args.ids else cta.CTA_unfiltered_gene_names()
+        genes = cta.cta_unfiltered_gene_ids() if args.ids else cta.cta_unfiltered_gene_names()
     else:
-        genes = cta.CTA_gene_ids() if args.ids else cta.CTA_gene_names()
+        genes = cta.cta_gene_ids() if args.ids else cta.cta_gene_names()
     if args.count:
         print(len(genes))
     else:
@@ -319,7 +348,7 @@ def _cmd_sources(args: argparse.Namespace) -> int:
         return 1 if failures else 0
     if args.action == "path":
         if not args.name:
-            print("Error: 'sources path' requires a source name", file=sys.stderr)
+            print("Error: 'hpa path' requires a source name", file=sys.stderr)
             return 1
         try:
             print(reference_data.ensure(args.name))
@@ -398,25 +427,24 @@ def _build_parser() -> argparse.ArgumentParser:
         func=_cmd_version
     )
 
-    # --- data bundle (fetch / cache) ---
-    sub.add_parser(
-        "cache-dir", help="Print the on-disk cache dir for the downloadable data bundle"
+    # --- cache: the downloadable per-cohort expression bundle ---
+    p_cache = sub.add_parser("cache", help="Manage the downloadable expression-bundle cache")
+    cache_sub = p_cache.add_subparsers(dest="cache_action", required=True)
+    cache_sub.add_parser(
+        "dir", help="Print the on-disk cache dir for the data bundle"
     ).set_defaults(func=_cmd_cache_dir)
-
-    p_fetch = sub.add_parser("fetch", help="Download the per-cohort expression data bundle")
-    p_fetch.add_argument("--force", action="store_true", help="Re-download even if present")
-    p_fetch.set_defaults(func=_cmd_fetch)
-
-    sub.add_parser(
+    p_cfetch = cache_sub.add_parser("fetch", help="Download the per-cohort expression data bundle")
+    p_cfetch.add_argument("--force", action="store_true", help="Re-download even if present")
+    p_cfetch.set_defaults(func=_cmd_fetch)
+    cache_sub.add_parser(
         "status", help="Report which bundle paths are cached locally (no download)"
     ).set_defaults(func=_cmd_status)
-
-    p_prune = sub.add_parser("prune", help="Delete stale version-pinned cache dirs")
-    p_prune.add_argument("--yes", action="store_true", help="Actually delete (default: dry run)")
-    p_prune.add_argument(
+    p_cprune = cache_sub.add_parser("prune", help="Delete stale version-pinned cache dirs")
+    p_cprune.add_argument("--yes", action="store_true", help="Actually delete (default: dry run)")
+    p_cprune.add_argument(
         "--include-current", action="store_true", help="Also delete the current version's cache"
     )
-    p_prune.set_defaults(func=_cmd_prune)
+    p_cprune.set_defaults(func=_cmd_prune)
 
     # --- reference lookups ---
     p_ct = sub.add_parser(
@@ -438,6 +466,22 @@ def _build_parser() -> argparse.ArgumentParser:
         "--no-inherit", action="store_true", help="Do not inherit an ancestor's ORR"
     )
     p_apd1.set_defaults(func=_cmd_apd1)
+
+    p_ici = sub.add_parser(
+        "ici", help="ICI ORR (%%) for a code by regimen (anti-PD-1/PD-L1/combo), or the full map"
+    )
+    p_ici.add_argument("code", nargs="?", default=None, help="Cancer code/alias (omit for all)")
+    p_ici.add_argument(
+        "--regimen",
+        default=None,
+        choices=list(ici.REGIMEN_FALLBACK),
+        help="Pin a regimen (default: PD-1 → PD-L1 → PD-1+CTLA-4 fallback)",
+    )
+    p_ici.add_argument(
+        "--all-regimens", action="store_true", help="Show every regimen present for the code"
+    )
+    p_ici.add_argument("--no-inherit", action="store_true", help="Do not inherit an ancestor's ORR")
+    p_ici.set_defaults(func=_cmd_ici)
 
     p_cta = sub.add_parser("cta", help="List cancer-testis antigens (expressed set by default)")
     p_cta.add_argument("--unfiltered", action="store_true", help="Full candidate universe")
@@ -545,17 +589,17 @@ def _build_parser() -> argparse.ArgumentParser:
     p_data.add_argument("--force", action="store_true", help="Re-download even if cached")
     p_data.set_defaults(func=_cmd_data)
 
-    p_sources = sub.add_parser(
-        "sources", help="Manage HPA normal-tissue reference sources (RNA / IHC / single-cell)"
+    p_hpa = sub.add_parser(
+        "hpa", help="Manage HPA normal-tissue reference data (RNA / IHC / single-cell)"
     )
-    p_sources.add_argument(
+    p_hpa.add_argument(
         "action",
         choices=["list", "status", "fetch", "path"],
         help="list/status (show cache state), fetch (download), path (print local path)",
     )
-    p_sources.add_argument("name", nargs="?", default=None, help="Source name (omit to fetch all)")
-    p_sources.add_argument("--force", action="store_true", help="Re-download even if cached")
-    p_sources.set_defaults(func=_cmd_sources)
+    p_hpa.add_argument("name", nargs="?", default=None, help="HPA source name (omit to fetch all)")
+    p_hpa.add_argument("--force", action="store_true", help="Re-download even if cached")
+    p_hpa.set_defaults(func=_cmd_sources)
 
     p_exprsrc = sub.add_parser(
         "expression-sources",

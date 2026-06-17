@@ -84,9 +84,9 @@ def test_cta_expression_heatmap_proteoform_reads_collapsed_vectors(tmp_path, mon
 
     # Use two real CTAs and their real proteoform keys, so the heatmap's CTA-key filter
     # (derived from the same CTA set) keeps both rows. At least one is a collapsed group.
-    grouped = next(g for g in sorted(cta.CTA_gene_ids()) if "/" in gene_to_proteoform_id([g])[g])
+    grouped = next(g for g in sorted(cta.cta_gene_ids()) if "/" in gene_to_proteoform_id([g])[g])
     singleton = next(
-        g for g in sorted(cta.CTA_gene_ids()) if "/" not in gene_to_proteoform_id([g])[g]
+        g for g in sorted(cta.cta_gene_ids()) if "/" not in gene_to_proteoform_id([g])[g]
     )
     keys = gene_to_proteoform_id([grouped, singleton])
 
