@@ -25,9 +25,9 @@ COAD_MSI,43.8,pembrolizumab,KEYNOTE-177,first-line; MSI-H/dMMR,PMID:33264544,hig
 COAD_MSS,0.0,pembrolizumab,KEYNOTE-016/-028,MSS,PMID:26028255,high,Microsatellite-stable colon; immune-cold; ~0% response,PD-1
 READ_MSI,43.8,pembrolizumab,KEYNOTE-177,first-line; MSI-H/dMMR,PMID:33264544,medium,MSI-H/dMMR rectal; small subset; same biology as COAD_MSI,PD-1
 READ_MSS,0.0,pembrolizumab,KEYNOTE-016,MSS,PMID:26028255,high,Microsatellite-stable rectal; immune-cold,PD-1
-UCEC_MSI,50.0,pembrolizumab,KEYNOTE-158,dMMR/MSI-H advanced EC,PMID:34990208,high,ORR 50% (95% CI 40-61); MSI-H/dMMR cohort n=94,PD-1
-UCEC_CNL,6.0,pembrolizumab,KEYNOTE-158,pMMR/MSS NSMP,PMID:34990208,medium,non-MSI-H ORR ~7% (3-14); MSS NSMP arm,PD-1
-UCEC_CNH,6.0,pembrolizumab,KEYNOTE-158,pMMR/MSS p53-abnormal,PMID:34990208,medium,non-MSI-H ORR ~7%; p53-abnormal most immune-cold,PD-1
+UCEC_MSI,48,pembrolizumab,KEYNOTE-158,dMMR/MSI-H advanced EC,PMID:39847999,high,ORR 48% (95% CI 37-60); MSI-H/dMMR cohort n~94 (KEYNOTE-158 long-term FU),PD-1
+UCEC_CNL,7,pembrolizumab,KEYNOTE-158,pMMR/MSS NSMP,PMID:39847999,medium,"non-MSI-H/pMMR ORR 7% (95% CI 3-14), KEYNOTE-158; MSS NSMP arm",PD-1
+UCEC_CNH,7,pembrolizumab,KEYNOTE-158,pMMR/MSS p53-abnormal,PMID:39847999,medium,"non-MSI-H/pMMR ORR 7% (95% CI 3-14), KEYNOTE-158; p53-abnormal most immune-cold",PD-1
 OV,8.0,pembrolizumab,KEYNOTE-100,recurrent ovarian (all-comers),PMID:31046082,medium,pembro monotherapy ORR 8.0%,PD-1
 HNSC_HPVpos,24.0,pembrolizumab,KEYNOTE-012,R/M HNSCC HPV+,PMID:27646946,medium,HPV+ subgroup; pooled monotherapy HPV+ > HPV- (overall KN-012 ORR 18%),PD-1
 HNSC_HPVneg,16.0,pembrolizumab,KEYNOTE-012,R/M HNSCC HPV-,PMID:27646946,medium,HPV- subgroup,PD-1
@@ -79,4 +79,4 @@ NET_MIDGUT,0.0,nivolumab+ipilimumab,DART/SWOG S1609,midgut/small-bowel carcinoid
 NET_LUNG,0.0,nivolumab+ipilimumab,DART/SWOG S1609,lung typical/atypical carcinoid (low-grade),PMID:31969335,low,low/intermediate-grade NET 0/14 in DART nonpancreatic NET cohort (pooled; not site-isolated),PD-1+CTLA-4
 PMBCL,41.5,pembrolizumab,KEYNOTE-170,relapsed/refractory primary mediastinal B-cell lymphoma,PMID:37130017,high,ORR 41.5% (22/53); CR 20.8%; 9p24.1/PD-L1 amplification; FDA-approved; the checkpoint-sensitive exception within DLBCL,PD-1
 ATC,30.0,nivolumab+ipilimumab,NCT03246958 (ASCO 2020 abstr 6513),anaplastic thyroid carcinoma,DOI:10.1200/JCO.2020.38.15_suppl.6513,low,dual checkpoint ORR 30% (3/10); abstract-level; lenvatinib+pembrolizumab ~52% (ATLEP combo; not monotherapy); no single-agent anti-PD-1 ORR,PD-1+CTLA-4
-UCEC,8,pembrolizumab,KEYNOTE-158,all-comers (response is MMR-dependent),PMID:34990208,medium,dMMR/MSI-H ~50% vs pMMR ~6% (KN-158); all-comer is a weighted blend,PD-1
+UCEC,15,pembrolizumab,KEYNOTE-158,all-comers (response is MMR-dependent),PMID:39847999,medium,derived all-comer = 0.20*48 (dMMR) + 0.80*7 (pMMR) = 15.2%; advanced/recurrent EC dMMR prevalence ~20%,PD-1

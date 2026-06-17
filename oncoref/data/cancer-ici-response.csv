@@ -96,10 +96,10 @@ TGCT,PD-1,0.0,pembrolizumab,Hoosier GU14-206,platinum-refractory germ cell,PMID:
 THCA,PD-1,6.8,pembrolizumab,KEYNOTE-158,advanced differentiated thyroid,DOI:10.1002/cncr.34657,high,differentiated thyroid ORR 6.8% (7/103); anaplastic ATC higher with TKI combos (not monotherapy)
 THYM,PD-L1,29.0,avelumab,NCI phase 1 (Rajan),relapsed thymoma,PMID:31639039,medium,tiny n=7; high irAE
 THYMCA,PD-1,22.5,pembrolizumab,NCT02364076,advanced thymic carcinoma,PMID:29395863,medium,thymic carcinoma ORR 22.5% (9/40); thymoma (THYM) itself avoided due to severe irAEs
-UCEC,PD-1,8.0,pembrolizumab,KEYNOTE-158,all-comers (response is MMR-dependent),PMID:39847999,medium,dMMR/MSI-H ~50% vs pMMR ~6% (KN-158); all-comer is a weighted blend
-UCEC_CNH,PD-1,6.0,pembrolizumab,KEYNOTE-158,pMMR/MSS p53-abnormal,PMID:39847999,medium,non-MSI-H ORR ~7%; p53-abnormal most immune-cold
-UCEC_CNL,PD-1,6.0,pembrolizumab,KEYNOTE-158,pMMR/MSS NSMP,PMID:39847999,medium,non-MSI-H ORR ~7% (3-14); MSS NSMP arm
-UCEC_MSI,PD-1,50.0,pembrolizumab,KEYNOTE-158,dMMR/MSI-H advanced EC,PMID:39847999,high,ORR 50% (95% CI 40-61); MSI-H/dMMR cohort n=94
+UCEC,PD-1,15,pembrolizumab,KEYNOTE-158,all-comers (response is MMR-dependent),PMID:39847999,medium,"derived all-comer = 0.20*48 (dMMR) + 0.80*7 (pMMR) = 15.2%; advanced/recurrent EC dMMR prevalence ~20%; KEYNOTE-158 reports the two cohorts separately, not a combined ORR"
+UCEC_CNH,PD-1,7,pembrolizumab,KEYNOTE-158,pMMR/MSS p53-abnormal,PMID:39847999,medium,"non-MSI-H/pMMR ORR 7% (95% CI 3-14), KEYNOTE-158; p53-abnormal most immune-cold"
+UCEC_CNL,PD-1,7,pembrolizumab,KEYNOTE-158,pMMR/MSS NSMP,PMID:39847999,medium,"non-MSI-H/pMMR ORR 7% (95% CI 3-14), KEYNOTE-158; MSS NSMP arm"
+UCEC_MSI,PD-1,48,pembrolizumab,KEYNOTE-158,dMMR/MSI-H advanced EC,PMID:39847999,high,"ORR 48% (95% CI 37-60); MSI-H/dMMR cohort n~94 (KEYNOTE-158 long-term follow-up, O'Malley 2022)"
 UVM,PD-1,4.0,nivolumab,pooled uveal series,metastatic uveal melanoma,PMID:27533448,low,uveal anti-PD-1 monotherapy ORR ~3-6% (checkpoint-refractory)
 VSCC,PD-1,10.9,pembrolizumab,KEYNOTE-158,advanced vulvar SCC,PMID:35361487,high,ORR 10.9% (11/101); durable (mDOR 20.4 mo)
 cSCC,PD-1,34.3,pembrolizumab,KEYNOTE-629,recurrent/metastatic cSCC,PMID:32673170,high,R/M cutaneous SCC ORR 34.3% (36/105); cemiplimab EMPOWER-CSCC-1 ~47%

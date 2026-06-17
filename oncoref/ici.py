@@ -52,8 +52,8 @@ follows three rules that matter when curating new trials or interpreting a poole
    and :func:`pooled_ici_response` drops them unconditionally — a derived blend must never
    be pooled as if it were trial data. The blend is reconstructable from its components:
    ``all_comer ≈ ORR_MSI · p_dMMR + ORR_MSS · (1 − p_dMMR)`` (COAD: 43.8·0.13 ≈ 5.7%;
-   READ: 43.8·0.07 ≈ 3.1%; UCEC: 50·0.28 + 6·0.72 ≈ 18% — note UCEC's table anchor of 8%
-   is *lower* than this roll-up and is flagged for review). When adding such an anchor,
+   READ: 43.8·0.07 ≈ 3.1%; UCEC: 48·0.20 + 7·0.80 ≈ 15%, using the KEYNOTE-158 dMMR/pMMR
+   cohorts at an advanced-EC dMMR prevalence ~20%). When adding such an anchor,
    keep the reported subtype values in the ``<code>_MSI`` / ``<code>_MSS`` rows and record
    the prevalence weighting in ``notes`` — never cite a paper that does not contain the
    blended number.
