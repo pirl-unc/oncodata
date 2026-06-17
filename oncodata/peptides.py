@@ -21,7 +21,7 @@ off-target reactivity). This mirrors pirlygenes' definition exactly:
     **longest** protein-coding transcript per gene (stop codon stripped);
   - 9-mers are the distinct sliding-window (stride 1) substrings of a protein;
   - the **background** is the union of 9-mers over every non-CTA protein (the full
-    CTA *universe* — :func:`oncodata.cta.CTA_unfiltered_gene_ids` — is excluded so
+    CTA *universe* — :func:`oncodata.cta.cta_unfiltered_gene_ids` — is excluded so
     borderline CTAs don't poison the background);
   - a CTA's ``n_specific_9mers`` is how many of its 9-mers miss that background.
 
@@ -38,7 +38,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .cta import CTA_gene_id_to_name, CTA_gene_ids, CTA_unfiltered_gene_ids
+from .cta import cta_gene_id_to_name, cta_gene_ids, cta_unfiltered_gene_ids
 from .genome import find_gene_id_by_name, genomes, strip_version
 
 #: 9 = the canonical MHC-I epitope length.
@@ -108,8 +108,8 @@ def _cta_set_fingerprint() -> str:
     the output rows and the background. Embedded in the cache key so a curation edit
     (a CTA added/removed) invalidates a stale cache *within* the same Ensembl release,
     not only across releases."""
-    payload = "F:" + ",".join(sorted(strip_version(g) for g in CTA_gene_ids()))
-    payload += "|U:" + ",".join(sorted(strip_version(g) for g in CTA_unfiltered_gene_ids()))
+    payload = "F:" + ",".join(sorted(strip_version(g) for g in cta_gene_ids()))
+    payload += "|U:" + ",".join(sorted(strip_version(g) for g in cta_unfiltered_gene_ids()))
     return hashlib.sha1(payload.encode()).hexdigest()[:10]
 
 
@@ -123,8 +123,8 @@ def _build_counts(genome, k: int) -> pd.DataFrame:
             "background would be wrong. Reinstall with "
             f"`pyensembl install --release {genome.release} --species homo_sapiens`."
         )
-    cta_filtered = {strip_version(g) for g in CTA_gene_ids()}
-    cta_universe = {strip_version(g) for g in CTA_unfiltered_gene_ids()}
+    cta_filtered = {strip_version(g) for g in cta_gene_ids()}
+    cta_universe = {strip_version(g) for g in cta_unfiltered_gene_ids()}
 
     background: set[str] = set()
     for gid, seq in longest.items():
@@ -132,7 +132,7 @@ def _build_counts(genome, k: int) -> pd.DataFrame:
             continue  # exclude the whole CTA universe so borderline CTAs don't mask specificity
         background |= _kmers(seq, k)
 
-    id2name = CTA_gene_id_to_name()
+    id2name = cta_gene_id_to_name()
     rows = []
     for gid in sorted(cta_filtered):
         seq = longest.get(gid)

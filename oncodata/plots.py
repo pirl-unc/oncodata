@@ -28,7 +28,7 @@ from functools import lru_cache
 
 from .apd1 import cancer_apd1_response
 from .cancer_types import cancer_type_registry, format_cancer_code_label
-from .cta import CTA_gene_id_to_name, CTA_gene_ids
+from .cta import cta_gene_id_to_name, cta_gene_ids
 from .expression import (
     available_percentile_cohorts,
     available_within_sample_cohorts,
@@ -516,10 +516,10 @@ def _cta_expression_matrix(stat, cohorts, *, proteoform=False):
     import pandas as pd
 
     col = _STAT_PERCENTILE_COL[stat]
-    id_to_name = CTA_gene_id_to_name()
-    cta_ids = set(CTA_gene_ids())
+    id_to_name = cta_gene_id_to_name()
+    cta_ids = set(cta_gene_ids())
     # In the collapsed space, a CTA group's row is keyed by its proteoform_key, and the
-    # row's canonical Ensembl_Gene_ID may be an unexpressed member outside CTA_gene_ids
+    # row's canonical Ensembl_Gene_ID may be an unexpressed member outside cta_gene_ids
     # — so match on the CTA *proteoform keys*, not the canonical ENSG (which would drop
     # CGB3/5/8, CT45A2/8/9, …). The keys are derived from the CTA set itself.
     cta_keys = None
@@ -637,7 +637,7 @@ def _cta_prevalence_by_cohort(threshold):
     and #13. Cohorts without a within-sample shard are skipped."""
     import pandas as pd
 
-    cta_ids = set(CTA_gene_ids())
+    cta_ids = set(cta_gene_ids())
     out = {}
     for code in available_within_sample_cohorts():
         df = within_sample_top_fraction(code, threshold=threshold)

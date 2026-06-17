@@ -164,9 +164,9 @@ def test_value_cols_excludes_proteoform_members():
 def test_drop_technical_vs_filter_technical_rna():
     gt, _ = _matrix()
     df = gt.assign(s1=1.0)
-    # drop_technical_genes removes the censored set (incl. ribosomal); the two
+    # drop_technical_rna removes the censored set (incl. ribosomal); the two
     # mito genes here are technical, so both go.
-    assert len(norm.drop_technical_genes(df)) == 3
+    assert len(norm.drop_technical_rna(df)) == 3
     assert len(norm.filter_technical_rna(df)) == 3  # mito is technical RNA too
 
 

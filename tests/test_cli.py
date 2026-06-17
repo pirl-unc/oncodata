@@ -62,7 +62,7 @@ def test_burden_full_map(capsys):
 
 def test_cache_dir_respects_env(capsys, monkeypatch, tmp_path):
     monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
-    assert cli.main(["cache-dir"]) == 0
+    assert cli.main(["cache", "dir"]) == 0
     out = capsys.readouterr().out.strip()
     assert str(tmp_path) in out
 
@@ -70,7 +70,7 @@ def test_cache_dir_respects_env(capsys, monkeypatch, tmp_path):
 def test_status_no_download(capsys, monkeypatch, tmp_path):
     # status must never trigger a fetch, even with an empty cache dir.
     monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
-    assert cli.main(["status"]) == 0
+    assert cli.main(["cache", "status"]) == 0
     out = capsys.readouterr().out
     assert "All local:    no" in out
     assert "cancer-reference-expression" in out
@@ -78,5 +78,5 @@ def test_status_no_download(capsys, monkeypatch, tmp_path):
 
 def test_prune_dry_run_default(capsys, monkeypatch, tmp_path):
     monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path / "v0.0.0"))
-    assert cli.main(["prune"]) == 0
+    assert cli.main(["cache", "prune"]) == 0
     assert "Nothing to prune" in capsys.readouterr().out

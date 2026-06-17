@@ -5,7 +5,7 @@
 # artifacts (data_bundle.DOWNLOADABLE_PATHS) are distributed as a version-pinned
 # tarball attached to the pirl-unc/oncodata release. This script packages those
 # paths from a source directory that already contains them — e.g. a populated
-# cache dir (`oncodata fetch` then `oncodata status` for the path) or a
+# cache dir (`oncodata cache fetch` then `oncodata cache status` for the path) or a
 # pirlygenes data checkout during the migration.
 #
 # Usage:

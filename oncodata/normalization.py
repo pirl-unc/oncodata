@@ -199,7 +199,7 @@ def clean_tpm(
     return clean.fillna(0.0)
 
 
-def drop_technical_genes(
+def drop_technical_rna(
     df: pd.DataFrame, *, exclude_ribosomal_proteins: bool = True
 ) -> pd.DataFrame:
     """Biology-only view: drop the clean-TPM censored rows (technical RNA, and by
@@ -210,7 +210,7 @@ def drop_technical_genes(
 
 def filter_technical_rna(df: pd.DataFrame) -> pd.DataFrame:
     """Drop the strict technical-RNA loci (mtDNA / NUMT / rRNA / nuclear-retained
-    lncRNA) — a lighter filter than :func:`drop_technical_genes` (keeps ribosomal
+    lncRNA) — a lighter filter than :func:`drop_technical_rna` (keeps ribosomal
     proteins). Row order preserved."""
     mask = _unversioned(df["Ensembl_Gene_ID"]).isin(gene_families.technical_rna_gene_ids())
     return df.loc[~mask].reset_index(drop=True)

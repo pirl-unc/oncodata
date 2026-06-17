@@ -26,7 +26,7 @@ prevalence:
 
 All operate on :func:`oncodata.expression.per_sample_expression` (clean TPM), so
 they need the cohort's per-sample matrix fetched (see :mod:`oncodata.source_matrices`).
-The default gene panel is the expressed CTA set (:func:`oncodata.cta.CTA_gene_ids`).
+The default gene panel is the expressed CTA set (:func:`oncodata.cta.cta_gene_ids`).
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ from collections.abc import Iterable
 import numpy as np
 import pandas as pd
 
-from .cta import CTA_gene_id_to_name, CTA_gene_ids
+from .cta import cta_gene_id_to_name, cta_gene_ids
 from .expression import per_sample_expression
 from .expression_engine import ID_COLUMNS as _ANTIGEN_ID_COLS
 
@@ -48,7 +48,7 @@ _BASE = ["Ensembl_Gene_ID", "Symbol"]
 
 
 def _panel_ids(gene_ids: Iterable[str] | None) -> set[str]:
-    ids = set(gene_ids) if gene_ids is not None else set(CTA_gene_ids())
+    ids = set(gene_ids) if gene_ids is not None else set(cta_gene_ids())
     return {str(g).split(".")[0] for g in ids}
 
 
@@ -279,4 +279,4 @@ def addressable_fraction_by_cohort(
 
 def cta_id_to_name() -> dict[str, str]:
     """``{unversioned CTA gene id -> symbol}`` for labelling coverage outputs."""
-    return CTA_gene_id_to_name()
+    return cta_gene_id_to_name()

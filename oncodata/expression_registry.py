@@ -16,7 +16,7 @@ The bundled ``expression_sources.yaml`` is the single source of truth for which
 upstream datasets feed each cancer cohort — Treehouse, BEAT-AML, GDC/TCGA,
 CLL-map, MMRF CoMMpass, TARGET, GEO series, recount3, … — with the provenance a
 re-runner needs (project/accession/url, native unit, library prep, builder,
-citation, expected size). It drives the legible ``oncodata sources`` listing
+citation, expected size). It drives the legible ``oncodata expression-sources`` listing
 and (incrementally) the fetch + regeneration of the per-cohort summaries.
 """
 
@@ -127,7 +127,7 @@ def sources_for_cancer_code(code: str) -> list[ExpressionSource]:
     return [s for s in load_registry() if code in s.cancer_codes]
 
 
-def registry_dataframe() -> pd.DataFrame:
+def expression_sources_df() -> pd.DataFrame:
     """The registry as a tabular view (one row per source) for inspection."""
     return pd.DataFrame(
         {

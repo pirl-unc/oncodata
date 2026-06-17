@@ -30,8 +30,8 @@ def test_lookup_by_id_and_code():
     assert any(s.id == "mmrf-commpass" for s in es.sources_for_cancer_code("MM"))
 
 
-def test_registry_dataframe_shape():
-    df = es.registry_dataframe()
+def test_expression_sources_df_shape():
+    df = es.expression_sources_df()
     assert {"id", "source_type", "cancer_codes", "citation"} <= set(df.columns)
     assert len(df) == len(es.expression_sources())
 

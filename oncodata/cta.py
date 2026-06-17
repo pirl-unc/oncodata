@@ -158,7 +158,7 @@ def synthesize_restriction(row) -> tuple[str, str]:
 @lru_cache(maxsize=1)
 def _cta_frame() -> pd.DataFrame:
     """Cached CTA table with the non-CTA excluded genes dropped. Internal,
-    read-only — do not mutate; public callers get a copy via cta_dataframe()."""
+    read-only — do not mutate; public callers get a copy via cta_df()."""
     df = get_data("cancer-testis-antigens", copy=False)
     excluded = _non_cta_excluded_gene_ids()
     if "Ensembl_Gene_ID" in df.columns and excluded:
@@ -170,23 +170,23 @@ def _cta_frame() -> pd.DataFrame:
 _register_derived_cache(_cta_frame.cache_clear)
 
 
-def cta_dataframe() -> pd.DataFrame:
+def cta_df() -> pd.DataFrame:
     """Full CTA evidence table (one row per candidate), with the non-CTA
     excluded genes (histones, etc.) dropped. Returns a defensive copy."""
     return _cta_frame().copy()
 
 
 #: Alias matching the target-selection layer's public name.
-def CTA_evidence() -> pd.DataFrame:
-    """The CTA evidence DataFrame (alias of :func:`cta_dataframe`)."""
-    return cta_dataframe()
+def cta_evidence() -> pd.DataFrame:
+    """The CTA evidence DataFrame (alias of :func:`cta_df`)."""
+    return cta_df()
 
 
 def cta_candidate_references() -> pd.DataFrame:
     """Top-of-funnel CTA *candidates* with literature references — overlooked
     cancer-testis / cancer-germline antigens (paralog-family members, meiosis/
     germline genes, recently described CTAs) that are **not yet promoted** into the
-    curated :func:`cta_dataframe` table.
+    curated :func:`cta_df` table.
 
     This is a referenced watchlist, not the filtered set: each row carries its
     ``candidate_source`` (paralog/literature/meiosis/registry), ``ct_designation``
@@ -244,51 +244,51 @@ def _all_by_column(column: str) -> set[str]:
     return result
 
 
-def CTA_gene_names() -> set[str]:
+def cta_gene_names() -> set[str]:
     """CTA gene symbols that pass the HPA filter AND are expressed (>= 2 nTPM
     somewhere) — the recommended default set."""
     return _cta_by_column("Symbol", filtered_only=True, exclude_never_expressed=True)
 
 
-def CTA_gene_ids() -> set[str]:
+def cta_gene_ids() -> set[str]:
     """CTA Ensembl gene IDs that pass the HPA filter AND are expressed."""
     return _cta_by_column("Ensembl_Gene_ID", filtered_only=True, exclude_never_expressed=True)
 
 
-def CTA_filtered_gene_names() -> set[str]:
+def cta_filtered_gene_names() -> set[str]:
     """All CTA symbols passing the HPA filter (including never-expressed)."""
     return _cta_by_column("Symbol", filtered_only=True)
 
 
-def CTA_filtered_gene_ids() -> set[str]:
+def cta_filtered_gene_ids() -> set[str]:
     """All CTA Ensembl gene IDs passing the HPA filter (including never-expressed)."""
     return _cta_by_column("Ensembl_Gene_ID", filtered_only=True)
 
 
-def CTA_never_expressed_gene_names() -> set[str]:
+def cta_never_expressed_gene_names() -> set[str]:
     """Filter-passing CTAs with no meaningful HPA expression (no protein, max RNA < 2)."""
-    return CTA_filtered_gene_names() - CTA_gene_names()
+    return cta_filtered_gene_names() - cta_gene_names()
 
 
-def CTA_unfiltered_gene_names() -> set[str]:
+def cta_unfiltered_gene_names() -> set[str]:
     """Every candidate CTA symbol across all source databases (the full universe)."""
     return _all_by_column("Symbol")
 
 
-def CTA_unfiltered_gene_ids() -> set[str]:
+def cta_unfiltered_gene_ids() -> set[str]:
     """Every candidate CTA Ensembl gene ID across all source databases."""
     return _all_by_column("Ensembl_Gene_ID")
 
 
-def CTA_excluded_gene_names() -> set[str]:
+def cta_excluded_gene_names() -> set[str]:
     """Candidate CTAs that FAIL the reproductive-restriction filter (somatic leakage)."""
-    return CTA_unfiltered_gene_names() - CTA_filtered_gene_names()
+    return cta_unfiltered_gene_names() - cta_filtered_gene_names()
 
 
-def CTA_gene_id_to_name() -> dict[str, str]:
+def cta_gene_id_to_name() -> dict[str, str]:
     """``{Ensembl_Gene_ID (unversioned): Symbol}`` over the expressed CTA set."""
     df = _cta_frame()
-    ids = CTA_gene_ids()
+    ids = cta_gene_ids()
     out: dict[str, str] = {}
     for _, row in df.iterrows():
         gid = str(row.get("Ensembl_Gene_ID", "")).split(".")[0]

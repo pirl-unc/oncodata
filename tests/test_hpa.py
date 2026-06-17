@@ -79,7 +79,7 @@ def test_gene_protein_tissues_detected_only(hpa_cache):
 def test_cli_sources_list(hpa_cache, capsys):
     from oncodata import cli
 
-    assert cli.main(["sources", "list"]) == 0
+    assert cli.main(["hpa", "list"]) == 0
     out = capsys.readouterr().out
     assert "hpa_rna_consensus" in out and "hpa_single_cell" in out
 
@@ -88,7 +88,7 @@ def test_cli_sources_path_uses_cache(hpa_cache, capsys):
     from oncodata import cli
 
     # already seeded -> ensure() returns the path without a network fetch
-    assert cli.main(["sources", "path", "hpa_rna_consensus"]) == 0
+    assert cli.main(["hpa", "path", "hpa_rna_consensus"]) == 0
     assert "rna_tissue_consensus.tsv" in capsys.readouterr().out
 
 

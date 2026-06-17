@@ -60,9 +60,9 @@ def fake_proteome(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(peptides, "_usable_genome", lambda: genome)
     monkeypatch.setattr(peptides, "_derived_cache_dir", lambda: tmp_path)
-    monkeypatch.setattr(peptides, "CTA_gene_ids", lambda: ["ENSG_CTA"])
-    monkeypatch.setattr(peptides, "CTA_unfiltered_gene_ids", lambda: ["ENSG_CTA"])
-    monkeypatch.setattr(peptides, "CTA_gene_id_to_name", lambda: {"ENSG_CTA": "CTAX"})
+    monkeypatch.setattr(peptides, "cta_gene_ids", lambda: ["ENSG_CTA"])
+    monkeypatch.setattr(peptides, "cta_unfiltered_gene_ids", lambda: ["ENSG_CTA"])
+    monkeypatch.setattr(peptides, "cta_gene_id_to_name", lambda: {"ENSG_CTA": "CTAX"})
     monkeypatch.setattr(peptides, "_MIN_PROTEOME_GENES", 1)  # tiny fake proteome
     peptides._COUNTS_CACHE.clear()
     yield

@@ -101,8 +101,14 @@ _register_derived_cache(_family_burden_map.cache_clear)
 
 
 def burden_category(cancer_type):
-    """Robustly resolve a cancer type (code, alias, or display name) to an
-    anatomic burden category, driven by the cancer-type registry ontology.
+    """Map a cancer type to its **incidence/mortality (cancer-burden) category** —
+    the coarse anatomic bucket under which ACS / GLOBOCAN report population burden
+    (e.g. ``SARC_OS`` → ``"bone_and_joint"``), so a fine cancer code can be joined to
+    :func:`cancer_burden`. This is *not* a severity label; it is the granularity at
+    which burden statistics are tabulated.
+
+    Robustly resolves a cancer type (code, alias, or display name) to that category,
+    driven by the cancer-type registry ontology.
     Order: normalize via :func:`resolve_cancer_type`; the small explicit
     ``cancer-code-burden-map`` *override* (walking the ``parent_code`` chain);
     then registry-driven — sarcoma family splits bone vs soft tissue, plasma

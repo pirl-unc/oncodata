@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from oncodata.cta import CTA_unfiltered_gene_names
+from oncodata.cta import cta_unfiltered_gene_names
 
 _CSV = Path(__file__).resolve().parents[1] / "oncodata" / "data" / "cancer-testis-antigens.csv"
 
@@ -93,7 +93,7 @@ def test_no_mass_spec_columns():
 
 
 def test_curated_genes_present():
-    missing = _CURATED_GENES - CTA_unfiltered_gene_names()
+    missing = _CURATED_GENES - cta_unfiltered_gene_names()
     assert not missing, f"CTA table missing curated genes: {sorted(missing)}"
 
 
