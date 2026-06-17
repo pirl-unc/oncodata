@@ -990,7 +990,10 @@ def cta_coverage_curves(
     curves.sort(key=lambda t: t[2][-1], reverse=True)  # broadest coverage first
     total = len(curves)
     shown = curves[:top_n] if top_n else curves
-    code_color, _ = _family_colors([c for c, _, _ in shown])
+    # Distinct per-cohort colors — lineage colors would collide for the several
+    # same-lineage cohorts usually in the top-coverage set (e.g. multiple sarcomas).
+    cmap = plt.get_cmap("tab10" if len(shown) <= 10 else "tab20")
+    code_color = {code: cmap(i % cmap.N) for i, (code, _, _) in enumerate(shown)}
 
     fig, ax = plt.subplots(figsize=(9, 6))
     for code, x, y in shown:
