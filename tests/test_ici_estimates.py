@@ -209,9 +209,13 @@ def test_pooled_result_contract():
         "ci_high",
         "n_total",
         "n_studies",
+        "n_pooled",
         "refs",
         "value_range",
         "sources",
     ):
         assert key in r
     assert r["cancer_code"] == "SKCM"
+    # n_studies is the full evidence count; n_pooled (proportion only) is what entered the
+    # responder-weighted pool, so it can only be <= n_studies.
+    assert r["n_pooled"] is None or r["n_pooled"] <= r["n_studies"]

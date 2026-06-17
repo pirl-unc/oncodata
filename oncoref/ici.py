@@ -272,13 +272,15 @@ def pooled_ici_response(
     Returns a dict::
 
         {cancer_code, regimen, metric, poolable, pooled_pct, ci_low, ci_high,
-         responders_total, n_total, n_studies, refs, value_range, sources}
+         responders_total, n_total, n_studies, n_pooled, refs, value_range, sources}
 
     For **proportion endpoints** (:data:`PROPORTION_METRICS` — ORR / CRR / DCR / PR) the
     pool is *responder-weighted*: ``pooled_pct = 100 · Σresponders / Σn`` over the sources
-    that report both, with a 95% Wilson score CI. ``n_total`` and ``n_studies`` are the
-    summed sample size and the number of contributing trials; ``refs`` lists their
-    citations.
+    that report both, with a 95% Wilson score CI. ``n_total`` is the summed sample size and
+    ``responders_total`` the summed responders. ``n_studies`` is the number of trial-sources
+    found for the cell (the full evidence count); ``n_pooled`` is how many of them actually
+    entered the responder-weighted pool (``None`` for non-proportion endpoints). ``refs``
+    lists the citations behind the reported estimate.
 
     For **time-to-event endpoints** (median PFS/OS/DOR in months) and **landmark rates**,
     medians/rates cannot be validly pooled without patient-level data — ``poolable`` is
@@ -341,6 +343,16 @@ def pooled_ici_response(
         )
 
     values = [s["value"] for s in sources if s["value"] is not None]
+    # Sources that actually enter the responder-weighted pool (need responders + n);
+    # empty for non-proportion endpoints, which are not pooled.
+    contrib = (
+        [s for s in sources if s["responders"] is not None and s["n"]]
+        if metric in PROPORTION_METRICS
+        else []
+    )
+    # `refs` = the citations behind the *reported* estimate: the pooled sources when a
+    # pool is produced, else every source feeding the value_range.
+    ref_sources = contrib if contrib else sources
     result = {
         "cancer_code": code,
         "regimen": regimen,
@@ -351,17 +363,16 @@ def pooled_ici_response(
         "ci_high": None,
         "responders_total": None,
         "n_total": None,
-        "n_studies": len(sources),
-        "refs": sorted({s["ref"] for s in sources if s["ref"]}),
+        "n_studies": len(sources),  # trial-sources found for this cell + metric
+        "n_pooled": len(contrib) if metric in PROPORTION_METRICS else None,  # entered the pool
+        "refs": sorted({s["ref"] for s in ref_sources if s["ref"]}),
         "value_range": (min(values), max(values)) if values else None,
         "sources": sources,
     }
 
-    if metric in PROPORTION_METRICS:
-        contrib = [s for s in sources if s["responders"] is not None and s["n"]]
+    if contrib:
         k = sum(s["responders"] for s in contrib)
         n = sum(s["n"] for s in contrib)
-        result["n_studies"] = len(contrib)
         if n:
             lo, hi = _wilson_ci(k, n)
             result.update(

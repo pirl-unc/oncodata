@@ -67,12 +67,14 @@ def _plt():
     return _PLT
 
 
+@lru_cache(maxsize=1)
 def _family_by_code() -> dict[str, str]:
     """``{code -> coarse lineage group}`` — the ~8 cell-of-origin groups (Epithelial,
     Sarcoma, Heme, CNS, Melanoma, Germ cell, Neuroendocrine, Embryonal; ``other`` if
     unmapped) used for plot colouring, matching the pirlygenes lineage palette. This is
     a deliberate coarsening of the registry's fine ``family`` field via
-    :func:`cancer_lineage_group` so plots have a small, legible, collision-free legend."""
+    :func:`cancer_lineage_group` so plots have a small, legible, collision-free legend.
+    Cached (read-only); callers must not mutate the returned dict."""
     reg = cancer_type_registry()
     return {str(c): (cancer_lineage_group(str(c)) or "other") for c in reg["code"]}
 
@@ -117,30 +119,6 @@ def _save(fig, save):
     if save is not None:
         fig.savefig(save, dpi=150, bbox_inches="tight")
     return fig
-
-
-@lru_cache(maxsize=1)
-def _cohort_sample_counts() -> dict:
-    """``{cancer_code: n_samples}`` from the per-sample matrix registry — the
-    cohort size used to rank cohorts in the by-cohort figures."""
-    from . import source_matrices
-
-    reg = source_matrices.registry()
-    counts: dict[str, int] = {}
-    for code, n in zip(reg["cancer_code"].astype(str), reg["n_samples"]):
-        counts[code] = max(counts.get(code, 0), int(n))  # largest source if several
-    return counts
-
-
-def _top_cohorts_by_samples(codes, top_n):
-    """The ``top_n`` of ``codes`` by cohort sample count (largest first); all of them
-    if ``top_n`` is ``None`` or there are no more than ``top_n``. Ties / unknown counts
-    fall back to a stable code order so the selection is deterministic."""
-    codes = list(codes)
-    if top_n is None or len(codes) <= top_n:
-        return codes
-    counts = _cohort_sample_counts()
-    return sorted(codes, key=lambda c: (-counts.get(c, 0), c))[:top_n]
 
 
 # ---------- shared plot primitives (the centralized rendering layer) ----------

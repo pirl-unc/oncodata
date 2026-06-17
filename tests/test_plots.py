@@ -62,6 +62,36 @@ def test_cli_plot_coverage_stacked_needs_codes(capsys):
     assert cli.main(["plot", "cta-coverage-stacked", "--out", "x.png"]) == 1
 
 
+def test_cli_plot_threshold_tpm_is_opt_in(monkeypatch, tmp_path):
+    # Without --threshold-tpm the CLI must NOT inject a value, so the patient heatmap keeps
+    # its within-sample p95 default (it never silently reverts to a flat TPM cut); when the
+    # flag is given it is forwarded.
+    captured = {}
+
+    def fake(*, save, **kwargs):
+        captured.clear()
+        captured.update(kwargs)
+        open(save, "wb").close()
+
+    monkeypatch.setattr(plots, "cta_patient_count_heatmap", fake)
+    assert cli.main(["plot", "cta-patient-heatmap", "--out", str(tmp_path / "a.png")]) == 0
+    assert "threshold_tpm" not in captured  # -> p95 default preserved
+    assert (
+        cli.main(
+            [
+                "plot",
+                "cta-patient-heatmap",
+                "--out",
+                str(tmp_path / "b.png"),
+                "--threshold-tpm",
+                "25",
+            ]
+        )
+        == 0
+    )
+    assert captured["threshold_tpm"] == 25.0
+
+
 # ---- CTA expression heatmap (needs the expression bundle / percentile data) ----
 
 _HAS_PERCENTILES = bool(__import__("oncoref").available_percentile_cohorts())
@@ -445,17 +475,3 @@ def test_regenerate_plots_runner_references_real_functions():
     for family, name, fn_attr, kwargs in jobs:
         assert family and name and isinstance(kwargs, dict)
         assert callable(getattr(plots, fn_attr, None)), f"{fn_attr} is not a plots function"
-
-
-def test_top_cohorts_by_samples_caps_and_ranks():
-    from oncoref import plots
-
-    # top_n=None or fewer codes than the cap -> unchanged (order preserved)
-    assert plots._top_cohorts_by_samples(["A", "B"], None) == ["A", "B"]
-    assert plots._top_cohorts_by_samples(["A", "B"], 5) == ["A", "B"]
-    # caps to the largest cohorts by sample count, deterministically
-    counts = plots._cohort_sample_counts()
-    big = sorted(counts, key=lambda c: counts[c], reverse=True)[:50]
-    top = plots._top_cohorts_by_samples(big, 10)
-    assert len(top) == 10
-    assert top == sorted(big, key=lambda c: (-counts[c], c))[:10]
