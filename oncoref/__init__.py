@@ -141,12 +141,15 @@ from .hpa import (
     hpa_single_cell,
 )
 from .ici import (
+    PROPORTION_METRICS,
     REGIMEN_FALLBACK,
     REGIMEN_LABELS,
     cancer_ici_regimen,
     cancer_ici_response,
     cancer_ici_response_df,
+    cancer_ici_response_estimates_df,
     ici_regimens,
+    pooled_ici_response,
 )
 from .incidence import (
     burden_category,
@@ -216,6 +219,7 @@ __all__ = [
     "CANCER_TYPE_ALIASES",
     "CANCER_TYPE_NAMES",
     "OTHER_TECHNICAL_FRACTION",
+    "PROPORTION_METRICS",
     "REGIMEN_FALLBACK",
     "REGIMEN_LABELS",
     "RIBOSOMAL_PROTEIN_FRACTION",
@@ -248,6 +252,7 @@ __all__ = [
     "cancer_ici_regimen",
     "cancer_ici_response",
     "cancer_ici_response_df",
+    "cancer_ici_response_estimates_df",
     "cancer_lineage_group",
     "cancer_lineage_group_overrides",
     "cancer_lineage_groups",
@@ -352,6 +357,7 @@ __all__ = [
     "per_sample_expression",
     "percentile_rank",
     "pooled_cohort_stats",
+    "pooled_ici_response",
     "protein_family",
     "proteoform_aliases",
     "proteoform_cohort_mean_expression",

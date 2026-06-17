@@ -36,10 +36,16 @@ full per-regimen mapping.
 
 from __future__ import annotations
 
+import math
 from functools import lru_cache
 
 from .cancer_types import cancer_type_registry, resolve_cancer_type
 from .load_dataset import _register_derived_cache, get_data
+
+#: Response-proportion endpoints that can be responder-weighted-pooled (each needs a
+#: responder count and a denominator n). Time-to-event medians and landmark rates are
+#: deliberately excluded — see :func:`pooled_ici_response`.
+PROPORTION_METRICS: tuple[str, ...] = ("ORR", "CRR", "DCR", "PR")
 
 #: Regimen tags in preference order — the default fallback when no regimen is pinned:
 #: anti-PD-1 monotherapy first, then anti-PD-L1, then the anti-PD-1+anti-CTLA-4 doublet.
@@ -167,3 +173,153 @@ def cancer_ici_regimen(cancer_type):
     code = resolve_cancer_type(cancer_type)
     _, regimen = _resolve_with_fallback(code, _regimen_maps(), REGIMEN_FALLBACK)
     return regimen
+
+
+# --------------------------------------------------------------------------------------
+# Multi-endpoint estimates + pooling
+#
+# ``cancer-ici-response.csv`` carries ONE representative ORR anchor per (cancer, regimen).
+# ``cancer-ici-response-estimates.csv`` is the wider evidence base behind it: every
+# endpoint (ORR/CRR/DCR/DOR/PFS/OS + landmark rates) from every trial-source for that
+# cell, with CIs and n, produced by the reference audit. The pooling helper combines
+# those sources into a single responder-weighted estimate with a Wilson CI.
+# --------------------------------------------------------------------------------------
+
+
+def cancer_ici_response_estimates_df():
+    """The verified ``cancer-ici-response-estimates.csv`` long table: one row per
+    (``cancer_code``, ``regimen``, trial-source, ``metric``).
+
+    Generalizes the one-anchor-per-cell :func:`cancer_ici_response_df` to *all* extracted
+    endpoints — ORR, CRR, DCR, DOR, PFS, OS and landmark PFS/OS rates — each with
+    ``value``, ``unit`` (``percent`` / ``months`` / ``rate_percent``), 95% CI
+    (``ci_low`` / ``ci_high``), ``timepoint``, sample size (``metric_n`` / ``source_n``)
+    and ``responders``. ``role`` is ``"primary"`` (the cited representative setting) or
+    ``"alternate"`` (other trials / subgroups for the same cancer + regimen).
+    ``source_verified`` marks rows whose citation was confirmed against PubMed/Crossref
+    in the reference audit."""
+    return get_data("cancer-ici-response-estimates")
+
+
+def _truthy(v) -> bool:
+    return str(v).strip().lower() in ("true", "1", "yes")
+
+
+def _wilson_ci(k: float, n: float, z: float = 1.96):
+    """95% Wilson score interval (returned as percentages) for ``k`` responders of ``n``."""
+    if not n:
+        return (None, None)
+    p = k / n
+    denom = 1.0 + z * z / n
+    center = (p + z * z / (2 * n)) / denom
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denom
+    return (round(100 * (center - half), 1), round(100 * (center + half), 1))
+
+
+def pooled_ici_response(
+    cancer_type,
+    *,
+    regimen=None,
+    metric="ORR",
+    verified_only=True,
+    include_alternates=True,
+):
+    """Pool every audited estimate for one cancer + regimen + endpoint.
+
+    Returns a dict::
+
+        {cancer_code, regimen, metric, poolable, pooled_pct, ci_low, ci_high,
+         responders_total, n_total, n_studies, refs, value_range, sources}
+
+    For **proportion endpoints** (:data:`PROPORTION_METRICS` — ORR / CRR / DCR / PR) the
+    pool is *responder-weighted*: ``pooled_pct = 100 · Σresponders / Σn`` over the sources
+    that report both, with a 95% Wilson score CI. ``n_total`` and ``n_studies`` are the
+    summed sample size and the number of contributing trials; ``refs`` lists their
+    citations.
+
+    For **time-to-event endpoints** (median PFS/OS/DOR in months) and **landmark rates**,
+    medians/rates cannot be validly pooled without patient-level data — ``poolable`` is
+    ``False``, ``pooled_pct`` is ``None``, and only the per-trial ``sources`` and their
+    ``value_range`` are returned.
+
+    Setting heterogeneity is real (all-comer vs PD-L1/MSI-selected vs different lines).
+    By default the pool includes the cited primary setting *and* the ``alternate`` rows;
+    pass ``include_alternates=False`` to pool only the representative primary setting, or
+    inspect each source's ``setting`` in ``sources`` to judge comparability. The
+    per-source breakdown and ``value_range`` are always returned so heterogeneity (and
+    any overlapping subgroups) stays visible. ``verified_only`` (default) keeps only
+    audit-confirmed citations.
+    """
+    code = resolve_cancer_type(cancer_type)
+    metric = str(metric).upper()
+    df = cancer_ici_response_estimates_df()
+    sub = df[(df["cancer_code"] == code) & (df["metric"].astype(str).str.upper() == metric)]
+    if regimen is not None:
+        sub = sub[sub["regimen"] == regimen]
+    if verified_only:
+        sub = sub[sub["source_verified"].map(_truthy)]
+    if not include_alternates:
+        sub = sub[sub["role"] == "primary"]
+
+    def _num(v):
+        try:
+            f = float(v)
+            return None if math.isnan(f) else f
+        except (TypeError, ValueError):
+            return None
+
+    sources, seen = [], set()
+    for _, r in sub.iterrows():
+        ref = None if r.get("ref") is None else str(r.get("ref"))
+        dedupe = (ref, str(r.get("trial")), str(r.get("setting")), _num(r.get("value")))
+        if dedupe in seen:
+            continue
+        seen.add(dedupe)
+        sources.append(
+            {
+                "role": r.get("role"),
+                "drug": r.get("drug"),
+                "trial": r.get("trial"),
+                "ref": ref,
+                "setting": r.get("setting"),
+                "value": _num(r.get("value")),
+                "unit": r.get("unit"),
+                "ci_low": _num(r.get("ci_low")),
+                "ci_high": _num(r.get("ci_high")),
+                "n": _num(r.get("metric_n")),
+                "responders": _num(r.get("responders")),
+            }
+        )
+
+    values = [s["value"] for s in sources if s["value"] is not None]
+    result = {
+        "cancer_code": code,
+        "regimen": regimen,
+        "metric": metric,
+        "poolable": metric in PROPORTION_METRICS,
+        "pooled_pct": None,
+        "ci_low": None,
+        "ci_high": None,
+        "responders_total": None,
+        "n_total": None,
+        "n_studies": len(sources),
+        "refs": sorted({s["ref"] for s in sources if s["ref"]}),
+        "value_range": (min(values), max(values)) if values else None,
+        "sources": sources,
+    }
+
+    if metric in PROPORTION_METRICS:
+        contrib = [s for s in sources if s["responders"] is not None and s["n"]]
+        k = sum(s["responders"] for s in contrib)
+        n = sum(s["n"] for s in contrib)
+        result["n_studies"] = len(contrib)
+        if n:
+            lo, hi = _wilson_ci(k, n)
+            result.update(
+                pooled_pct=round(100 * k / n, 1),
+                ci_low=lo,
+                ci_high=hi,
+                responders_total=int(k),
+                n_total=int(n),
+            )
+    return result
