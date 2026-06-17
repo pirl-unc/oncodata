@@ -6,8 +6,8 @@
 
 import pytest
 
-import oncodata as cd
-from oncodata import cancer_types
+import oncoref as cd
+from oncoref import cancer_types
 
 
 def test_resolve_common_name_alias():

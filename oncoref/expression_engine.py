@@ -13,13 +13,13 @@
 """Transcript→gene expression aggregation (the pandas-only grouping core).
 
 Sums transcript-level TPM to gene level given a transcript→gene mapping. This is
-the part of the operation that is oncodata's domain — the deterministic grouping
+the part of the operation that is oncoref's domain — the deterministic grouping
 and TPM summation — independent of which transcript reference produced the quant.
 
 **Dependency boundary.** Resolving an *arbitrary, unknown* transcript ID to a gene
 (and a gene symbol to its Ensembl ID) is a reference-genome operation that needs
-``pyensembl`` — out of oncodata's pandas-only base layer. So this function maps
-transcripts via the supplied ``tx_to_gene_name`` dict (default: oncodata's curated
+``pyensembl`` — out of oncoref's pandas-only base layer. So this function maps
+transcripts via the supplied ``tx_to_gene_name`` dict (default: oncoref's curated
 ``extra-tx-mappings`` back-compat set) and reports the unresolved TPM fraction;
 transcripts not in the map are summed into an ``unresolved`` bucket rather than
 silently dropped. A consumer that needs full Ensembl-reference resolution passes a
@@ -32,7 +32,7 @@ from functools import lru_cache
 
 import pandas as pd
 
-#: Canonical identity columns of a oncodata expression frame. Everything else is a
+#: Canonical identity columns of a oncoref expression frame. Everything else is a
 #: per-sample / per-representative value column. One definition shared by every
 #: "value columns = all columns except the id columns" consumer (the build
 #: generators, the normalization helpers, the coverage hit-matrix) so a
@@ -101,7 +101,7 @@ def expanded_tx_map(tx_to_gene_name: dict) -> dict:
 
 @lru_cache(maxsize=1)
 def _default_tx_to_gene() -> dict:
-    """oncodata's curated ``extra-tx-mappings`` (transcript_id → gene_symbol) —
+    """oncoref's curated ``extra-tx-mappings`` (transcript_id → gene_symbol) —
     the back-compat known set; not a full Ensembl reference."""
     from .gene_ids import extra_transcript_mappings
 

@@ -12,11 +12,11 @@
 
 """Tissue definitions and HPA confidence thresholds for CTA restriction analysis.
 
-Ported (HPA-only) from ``tsarina.tissues`` so oncodata can regenerate the
+Ported (HPA-only) from ``tsarina.tissues`` so oncoref can regenerate the
 bundled ``cancer-testis-antigens.csv`` restriction/filter columns from HPA data
 alone. The MS-related constants and the CTA-universe membership rules (the
 gene-family exclusion and the never-expressed rescue) are intentionally NOT
-here — they live in :mod:`oncodata.cta`.
+here — they live in :mod:`oncoref.cta`.
 
 Three tiers of reproductive tissue sets determine how strictly a gene's
 expression must be confined to qualify as a cancer-testis antigen:

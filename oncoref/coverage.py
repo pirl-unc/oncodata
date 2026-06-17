@@ -24,9 +24,9 @@ prevalence:
   - :func:`greedy_coverage` — a minimal antigen panel by greedy set cover: at each
     step add the gene covering the most still-uncovered patients.
 
-All operate on :func:`oncodata.expression.per_sample_expression` (clean TPM), so
-they need the cohort's per-sample matrix fetched (see :mod:`oncodata.source_matrices`).
-The default gene panel is the expressed CTA set (:func:`oncodata.cta.cta_gene_ids`).
+All operate on :func:`oncoref.expression.per_sample_expression` (clean TPM), so
+they need the cohort's per-sample matrix fetched (see :mod:`oncoref.source_matrices`).
+The default gene panel is the expressed CTA set (:func:`oncoref.cta.cta_gene_ids`).
 """
 
 from __future__ import annotations

@@ -4,7 +4,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-from oncodata import cta
+from oncoref import cta
 
 
 def test_set_sizes_reasonable():
@@ -61,8 +61,8 @@ def test_no_histone_or_tubulin_survives_in_cta_universe():
     # The exclusion is a gene-family rule, not a hand-list: EVERY core histone
     # and alpha-tubulin candidate is dropped, so a sibling can't be left in (the
     # H1-6-vs-H2BC1 inconsistency the family rule fixed). Guards future drift.
-    from oncodata.gene_families import gene_family_ids
-    from oncodata.load_dataset import get_data
+    from oncoref.gene_families import gene_family_ids
+    from oncoref.load_dataset import get_data
 
     raw = get_data("cancer-testis-antigens")
     uid = raw["Ensembl_Gene_ID"].astype(str).str.split(".").str[0]
@@ -83,7 +83,7 @@ def test_cgb8_not_deny_listed():
 
 
 def test_evidence_has_no_ms_columns():
-    # MS-runtime columns stay in the target-selection layer, not oncodata.
+    # MS-runtime columns stay in the target-selection layer, not oncoref.
     cols = set(cta.cta_evidence().columns)
     assert not any(c.startswith("ms_") for c in cols)
     # but the HPA-derived restriction columns are present

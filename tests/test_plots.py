@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("matplotlib")
 
-from oncodata import cli, plots
+from oncoref import cli, plots
 
 
 def test_apd1_vs_tmb_renders(tmp_path):
@@ -54,7 +54,7 @@ def test_cli_plot_coverage_stacked_needs_codes(capsys):
 
 # ---- CTA expression heatmap (needs the expression bundle / percentile data) ----
 
-_HAS_PERCENTILES = bool(__import__("oncodata").available_percentile_cohorts())
+_HAS_PERCENTILES = bool(__import__("oncoref").available_percentile_cohorts())
 _needs_bundle = pytest.mark.skipif(
     not _HAS_PERCENTILES, reason="expression bundle (percentile artifacts) not present"
 )
@@ -63,7 +63,7 @@ _needs_bundle = pytest.mark.skipif(
 @_needs_bundle
 def test_cta_expression_heatmap_renders(tmp_path):
     out = tmp_path / "cta.png"
-    cohorts = __import__("oncodata").available_percentile_cohorts()[:6]
+    cohorts = __import__("oncoref").available_percentile_cohorts()[:6]
     fig = plots.cta_expression_heatmap(cohorts=cohorts, n_cohorts=4, n_ctas=8, save=str(out))
     assert out.exists() and out.stat().st_size > 0
     assert fig is not None
@@ -79,8 +79,8 @@ def test_cta_expression_heatmap_proteoform_reads_collapsed_vectors(tmp_path, mon
     # columns by the proteoform symbol (NY-ESO-1). Stub the per-cohort vector.
     import pandas as pd
 
-    from oncodata import cta
-    from oncodata.proteoforms import gene_to_proteoform_id
+    from oncoref import cta
+    from oncoref.proteoforms import gene_to_proteoform_id
 
     # Use two real CTAs and their real proteoform keys, so the heatmap's CTA-key filter
     # (derived from the same CTA set) keeps both rows. At least one is a collapsed group.
@@ -162,7 +162,7 @@ def test_cta_addressable_burden_no_mapped_cohorts(monkeypatch):
 
 
 def test_cta_specific_9mer_load_renders(tmp_path, monkeypatch):
-    from oncodata import peptides
+    from oncoref import peptides
 
     monkeypatch.setattr(plots, "_cached_per_sample_cohorts", lambda: ["LUAD", "SKCM", "MM"])
     monkeypatch.setattr(plots, "cancer_tmb", lambda: {"LUAD": 6.9, "SKCM": 13.0, "MM": 1.5})
@@ -192,7 +192,7 @@ def test_cta_specific_9mer_load_no_data(monkeypatch):
 
 def test_cta_addressable_burden_per_sample_source(tmp_path, monkeypatch):
     # source="per_sample" pulls the faithful union from coverage; stub it hermetically.
-    from oncodata import coverage
+    from oncoref import coverage
 
     monkeypatch.setattr(
         coverage,
@@ -213,7 +213,7 @@ def test_cta_addressable_burden_bad_source():
 def test_cta_patient_count_heatmap_renders(tmp_path, monkeypatch):
     import pandas as pd
 
-    from oncodata import coverage
+    from oncoref import coverage
 
     def fake_fractions(code, *, threshold_tpm):
         # two cohorts, three CTAs with different per-patient prevalences
@@ -248,7 +248,7 @@ def test_cta_patient_count_heatmap_duplicate_symbols(tmp_path, monkeypatch):
     # cohort×CTA frame alignment — keying is on the unique proteoform_key.
     import pandas as pd
 
-    from oncodata import coverage
+    from oncoref import coverage
 
     def fake_fractions(code, *, threshold_tpm):
         return pd.DataFrame(
@@ -272,7 +272,7 @@ def test_cta_patient_count_heatmap_duplicate_symbols(tmp_path, monkeypatch):
 def test_cta_coverage_curves_renders(tmp_path, monkeypatch):
     import pandas as pd
 
-    from oncodata import coverage
+    from oncoref import coverage
 
     def fake_greedy(code, *, threshold_tpm, max_genes):
         return pd.DataFrame(
@@ -297,7 +297,7 @@ def test_cta_coverage_curves_renders(tmp_path, monkeypatch):
 def test_cta_coverage_curves_empty_raises(monkeypatch):
     import pandas as pd
 
-    from oncodata import coverage
+    from oncoref import coverage
 
     monkeypatch.setattr(coverage, "greedy_coverage", lambda *a, **k: pd.DataFrame())
     with pytest.raises(ValueError, match="no coverage curve"):
@@ -316,7 +316,7 @@ def test_antigen_family_grouping():
 def test_cta_coverage_stacked_bars_renders(tmp_path, monkeypatch):
     import pandas as pd
 
-    from oncodata import coverage
+    from oncoref import coverage
 
     def fake_greedy(code, *, threshold_tpm, max_genes):
         return pd.DataFrame(
@@ -341,7 +341,7 @@ def test_cta_coverage_stacked_bars_renders(tmp_path, monkeypatch):
 def test_cta_coverage_stacked_bars_empty_raises(monkeypatch):
     import pandas as pd
 
-    from oncodata import coverage
+    from oncoref import coverage
 
     monkeypatch.setattr(coverage, "greedy_coverage", lambda *a, **k: pd.DataFrame())
     with pytest.raises(ValueError, match="no coverage to plot"):
@@ -361,7 +361,7 @@ def test_burden_category_bars_bad_region():
 
 
 def test_cta_burden_vs_response_renders(tmp_path, monkeypatch):
-    from oncodata import coverage
+    from oncoref import coverage
 
     monkeypatch.setattr(plots, "_cached_per_sample_cohorts", lambda: ["LUAD", "SKCM", "MM"])
     monkeypatch.setattr(
@@ -389,7 +389,7 @@ def test_cta_burden_vs_response_no_data(monkeypatch):
 
 
 def test_apd1_response_signature_scatter_renders(tmp_path, monkeypatch):
-    from oncodata import response_signatures as rs
+    from oncoref import response_signatures as rs
 
     monkeypatch.setattr(plots, "_cached_per_sample_cohorts", lambda: ["LUAD", "SKCM", "MM"])
     monkeypatch.setattr(
@@ -416,12 +416,12 @@ def test_apd1_response_signature_bad_name():
 
 def test_regenerate_plots_runner_references_real_functions():
     # Guard: every (family, name, fn_attr, kwargs) job in the batch runner must
-    # name a real callable on oncodata.plots — catches typos like a removed or
+    # name a real callable on oncoref.plots — catches typos like a removed or
     # renamed figure before a full run does.
     import importlib.util
     from pathlib import Path
 
-    from oncodata import plots
+    from oncoref import plots
 
     runner = Path(__file__).resolve().parent.parent / "scripts" / "regenerate_plots.py"
     spec = importlib.util.spec_from_file_location("_regen_plots", runner)
@@ -436,7 +436,7 @@ def test_regenerate_plots_runner_references_real_functions():
 
 
 def test_top_cohorts_by_samples_caps_and_ranks():
-    from oncodata import plots
+    from oncoref import plots
 
     # top_n=None or fewer codes than the cap -> unchanged (order preserved)
     assert plots._top_cohorts_by_samples(["A", "B"], None) == ["A", "B"]

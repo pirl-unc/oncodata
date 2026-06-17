@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from oncodata import reference_data
+from oncoref import reference_data
 
 
 def _seed_cache(name, content: bytes, version="v23"):

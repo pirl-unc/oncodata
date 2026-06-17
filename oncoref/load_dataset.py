@@ -15,13 +15,13 @@
 Two data roots are checked in order:
 
   1. ``_BUNDLED_DATA_DIR`` — files shipped in the wheel (the small curated
-     tables) AND files present in a git checkout's ``oncodata/data/``.
-  2. the cache populated by :mod:`oncodata.data_bundle` (the large per-cohort
+     tables) AND files present in a git checkout's ``oncoref/data/``.
+  2. the cache populated by :mod:`oncoref.data_bundle` (the large per-cohort
      expression summaries fetched from the GitHub Release).
 
 Any file present in (1) wins over (2). When a callable requests one of the
-:data:`oncodata.data_bundle.DOWNLOADABLE_PATHS` items and it's missing from
-both, :func:`oncodata.data_bundle.ensure_local` triggers a one-time download.
+:data:`oncoref.data_bundle.DOWNLOADABLE_PATHS` items and it's missing from
+both, :func:`oncoref.data_bundle.ensure_local` triggers a one-time download.
 """
 
 from __future__ import annotations
@@ -123,7 +123,7 @@ def _load_shard_directory(shard_dir: Path) -> pd.DataFrame:
     """Concatenate every ``*.csv[.gz]`` shard in a sharded dataset directory.
 
     Keeps a best-effort parquet cache of the concatenated frame in
-    ``~/.cache/oncodata/shard_cache/``, keyed on a signature of the shard
+    ``~/.cache/oncoref/shard_cache/``, keyed on a signature of the shard
     files (count + total size + newest mtime), auto-invalidating on change.
     """
     paths = _shard_paths(shard_dir)
@@ -132,7 +132,7 @@ def _load_shard_directory(shard_dir: Path) -> pd.DataFrame:
     sig = repr(
         (len(paths), sum(p.stat().st_size for p in paths), max(p.stat().st_mtime_ns for p in paths))
     )
-    cache_dir = Path.home() / ".cache" / "oncodata" / "shard_cache"
+    cache_dir = Path.home() / ".cache" / "oncoref" / "shard_cache"
     cache_file = cache_dir / f"{shard_dir.name}.parquet"
     sig_file = cache_dir / f"{shard_dir.name}.sig"
     try:
@@ -143,7 +143,7 @@ def _load_shard_directory(shard_dir: Path) -> pd.DataFrame:
         # every run) and surface a warning, then rebuild from the authoritative
         # CSVs below.
         warnings.warn(
-            f"oncodata: rebuilding unreadable shard cache {cache_file.name}: {e}",
+            f"oncoref: rebuilding unreadable shard cache {cache_file.name}: {e}",
             stacklevel=2,
         )
         for stale in (cache_file, sig_file):
@@ -158,7 +158,7 @@ def _load_shard_directory(shard_dir: Path) -> pd.DataFrame:
         # Caching is best-effort — a write failure (disk full, read-only FS)
         # must never fail the load, but make it visible.
         warnings.warn(
-            f"oncodata: could not write shard cache {cache_file.name}: {e}",
+            f"oncoref: could not write shard cache {cache_file.name}: {e}",
             stacklevel=2,
         )
     return df

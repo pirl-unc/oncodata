@@ -6,7 +6,7 @@
 
 """Cross-cutting subtype groupings: MSI/POLE/HPV reverse queries (#27, O2)."""
 
-from oncodata import (
+from oncoref import (
     cancer_subtype_group,
     cancer_subtype_groupings,
     cancer_type_registry,

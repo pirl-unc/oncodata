@@ -1,16 +1,16 @@
-# oncodata
+# oncoref
 
-[![Tests](https://github.com/pirl-unc/oncodata/actions/workflows/tests.yml/badge.svg)](https://github.com/pirl-unc/oncodata/actions/workflows/tests.yml)
-[![PyPI](https://img.shields.io/pypi/v/oncodata.svg)](https://pypi.org/project/oncodata/)
+[![Tests](https://github.com/pirl-unc/oncoref/actions/workflows/tests.yml/badge.svg)](https://github.com/pirl-unc/oncoref/actions/workflows/tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/oncoref.svg)](https://pypi.org/project/oncoref/)
 
 Curated cancer reference data — cancer-type ontology, tumor mutational burden
 (TMB), incidence/mortality, checkpoint-inhibitor (ICI) response, per-cohort RNA-seq expression,
 and cancer-testis antigens — behind one small Python API, a data fetch/cache
 CLI, and a set of reference plots.
 
-## oncodata is the base layer
+## oncoref is the base layer
 
-`oncodata` is **designed as the base layer** of the openvax/PIRL stack — the
+`oncoref` is **designed as the base layer** of the openvax/PIRL stack — the
 intended single upstream **source of truth** for cancer reference data, meant to
 become a shared dependency of
 [pirlygenes](https://github.com/pirl-unc/pirlygenes),
@@ -34,24 +34,24 @@ Anything that needs to know about
   groupings; and
 - **checkpoint-inhibitor response rates** and **TMB** per cancer type
 
-depends on `oncodata` — including `pirlygenes` (gene-set curation/analysis),
+depends on `oncoref` — including `pirlygenes` (gene-set curation/analysis),
 `tsarina` (personalized target selection), `hitlist` (panel selection),
 `trufflepig` (sample classification), and anything else downstream.
 
 Everything keys on the cancer-type registry. The small curated tables ship in the
 wheel; the heavy per-cohort expression bundle downloads on first use from
-oncodata's own GitHub Release.
+oncoref's own GitHub Release.
 
 ## Install
 
 ```bash
-pip install oncodata
+pip install oncoref
 ```
 
 ## Python API
 
 ```python
-import oncodata as od
+import oncoref as od
 
 od.resolve_cancer_type("prostate")        # -> "PRAD"
 od.cancer_type_info("SARC_RMS_ARMS")      # full registry record + burden + tmb
@@ -87,7 +87,7 @@ od.within_sample_top_fraction("PRAD")     # per-gene frac of samples top-5% (wit
 - **HPA normal tissue** — `hpa_rna_consensus`, `hpa_normal_tissue` (IHC),
   `hpa_single_cell`, and per-gene lookups (`gene_tissue_ntpm`,
   `gene_protein_tissues`, `gene_cell_type_ntpm`) over HPA v23, fetched on demand
-  (`oncodata hpa fetch`).
+  (`oncoref hpa fetch`).
 - **Genome reference** — `canonical_gene_id_and_name`, `find_gene_id_by_name`,
   `find_gene_name_from_ensembl_{gene,transcript}_id`, `aggregate_gene_expression`
   (pyensembl-backed symbol ↔ Ensembl-ID resolution). pyensembl ships with the
@@ -97,26 +97,26 @@ od.within_sample_top_fraction("PRAD")     # per-gene frac of samples top-5% (wit
 - **Peptides** — `cta_specific_9mer_counts`, `cta_specific_9mer_load` (per-cohort
   mean per-patient CTA-specific 9-mer load): 9-mers found in a CTA protein but in no
   non-CTA protein, enumerated from the reference proteome and cached per release.
-- **Plots** (`pip install oncodata[plots]`) — `oncodata.plots.apd1_vs_tmb`,
+- **Plots** (`pip install oncoref[plots]`) — `oncoref.plots.apd1_vs_tmb`,
   `apd1_orr_bars`, `incidence_vs_mortality`, and the CTA/coverage figures.
 
 ## CLI
 
 ```bash
-oncodata cancer-type prostate     # registry info as JSON
-oncodata tmb LUAD_EGFR            # 6.9
-oncodata ici SKCM                # 42  (--regimen to pin, --all-regimens to compare)
-oncodata burden pancreas --metric us_mortality_pct
-oncodata cta --count             # number of expressed CTAs
-oncodata plot apd1-vs-tmb --out apd1_vs_tmb.png
+oncoref cancer-type prostate     # registry info as JSON
+oncoref tmb LUAD_EGFR            # 6.9
+oncoref ici SKCM                # 42  (--regimen to pin, --all-regimens to compare)
+oncoref burden pancreas --metric us_mortality_pct
+oncoref cta --count             # number of expressed CTAs
+oncoref plot apd1-vs-tmb --out apd1_vs_tmb.png
 
 # expression-bundle cache (per-cohort expression):
-oncodata cache fetch             # download the ~340 MB bundle
-oncodata cache status            # which bundle paths are cached (no download)
-oncodata cache dir               # where the data bundle is cached
-oncodata cache prune --yes       # delete stale version caches
-oncodata hpa fetch               # download HPA reference data (RNA / IHC / single-cell)
-oncodata version
+oncoref cache fetch             # download the ~340 MB bundle
+oncoref cache status            # which bundle paths are cached (no download)
+oncoref cache dir               # where the data bundle is cached
+oncoref cache prune --yes       # delete stale version caches
+oncoref hpa fetch               # download HPA reference data (RNA / IHC / single-cell)
+oncoref version
 ```
 
 ## Development

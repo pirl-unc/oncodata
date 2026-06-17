@@ -8,7 +8,7 @@
 
 import pytest
 
-from oncodata import genome as gx
+from oncoref import genome as gx
 
 
 class _Tx:

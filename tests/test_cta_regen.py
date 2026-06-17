@@ -12,9 +12,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from oncodata import cta_regen, reference_data
+from oncoref import cta_regen, reference_data
 
-_CSV = Path(__file__).resolve().parents[1] / "oncodata" / "data" / "cancer-testis-antigens.csv"
+_CSV = Path(__file__).resolve().parents[1] / "oncoref" / "data" / "cancer-testis-antigens.csv"
 
 _HPA_READY = reference_data.is_cached("hpa_rna_consensus") and reference_data.is_cached(
     "hpa_normal_tissue"
@@ -35,7 +35,7 @@ def test_fraction_deflation_semantics():
 @pytest.mark.skipif(not _HPA_READY, reason="HPA v23 not cached")
 def test_regeneration_reproduces_shipped_table():
     # Regenerating the 47 HPA columns from HPA v23 must reproduce the shipped,
-    # oncodata-owned table exactly — proof the regenerator is the source of truth.
+    # oncoref-owned table exactly — proof the regenerator is the source of truth.
     regen = cta_regen.regenerate_cta_columns(pd.read_csv(_CSV))
     buf = io.StringIO()
     regen.to_csv(buf, index=False)

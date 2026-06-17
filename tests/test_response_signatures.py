@@ -7,7 +7,7 @@
 import pandas as pd
 import pytest
 
-from oncodata import response_signatures as rs
+from oncoref import response_signatures as rs
 
 
 def test_signature_catalog():
@@ -25,7 +25,7 @@ def test_unknown_signature_raises():
 
 def test_signature_score(monkeypatch):
     # Stub cohort_mean_expression so the score is hermetic.
-    import oncodata.expression as ex
+    import oncoref.expression as ex
 
     fixture = pd.DataFrame(
         {
@@ -41,7 +41,7 @@ def test_signature_score(monkeypatch):
 
 
 def test_signature_score_nan_when_no_genes(monkeypatch):
-    import oncodata.expression as ex
+    import oncoref.expression as ex
 
     empty = pd.DataFrame({"Ensembl_Gene_ID": [], "Symbol": [], "expression": []})
     monkeypatch.setattr(ex, "cohort_mean_expression", lambda *a, **k: empty)

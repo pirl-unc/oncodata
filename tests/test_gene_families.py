@@ -8,7 +8,7 @@
 
 import pytest
 
-from oncodata import gene_families as gf
+from oncoref import gene_families as gf
 
 
 def test_families_load_with_ids():

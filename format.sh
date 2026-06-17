@@ -1,3 +1,3 @@
 #!/bin/bash
-ruff format oncodata tests
+ruff format oncoref tests
 echo "Formatting complete!"

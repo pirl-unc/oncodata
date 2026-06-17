@@ -7,7 +7,7 @@
 import pandas as pd
 import pytest
 
-from oncodata import genome as gx
+from oncoref import genome as gx
 
 # pyensembl is a core dependency, but resolution still needs a downloaded human
 # Ensembl release; skip when none is installed.

@@ -4,9 +4,9 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-"""Integrity guards for the oncodata-owned cancer-type registry.
+"""Integrity guards for the oncoref-owned cancer-type registry.
 
-oncodata owns the cancer-type ontology outright — the registry is authoritative
+oncoref owns the cancer-type ontology outright — the registry is authoritative
 here, not mirrored from anywhere. These guards pin the schema and the structural
 invariants the navigation/grouping/fusion accessors rely on.
 """
@@ -15,9 +15,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from oncodata import cancer_type_registry, cancer_type_subtypes_of
+from oncoref import cancer_type_registry, cancer_type_subtypes_of
 
-_CSV = Path(__file__).resolve().parents[1] / "oncodata" / "data" / "cancer-type-registry.csv"
+_CSV = Path(__file__).resolve().parents[1] / "oncoref" / "data" / "cancer-type-registry.csv"
 
 # The registry schema (shipped column order).
 REGISTRY_COLUMNS = [

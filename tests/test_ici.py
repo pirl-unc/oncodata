@@ -4,7 +4,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-from oncodata import ici
+from oncoref import ici
 
 
 def test_regimens_and_table():

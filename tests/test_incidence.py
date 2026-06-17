@@ -7,8 +7,8 @@
 import pandas as pd
 import pytest
 
-from oncodata import incidence
-from oncodata import load_dataset as ld
+from oncoref import incidence
+from oncoref import load_dataset as ld
 
 
 def test_derived_burden_cache_invalidates_on_clear(monkeypatch):
@@ -77,7 +77,7 @@ def test_every_registry_code_resolves_to_a_burden_category():
     # Drift guard: the primary_tissue/family -> burden maps in incidence.py must
     # cover the registry's vocabulary. A new registry primary_tissue/family that
     # nothing maps would silently yield None here.
-    from oncodata.cancer_types import cancer_type_registry
+    from oncoref.cancer_types import cancer_type_registry
 
     registry = cancer_type_registry()
     unmapped = [
@@ -90,7 +90,7 @@ def test_family_burden_map_has_no_stale_families():
     # Drift guard for the data-driven family fallback: every family key must be a
     # current registry family. (This caught the stale 'cns' slug left after the
     # registry split cns -> cns-glial/-embryonal/... .)
-    from oncodata.cancer_types import cancer_type_registry
+    from oncoref.cancer_types import cancer_type_registry
 
     registry_families = set(cancer_type_registry()["family"].dropna().astype(str))
     stale = [f for f in incidence._family_burden_map() if f not in registry_families]

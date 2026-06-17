@@ -22,7 +22,7 @@ sample's gene as a percentile rank within the cohort instead of an absolute TPM.
 It is computed from the full per-sample matrices, which are never shipped (see
 ``source_matrices`` for the per-cohort fetch). Pass ``--drop-genes`` with the
 clean-TPM censored-gene list so the breakpoints describe the biological view the
-reader expects (``oncodata.gene_families.clean_tpm_censored_gene_ids``).
+reader expects (``oncoref.gene_families.clean_tpm_censored_gene_ids``).
 
 Input
 -----
@@ -32,7 +32,7 @@ and one column per sample (clean TPM).
 
 Output
 ------
-``oncodata/data/cancer-reference-expression-percentiles/<CODE>.parquet`` with
+``oncoref/data/cancer-reference-expression-percentiles/<CODE>.parquet`` with
 ``Ensembl_Gene_ID, Symbol`` and 26 ``p{n}`` columns, stored log1p + float16 — the
 exact encoding ``expression.cohort_gene_percentiles`` restores with ``expm1``.
 
@@ -54,11 +54,11 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from oncodata.expression import SHARD_DATASETS
-from oncodata.expression_builders import cohort_percentile_vectors, sample_columns
+from oncoref.expression import SHARD_DATASETS
+from oncoref.expression_builders import cohort_percentile_vectors, sample_columns
 
 _DATASET = SHARD_DATASETS["percentiles"]  # the reader's record — derive dirs from it so
-_DATA_DIR = Path(__file__).resolve().parents[1] / "oncodata" / "data"  # producer/reader can't drift
+_DATA_DIR = Path(__file__).resolve().parents[1] / "oncoref" / "data"  # producer/reader can't drift
 OUT_DIR = _DATA_DIR / _DATASET.gene_dir
 
 
@@ -87,7 +87,7 @@ def build(
     proteoform key space (identical-protein members summed, in ``scope``) *before* the
     percentiles are computed, so the vector is one row per proteoform key. Output lands
     in the scope-specific ``…-percentiles-proteoform-<scope>`` directory the reader
-    expects (see :meth:`oncodata.expression.ShardDataset.subdir`).
+    expects (see :meth:`oncoref.expression.ShardDataset.subdir`).
     """
     if out_dir is None:
         out_dir = _proteoform_out_dir(scope) if proteoform else OUT_DIR
@@ -108,7 +108,7 @@ def build(
         if proteoform:
             # Collapse identical-protein members per sample first, then rank on the
             # reduced proteoform key space (one reusable collapse + proteoform_key).
-            from oncodata.proteoforms import collapse_to_proteoforms
+            from oncoref.proteoforms import collapse_to_proteoforms
 
             df = collapse_to_proteoforms(df, scope=scope, sample_cols=cols)
             cols = sample_columns(df)

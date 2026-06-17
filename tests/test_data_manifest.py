@@ -8,9 +8,9 @@
 
 from pathlib import Path
 
-from oncodata import data_bundle, data_manifest, reference_data
+from oncoref import data_bundle, data_manifest, reference_data
 
-_DATA_DIR = Path(__file__).resolve().parents[1] / "oncodata" / "data"
+_DATA_DIR = Path(__file__).resolve().parents[1] / "oncoref" / "data"
 
 _BUCKETS = {
     "WHEEL": set(data_manifest.WHEEL),
@@ -69,19 +69,19 @@ def test_hpa_matches_reference_sources():
     assert set(data_manifest.HPA) == set(reference_data.REFERENCE_SOURCES)
 
 
-def test_oncodata_originated_tables_ship():
-    # The wheel tables oncodata generates itself (CTA, proteoform groups, the
+def test_oncoref_originated_tables_ship():
+    # The wheel tables oncoref generates itself (CTA, proteoform groups, the
     # source-matrix registry) must actually be present and appear in the inventory.
-    from oncodata import catalog
+    from oncoref import catalog
 
     missing = [n for n in data_manifest.CANCERDATA_ORIGINATED if not _wheel_file_exists(n)]
-    assert not missing, f"oncodata-originated tables not shipped: {missing}"
+    assert not missing, f"oncoref-originated tables not shipped: {missing}"
     inv = {r["name"] for r in catalog.inventory()}
     assert set(data_manifest.CANCERDATA_ORIGINATED) <= inv
 
 
 def test_originated_not_in_pirlygenes_classification():
-    # oncodata-originated tables are NOT pirlygenes files, so must not collide
+    # oncoref-originated tables are NOT pirlygenes files, so must not collide
     # with the pirlygenes-derived buckets.
     classified = (
         set(data_manifest.WHEEL) | set(data_manifest.PLANNED) | set(data_manifest.OUT_OF_SCOPE)

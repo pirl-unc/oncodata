@@ -15,13 +15,13 @@
 Answers *which gene-level features are usable* for downstream rescaling: which
 rows are technical RNA (mitochondrial / rRNA-like / NUMT-like / the polyA-bias
 nuclear-retained lncRNAs) that consume a large, pipeline-variable fraction of TPM
-and distort absolute expression. The companion :func:`oncodata.normalization`
+and distort absolute expression. The companion :func:`oncoref.normalization`
 helpers consume the classification to censor those rows.
 
-The classifier is ENSG-first (against oncodata's curated gene-family panels,
+The classifier is ENSG-first (against oncoref's curated gene-family panels,
 stable across symbol renames) then symbol-regex (the self-contained source of
 truth). Ported from ``pirlygenes.expression.qc`` with the family lookup rebound to
-oncodata's :mod:`oncodata.gene_families` panels — pandas/numpy only, no
+oncoref's :mod:`oncoref.gene_families` panels — pandas/numpy only, no
 pyensembl.
 """
 
@@ -58,8 +58,8 @@ TECHNICAL_RNA_GROUPS = frozenset(
 #: Back-compat private alias (prefer :data:`TECHNICAL_RNA_GROUPS`).
 _TECHNICAL_RNA_GROUPS = TECHNICAL_RNA_GROUPS
 
-#: oncodata gene-family name -> (qc_label, qc_group). The family naming is
-#: biological; the QC grouping is the downstream drop-by-default view. (oncodata
+#: oncoref gene-family name -> (qc_label, qc_group). The family naming is
+#: biological; the QC grouping is the downstream drop-by-default view. (oncoref
 #: has no immune-receptor panel — the symbol regex covers IG/TR segments.)
 _FAMILY_TO_QC = {
     "mitochondrial": ("mitochondrial transcript", "mt_dna"),
@@ -82,7 +82,7 @@ _FAMILY_TO_QC = {
 
 @lru_cache(maxsize=1)
 def _ensembl_id_to_family() -> dict[str, str]:
-    """``{unversioned ENSG -> oncodata gene-family name}`` over the QC families.
+    """``{unversioned ENSG -> oncoref gene-family name}`` over the QC families.
     ENSG-first lookup is stable across HGNC symbol renames / version drift."""
     from . import gene_families
 
@@ -95,7 +95,7 @@ def _ensembl_id_to_family() -> dict[str, str]:
 
 
 def _family_to_qc_class(family: str, symbol: str | None = None) -> GeneQcClass:
-    """Map a oncodata gene-family name to its QC class, refining the label with a
+    """Map a oncoref gene-family name to its QC class, refining the label with a
     symbol-specific sub-classifier when a symbol is given (the QC *group* always
     comes from the family; refinement only affects the human-readable label)."""
     label, group = _FAMILY_TO_QC.get(family, ("protein-coding/other", "other"))
@@ -150,7 +150,7 @@ def _refine_family_label(family: str, upper: str) -> str | None:
 def classify_gene_qc(symbol: str | None = None, *, ensembl_id: str | None = None) -> GeneQcClass:
     """Coarse QC class for a gene by symbol and/or Ensembl ID.
 
-    Lookup order: (1) ENSG against oncodata's curated gene-family panels
+    Lookup order: (1) ENSG against oncoref's curated gene-family panels
     (stable across symbol renames), (2) the symbol regex below (the source of
     truth for the family CSVs). Returns a :class:`GeneQcClass` whose ``group`` is
     one of ``mt_dna``, ``mt_like_pseudogene``, ``rrna_like``, ``ribosomal_protein``,

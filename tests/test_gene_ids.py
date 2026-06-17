@@ -6,7 +6,7 @@
 
 """Gene-id / symbol resolution references (#35, R-resolve)."""
 
-from oncodata import gene_ids as g
+from oncoref import gene_ids as g
 
 
 def test_unversioned_normalizer():

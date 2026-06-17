@@ -10,28 +10,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The complete, classified inventory of oncodata-domain data.
+"""The complete, classified inventory of oncoref-domain data.
 
-This is the single declarative source of truth for *what data oncodata owns*
+This is the single declarative source of truth for *what data oncoref owns*
 and how each dataset is held. It keeps the base layer honest: every dataset is
 classified into exactly one bucket, and a guard test (test_data_manifest.py)
 asserts the buckets partition the frozen pirlygenes inventory exhaustively and
-disjointly — so as oncodata absorbs pirlygenes, nothing is silently dropped or
+disjointly — so as oncoref absorbs pirlygenes, nothing is silently dropped or
 double-owned.
 
-Held buckets (oncodata domain):
+Held buckets (oncoref domain):
   WHEEL     — small curated tables shipped in the wheel (no fetch).
   BUNDLE    — heavy expression artifacts in the version-pinned release tarball.
   HPA       — Human Protein Atlas reference tables fetched per-source on demand.
   SOURCE    — the raw per-sample TPM matrices (a separate large optional bundle).
-  PLANNED   — oncodata-domain tables still to port (they feed the normalization
+  PLANNED   — oncoref-domain tables still to port (they feed the normalization
               / CTA-regeneration / ontology phases).
-  SUPERSEDED— a pirlygenes table oncodata replaced with its own regenerated one.
+  SUPERSEDED— a pirlygenes table oncoref replaced with its own regenerated one.
 
-OUT_OF_SCOPE — pirlygenes data that is NOT oncodata's domain (target selection,
+OUT_OF_SCOPE — pirlygenes data that is NOT oncoref's domain (target selection,
   therapy/modality, surfaceome, analysis gene sets) and stays in tsarina/hitlist.
 
-The catalog (:mod:`oncodata.catalog`) manages the fetchable subset; this module
+The catalog (:mod:`oncoref.catalog`) manages the fetchable subset; this module
 is the inventory + classification.
 """
 
@@ -113,19 +113,19 @@ SOURCE: dict[str, tuple[str, str]] = {
     "per-sample-tpm-matrices": ("expression", "raw per-sample cohort TPM (build inputs)"),
 }
 
-#: {name: (category, description)} — oncodata-domain tables still to port.
-#: oncodata-domain tables still to port. Empty — every pirlygenes table in
-#: oncodata's domain is now captured (the remaining gap is the per-sample
+#: {name: (category, description)} — oncoref-domain tables still to port.
+#: oncoref-domain tables still to port. Empty — every pirlygenes table in
+#: oncoref's domain is now captured (the remaining gap is the per-sample
 #: matrices in SOURCE, distributed per cohort).
 PLANNED: dict[str, tuple[str, str]] = {}
 
-#: pirlygenes tables oncodata replaced with its own regenerated equivalent.
+#: pirlygenes tables oncoref replaced with its own regenerated equivalent.
 SUPERSEDED: dict[str, str] = {
     "protein-identical-gene-groups": "proteoform-groups-genome (byte-identical, regenerated)",
     "cta-protein-groups": "proteoform-groups (byte-identical; pirlygenes' is ≥90% identity)",
 }
 
-#: {name: (category, description)} — oncodata-ORIGINATED wheel tables: derived or
+#: {name: (category, description)} — oncoref-ORIGINATED wheel tables: derived or
 #: regenerated here rather than copied from pirlygenes, so they aren't in the
 #: pirlygenes snapshot but DO ship in the wheel and belong in the inventory.
 CANCERDATA_ORIGINATED: dict[str, tuple[str, str]] = {
@@ -142,7 +142,7 @@ CANCERDATA_ORIGINATED: dict[str, tuple[str, str]] = {
     ),
 }
 
-#: pirlygenes data that is NOT oncodata's domain — target selection / therapy /
+#: pirlygenes data that is NOT oncoref's domain — target selection / therapy /
 #: surfaceome / analysis gene sets. These stay in tsarina / hitlist.
 OUT_OF_SCOPE: frozenset[str] = frozenset(
     {
@@ -274,10 +274,10 @@ PIRLYGENES_DATA: frozenset[str] = frozenset(
 
 
 def captured() -> set[str]:
-    """oncodata-domain datasets already held (wheel + bundle + superseded)."""
+    """oncoref-domain datasets already held (wheel + bundle + superseded)."""
     return set(WHEEL) | set(BUNDLE) | set(SUPERSEDED)
 
 
 def in_scope() -> set[str]:
-    """Every oncodata-domain dataset — captured plus still-planned."""
+    """Every oncoref-domain dataset — captured plus still-planned."""
     return captured() | set(PLANNED)

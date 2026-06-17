@@ -6,7 +6,7 @@
 
 """Cancer-type tree navigation: ancestors / descendants / lineage / tree (#27, O3)."""
 
-from oncodata import (
+from oncoref import (
     cancer_type_ancestors,
     cancer_type_descendants,
     cancer_type_lineage,

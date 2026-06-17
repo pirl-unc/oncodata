@@ -12,12 +12,12 @@
 
 """Gene-family reference lists for expression normalization.
 
-The curated families behind oncodata's normalization: the technical-RNA loci
+The curated families behind oncoref's normalization: the technical-RNA loci
 whose RNA-seq abundance is library-prep artifact rather than biology (mtDNA, NUMT
 pseudogenes, rRNA, nuclear-retained lncRNAs), the ribosomal-protein / histone /
 hemoglobin / small-ncRNA families, the housekeeping panel, and the censored-gene
 surrogate TPMs. This is the read surface; the clean-TPM engine that consumes them
-lives in :mod:`oncodata.normalization`.
+lives in :mod:`oncoref.normalization`.
 """
 
 from __future__ import annotations
@@ -109,7 +109,7 @@ def clean_tpm_censored_gene_ids(*, include_ribosomal_proteins: bool = True) -> f
     their molecular nature. Never expand this set from expression variance or abundance —
     cancer-testis antigens are high-variance *by definition* (silent in most samples, high in
     a few, which is exactly what makes them targets), so a variance-based rule would censor the
-    very antigens oncodata exists to find. Data (TCGA LUAD/SKCM) is used only to *calibrate*
+    very antigens oncoref exists to find. Data (TCGA LUAD/SKCM) is used only to *calibrate*
     the clean-TPM compartment fractions and to *validate completeness* of this list (how the
     missing rRNA genes, incl. 28S, were found)."""
     df = get_data("clean-tpm-censored-genes", copy=False)

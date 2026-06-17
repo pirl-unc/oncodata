@@ -12,7 +12,7 @@
 
 """End-to-end rebuild of the per-cohort expression artifacts from per-sample matrices.
 
-Ties the pieces together so oncodata can **regenerate** (not just hold) its
+Ties the pieces together so oncoref can **regenerate** (not just hold) its
 expression bundle:
 
     raw per-sample TPM matrices  (candidate source cohorts per cancer code)
@@ -29,7 +29,7 @@ names define the canonical casing). A code with several candidate source cohorts
 resolved to the single one recorded in ``source-matrices.csv`` (pirlygenes selects
 one source per code; it never pools) — so the artifacts match the shipped reference.
 
-Outputs land under ``--out`` (a staging dir, NOT ``oncodata/data`` — the artifacts
+Outputs land under ``--out`` (a staging dir, NOT ``oncoref/data`` — the artifacts
 are large and ship via the release tarball, so they're never committed):
 
     <out>/clean/<CODE>.parquet                                 (clean-TPM matrix, full)
@@ -44,7 +44,7 @@ Run:
     python scripts/rebuild_expression_artifacts.py \
         --cache ~/.cache/pirlygenes/expression \
         --ref   ~/code/pirlygenes/pirlygenes/data/cancer-reference-expression-percentiles \
-        --out   ~/.cache/oncodata/rebuild-staging [--limit N] [--validate]
+        --out   ~/.cache/oncoref/rebuild-staging [--limit N] [--validate]
 """
 
 from __future__ import annotations
@@ -59,15 +59,15 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from oncodata.expression import SHARD_DATASETS
-from oncodata.expression_builders import (
+from oncoref.expression import SHARD_DATASETS
+from oncoref.expression_builders import (
     cohort_medoids,
     cohort_percentile_vectors,
     within_sample_top_fractions,
 )
-from oncodata.gene_families import clean_tpm_censored_gene_ids
-from oncodata.normalization import clean_tpm
-from oncodata.source_matrices import registry as source_registry
+from oncoref.gene_families import clean_tpm_censored_gene_ids
+from oncoref.normalization import clean_tpm
+from oncoref.source_matrices import registry as source_registry
 
 # Rebuilt artifacts must land in the exact directories the reader resolves; derive every
 # name from the shared registry so producer and reader can't drift. Proteoform shards are
@@ -118,7 +118,7 @@ def _select_source(code: str, candidates: list[tuple[str, Path]], code_to_source
     """Pick the single source matrix for a code — never pool.
 
     pirlygenes selects exactly one source cohort per code (RNA-seq over microarray
-    proxy, then a primary-tumor source, then most samples); oncodata's shipped
+    proxy, then a primary-tumor source, then most samples); oncoref's shipped
     ``source-matrices.csv`` already records that choice as ``code -> source_cohort``.
     So with a single candidate we use it; with several we keep the one whose cohort
     directory matches the registry's source_cohort. This replaces the old concat-pool
@@ -213,8 +213,8 @@ def rebuild(cache: Path, ref: Path, out: Path, *, limit: int | None, validate: b
         # Proteoform key space: collapse identical-protein members per sample, then
         # build the same percentile + within-sample summaries on the reduced space so
         # every downstream read can compare/quantify/plot on one collapsed key space.
-        from oncodata.expression_builders import sample_columns
-        from oncodata.proteoforms import collapse_to_proteoforms
+        from oncoref.expression_builders import sample_columns
+        from oncoref.proteoforms import collapse_to_proteoforms
 
         bio_pf = collapse_to_proteoforms(bio_df, scope=_PROTEOFORM_SCOPE, sample_cols=samples)
         pf_samples = sample_columns(bio_pf)
@@ -275,7 +275,7 @@ def main(argv=None) -> None:
     p.add_argument(
         "--ref", required=True, type=Path, help="Reference percentile dir (defines codes)"
     )
-    p.add_argument("--out", required=True, type=Path, help="Staging output dir (not oncodata/data)")
+    p.add_argument("--out", required=True, type=Path, help="Staging output dir (not oncoref/data)")
     p.add_argument("--limit", type=int, default=None, help="Only the first N codes (a test run)")
     p.add_argument("--validate", action="store_true", help="Correlate vs the reference artifacts")
     args = p.parse_args(argv)

@@ -8,7 +8,7 @@
 
 import pytest
 
-from oncodata import (
+from oncoref import (
     cancer_fusions,
     cancer_fusions_df,
     cancer_type_registry,

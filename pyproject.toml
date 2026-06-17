@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "oncodata"
+name = "oncoref"
 dynamic = ["version"]
 description = "Curated cancer reference data: ontology, TMB, incidence/mortality, and expression"
 readme = "README.md"
@@ -46,14 +46,14 @@ dev = [
 ]
 
 [project.scripts]
-oncodata = "oncodata.cli:main"
+oncoref = "oncoref.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/pirl-unc/oncodata"
-Repository = "https://github.com/pirl-unc/oncodata"
+Homepage = "https://github.com/pirl-unc/oncoref"
+Repository = "https://github.com/pirl-unc/oncoref"
 
 [tool.setuptools.dynamic]
-version = {attr = "oncodata.version.__version__"}
+version = {attr = "oncoref.version.__version__"}
 
 [tool.setuptools]
 # Make the package-data list authoritative (see pirlygenes #5.3.0 wheel-bloat
@@ -62,19 +62,19 @@ version = {attr = "oncodata.version.__version__"}
 include-package-data = false
 
 [tool.setuptools.packages.find]
-include = ["oncodata*"]
+include = ["oncoref*"]
 
 [tool.setuptools.package-data]
 # Small curated tables ship in the wheel. The heavy per-cohort expression
 # bundle (added in a later milestone) downloads on first access — never bundled.
-oncodata = [
+oncoref = [
     "data/*.csv",
     "data/*.csv.gz",
     "data/*.yaml",
 ]
 
 [tool.setuptools.exclude-package-data]
-oncodata = [
+oncoref = [
     "data/cancer-reference-expression/*",
     "data/cancer-reference-expression-percentiles/*",
     "data/cancer-reference-expression-percentiles-proteoform/*",
@@ -88,7 +88,7 @@ oncodata = [
 [tool.ruff]
 target-version = "py39"
 line-length = 100
-src = ["oncodata", "tests"]
+src = ["oncoref", "tests"]
 exclude = [
     ".git",
     ".venv",
@@ -127,7 +127,7 @@ ignore = [
 "__init__.py" = ["F401"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["oncodata"]
+known-first-party = ["oncoref"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -136,5 +136,5 @@ python_functions = "test_*"
 addopts = "-v --tb=short"
 
 [tool.coverage.run]
-source = ["oncodata"]
-omit = ["oncodata/version.py"]
+source = ["oncoref"]
+omit = ["oncoref/version.py"]

@@ -2,9 +2,9 @@
 # [tool.setuptools.exclude-package-data] — without this the sdist auto-includes
 # every git-tracked file and the heavy per-cohort expression data (added in a
 # later milestone) would balloon the .tar.gz past PyPI's 100 MiB limit.
-recursive-exclude oncodata/data/cancer-reference-expression *
-recursive-exclude oncodata/data/cancer-reference-expression-percentiles *
-recursive-exclude oncodata/data/cancer-reference-expression-representatives *
-recursive-exclude oncodata/data/cancer-reference-expression-within-sample-top5 *
-exclude oncodata/data/pan-cancer-expression.csv
-exclude oncodata/data/hpa-cell-type-expression.csv
+recursive-exclude oncoref/data/cancer-reference-expression *
+recursive-exclude oncoref/data/cancer-reference-expression-percentiles *
+recursive-exclude oncoref/data/cancer-reference-expression-representatives *
+recursive-exclude oncoref/data/cancer-reference-expression-within-sample-top5 *
+exclude oncoref/data/pan-cancer-expression.csv
+exclude oncoref/data/hpa-cell-type-expression.csv

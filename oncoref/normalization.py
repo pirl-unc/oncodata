@@ -33,7 +33,7 @@ budget empirically interpretable. (Verified: LUAD clean TPM lands at exactly 16/
 sample.)
 
 **Curated membership.** Which genes are technical/ribosomal is a *curated, biology-defined*
-list (the technical-RNA families + ribosomal proteins; see :mod:`oncodata.gene_families`),
+list (the technical-RNA families + ribosomal proteins; see :mod:`oncoref.gene_families`),
 NOT data-derived. Never define censoring from expression variance or abundance: cancer-testis
 antigens are high-variance *by definition* (that's what makes them targets), so a
 variance-based rule would censor the very antigens this library exists to find. Use data
@@ -46,7 +46,7 @@ split anywhere; read the budgets from the public fraction constants, not magic n
 
 Plus the supporting helpers: drop technical genes for a biology-only view,
 housekeeping/log/rank transforms. Censored-gene and gene-family lists come from
-:mod:`oncodata.gene_families`.
+:mod:`oncoref.gene_families`.
 """
 
 from __future__ import annotations
@@ -336,13 +336,13 @@ def fpkm_to_tpm(df: pd.DataFrame, *, value_cols=None) -> tuple[pd.DataFrame, dic
 # ---------- technical-RNA normalization (the comparable biology view) ----------
 
 #: QC groups removed by default in the legacy zero-and-renormalize path — the
-#: technical-RNA set. Single source of truth lives in :mod:`oncodata.gene_qc`.
+#: technical-RNA set. Single source of truth lives in :mod:`oncoref.gene_qc`.
 from .gene_qc import TECHNICAL_RNA_GROUPS as _TECHNICAL_RNA_GROUPS  # noqa: E402
 
 
 def _technical_mask(df, *, label_col, id_col, remove_groups) -> pd.Series:
     """Boolean (row-aligned) for rows whose QC group is in ``remove_groups``,
-    classified ENSG-first via :func:`oncodata.gene_qc.classify_gene_qc`."""
+    classified ENSG-first via :func:`oncoref.gene_qc.classify_gene_qc`."""
     from .gene_qc import classify_gene_qc
 
     labels = df[label_col].fillna("").astype(str).str.strip()
@@ -410,7 +410,7 @@ def normalize_expression(
 
     ``censored_fill``:
       - ``"zero"`` (default, legacy) — zero the technical-RNA rows
-        (:func:`oncodata.gene_qc.classify_gene_qc` group in ``remove_groups``:
+        (:func:`oncoref.gene_qc.classify_gene_qc` group in ``remove_groups``:
         mtDNA / NUMT-like / rRNA-like / polyA-bias lncRNA) and rescale the kept rows
         so each column's **original total** is preserved. With ``group_cols``,
         normalizes within each group independently (e.g. per cohort in a long table).
@@ -550,8 +550,8 @@ def tpm_to_housekeeping_normalized(
     log-normal expression and is dominated by no single deviating reference gene; a
     small ``pseudocount`` keeps it finite through zeros.
 
-    The panel defaults to oncodata's housekeeping gene set
-    (:func:`oncodata.gene_families.housekeeping_gene_ids`), matched by Ensembl id.
+    The panel defaults to oncoref's housekeeping gene set
+    (:func:`oncoref.gene_families.housekeeping_gene_ids`), matched by Ensembl id.
     ``value_cols`` defaults to the **named-TPM** columns (:func:`is_expression_value_col`)
     — for a plain ``genes × samples`` frame whose columns aren't ``*_TPM``, pass them
     explicitly or use :func:`normalize_to_housekeeping` (which defaults to all sample

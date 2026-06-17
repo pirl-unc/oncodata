@@ -4,9 +4,9 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-"""Integrity guards for the oncodata-owned CTA table.
+"""Integrity guards for the oncoref-owned CTA table.
 
-oncodata is the source of truth for the cancer-testis-antigen *definition* — the
+oncoref is the source of truth for the cancer-testis-antigen *definition* — the
 HPA tissue-restriction call over the candidate list. The mass-spec / peptide /
 target-selection layer stays OUT (it lives in tsarina). These guards pin that
 ownership boundary and the table's basic integrity.
@@ -16,9 +16,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from oncodata.cta import cta_unfiltered_gene_names
+from oncoref.cta import cta_unfiltered_gene_names
 
-_CSV = Path(__file__).resolve().parents[1] / "oncodata" / "data" / "cancer-testis-antigens.csv"
+_CSV = Path(__file__).resolve().parents[1] / "oncoref" / "data" / "cancer-testis-antigens.csv"
 
 # The exact shipped CTA schema (HPA-only projection, in column order). This is the
 # stable contract downstream consumers read against — an exact, order-sensitive
@@ -75,7 +75,7 @@ CTA_COLUMNS = [
     "safety_flags",
 ]
 
-# tsarina's mass-spec evidence columns must NOT ship in oncodata's HPA-only table
+# tsarina's mass-spec evidence columns must NOT ship in oncoref's HPA-only table
 # (the ownership seam: HPA-only definition here, MS/peptide downstream).
 _MASS_SPEC_COLUMNS = {"ms_restriction", "ms_pmids", "ms_healthy_somatic_tissues"}
 
@@ -89,7 +89,7 @@ def test_schema_matches_contract():
 
 def test_no_mass_spec_columns():
     cols = set(pd.read_csv(_CSV, nrows=0).columns)
-    assert cols.isdisjoint(_MASS_SPEC_COLUMNS), "MS columns belong in tsarina, not oncodata"
+    assert cols.isdisjoint(_MASS_SPEC_COLUMNS), "MS columns belong in tsarina, not oncoref"
 
 
 def test_curated_genes_present():

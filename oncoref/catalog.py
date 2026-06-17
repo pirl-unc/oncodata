@@ -12,15 +12,15 @@
 
 """One catalog over every managed (fetchable) dataset.
 
-oncodata holds two kinds of heavy/external data behind separate machinery: the
-version-pinned per-cohort **expression bundle** (:mod:`oncodata.data_bundle`, a
+oncoref holds two kinds of heavy/external data behind separate machinery: the
+version-pinned per-cohort **expression bundle** (:mod:`oncoref.data_bundle`, a
 single GitHub-release tarball) and the **HPA** protein/RNA reference tables
-(:mod:`oncodata.reference_data`, per-source downloads from proteinatlas.org).
+(:mod:`oncoref.reference_data`, per-source downloads from proteinatlas.org).
 This module is the unified facade over both — one ``Dataset`` model and one
 fetch/cache/status API — so a caller (or the CLI) manages everything uniformly
 without knowing which backend a dataset lives in.
 
-    from oncodata import catalog
+    from oncoref import catalog
     catalog.datasets()                       # every managed dataset
     catalog.status()                         # uniform present/size rows
     catalog.ensure("hpa_normal_tissue")      # download if needed -> Path
@@ -200,11 +200,11 @@ def _cohort_count(p: Path | None) -> int | None:
 
 
 def inventory() -> list[dict]:
-    """The complete oncodata-domain data inventory — the full picture behind the
+    """The complete oncoref-domain data inventory — the full picture behind the
     fetchable :func:`datasets`. One row per dataset with ``name``, ``held``
     (``wheel`` / ``bundle`` / ``hpa`` / ``source`` / ``planned``), ``category``,
     ``available`` (present locally / shipped), and ``description``. Driven by
-    :mod:`oncodata.data_manifest` so it stays exhaustive against pirlygenes.
+    :mod:`oncoref.data_manifest` so it stays exhaustive against pirlygenes.
     """
     bundle_member = {p.removesuffix(".csv"): p for p in data_bundle.DOWNLOADABLE_PATHS}
     rows: list[dict] = []
@@ -234,7 +234,7 @@ def inventory() -> list[dict]:
         available = any(source_matrices.is_cached(c) for c in cohorts)
         _add(name, "source", cat, desc, available, len(cohorts))  # per-cohort fetchable
     for name, (cat, desc) in sorted(data_manifest.PLANNED.items()):
-        _add(name, "planned", cat, desc, False)  # oncodata-domain, still to port
+        _add(name, "planned", cat, desc, False)  # oncoref-domain, still to port
     return rows
 
 

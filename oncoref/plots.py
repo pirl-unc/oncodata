@@ -10,13 +10,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Cancer-type-level reference plots built from oncodata's own data.
+"""Cancer-type-level reference plots built from oncoref's own data.
 
-These need only oncodata-owned data (TMB, anti-PD-1 ORR, incidence/mortality,
+These need only oncoref-owned data (TMB, anti-PD-1 ORR, incidence/mortality,
 the cancer-type registry for lineage colors) — no CTA or peptide data — so they
 have no dependency on the target-selection libraries.
 
-matplotlib is an optional extra (``pip install oncodata[plots]``); it is
+matplotlib is an optional extra (``pip install oncoref[plots]``); it is
 imported lazily so the data layer stays importable without it. Every function
 returns the matplotlib ``Figure`` and optionally writes a PNG when ``save`` is
 given.
@@ -57,7 +57,7 @@ def _plt():
         import matplotlib.pyplot as plt
     except ModuleNotFoundError as e:  # pragma: no cover - exercised via extras
         raise ModuleNotFoundError(
-            "oncodata plotting requires matplotlib — install with `pip install oncodata[plots]`"
+            "oncoref plotting requires matplotlib — install with `pip install oncoref[plots]`"
         ) from e
     _PLT = plt
     return _PLT
@@ -246,7 +246,7 @@ def _cohort_gene_heatmap(grid, *, title, cbar_label, cmap, lognorm=False, floor=
     return _save(fig, save)
 
 
-# CTA antigen families, by symbol prefix (longest match wins). oncodata has no
+# CTA antigen families, by symbol prefix (longest match wins). oncoref has no
 # curated antigen-family table; this presentational heuristic mirrors pirlygenes and
 # only drives colour grouping in the gene-level CTA plots — never analysis.
 _ANTIGEN_FAMILY_PREFIXES = (
@@ -633,7 +633,7 @@ def _cta_prevalence_by_cohort(threshold):
     samples in which it ranks in the top ``(1-threshold)`` *within that sample*; we
     take the max over the CTA set. It is a lower bound on the true "≥1 CTA expressed"
     union (different patients may express different CTAs), which needs the per-sample
-    joint matrices — see :func:`oncodata.expression.proteoform_representative_samples`
+    joint matrices — see :func:`oncoref.expression.proteoform_representative_samples`
     and #13. Cohorts without a within-sample shard are skipped."""
     import pandas as pd
 
@@ -686,7 +686,7 @@ def cta_addressable_burden(
         the within-sample rank cut 0.99/0.95/0.90);
       - ``"per_sample"`` — the **faithful** fraction of patients expressing ≥1 CTA
         above ``threshold_tpm`` (the per-patient union), from the per-sample matrices
-        (:func:`oncodata.coverage.addressable_fraction_by_cohort`); needs the
+        (:func:`oncoref.coverage.addressable_fraction_by_cohort`); needs the
         cohorts' per-sample matrices cached.
 
     ``metric`` selects the incidence basis; ``n`` caps the bars; bars are coloured by
@@ -804,7 +804,7 @@ def cta_coverage_curves(
 ):
     """Greedy **antigen-coverage curves** — for each cohort, the cumulative fraction
     of patients covered as CTAs are added to the panel in greedy set-cover order
-    (:func:`oncodata.coverage.greedy_coverage`). Answers "how many antigens does a
+    (:func:`oncoref.coverage.greedy_coverage`). Answers "how many antigens does a
     panel need to reach most patients of this cancer".
 
     ``cancer_types`` is a code or iterable of codes (each needs a cached per-sample
@@ -887,7 +887,7 @@ def cta_coverage_stacked_bars(
 ):
     """Greedy **coverage plateau** as a stacked bar per cohort — one horizontal bar
     per cancer type, split into the marginal new-patient fraction each CTA adds in
-    greedy set-cover order (:func:`oncodata.coverage.greedy_coverage`). The bar's
+    greedy set-cover order (:func:`oncoref.coverage.greedy_coverage`). The bar's
     total length is the cohort's addressable share (≥1 CTA panel); each segment shows
     how much a single antigen contributes, coloured by antigen family.
 
@@ -963,7 +963,7 @@ def burden_category_bars(*, region="us", n=None, save=None):
 def cta_burden_vs_response(*, against="apd1", threshold_tpm=10.0, cohorts=None, save=None):
     """Scatter of a cohort's **mean CTA antigen load** (mean number of CTAs a patient
     expresses above ``threshold_tpm``, from
-    :func:`oncodata.coverage.mean_antigens_per_patient`) vs its anti-PD-1 ORR
+    :func:`oncoref.coverage.mean_antigens_per_patient`) vs its anti-PD-1 ORR
     (``against="apd1"``) or median TMB (``against="tmb"``), one point per cancer type,
     coloured by lineage family.
 
@@ -1006,8 +1006,8 @@ def apd1_response_signature_scatter(signature="t_cell_inflamed", *, cohorts=None
     one point per cancer type — the mechanism view of *why* response varies.
 
     The signature score is the cohort-mean log clean-TPM of the signature's genes
-    (:func:`oncodata.response_signatures.signature_score`); ``signature`` is one of
-    :func:`oncodata.response_signatures.response_signature_names` (e.g.
+    (:func:`oncoref.response_signatures.signature_score`); ``signature`` is one of
+    :func:`oncoref.response_signatures.response_signature_names` (e.g.
     ``"t_cell_inflamed"`` / ``"cytotoxic"`` / ``"antigen_presentation"`` →
     response-associated, ``"tgfb_exclusion"`` → resistance-associated). Points are
     cohorts that have BOTH a cached per-sample matrix and a curated aPD1 ORR,
@@ -1040,7 +1040,7 @@ def apd1_response_signature_scatter(signature="t_cell_inflamed", *, cohorts=None
 
 def cta_specific_9mer_load(*, against="tmb", threshold_tpm=10.0, cohorts=None, save=None):
     """Scatter of a cohort's **mean per-patient CTA-specific 9-mer load**
-    (:func:`oncodata.peptides.cta_specific_9mer_load`) vs its median TMB
+    (:func:`oncoref.peptides.cta_specific_9mer_load`) vs its median TMB
     (``against="tmb"``) or anti-PD-1 ORR (``against="apd1"``), one point per cancer
     type, coloured by lineage family.
 
@@ -1048,7 +1048,7 @@ def cta_specific_9mer_load(*, against="tmb", threshold_tpm=10.0, cohorts=None, s
     the CTAs they express above ``threshold_tpm`` — a per-patient measure of
     tumor-restricted neoepitope source breadth. CTA-specific 9-mers come from the
     reference proteome (the longest protein per gene, background-subtracted against
-    all non-CTA proteins); see :mod:`oncodata.peptides`.
+    all non-CTA proteins); see :mod:`oncoref.peptides`.
 
     Points are cohorts with BOTH a cached per-sample matrix and the chosen metric.
     Needs the per-sample matrices cached and a downloaded Ensembl release with protein

@@ -11,7 +11,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Regenerate **all** oncodata figures into one timestamped run directory.
+"""Regenerate **all** oncoref figures into one timestamped run directory.
 
 Mirrors the pirlygenes ``analyses/regenerate_plots.py`` convention: every run
 writes into a fresh ``outputs/run_<YYYYMMDD-HHMMSS>/`` snapshot (gitignored),
@@ -43,8 +43,8 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
-from oncodata import plots  # noqa: E402
-from oncodata.plots import _cached_per_sample_cohorts  # noqa: E402
+from oncoref import plots  # noqa: E402
+from oncoref.plots import _cached_per_sample_cohorts  # noqa: E402
 
 
 def _jobs() -> list[tuple[str, str, str, dict]]:
@@ -179,7 +179,7 @@ def main() -> int:
 
     index = run_dir / "index.md"
     lines = [
-        f"# oncodata figures — {run_dir.name}",
+        f"# oncoref figures — {run_dir.name}",
         "",
         f"{len(done)} generated, {len(skipped)} skipped.",
         "",

@@ -12,7 +12,7 @@
 
 """Immune-checkpoint-inhibitor (ICI) response (ORR) by cancer type and regimen.
 
-Generalizes the anti-PD-1 layer (:mod:`oncodata.apd1`) to **all three checkpoint
+Generalizes the anti-PD-1 layer (:mod:`oncoref.apd1`) to **all three checkpoint
 regimens, each kept as a distinct source of response data**:
 
 - ``"PD-1"``        — anti-PD-1 monotherapy (pembrolizumab / nivolumab / cemiplimab)

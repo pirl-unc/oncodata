@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from oncodata import expression_builders
+from oncoref import expression_builders
 
 _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 
@@ -221,8 +221,8 @@ def test_representatives_generator_writes_shards_and_provenance(tmp_path):
 def test_percentiles_reproduce_pirlygenes_reference():
     # End-to-end on REAL data: raw per-sample matrix -> clean_tpm -> percentile
     # vectors must reproduce pirlygenes' shipped percentile artifact for the same
-    # cohort. Proves the generator + oncodata's clean_tpm port are faithful.
-    from oncodata import normalization as nz
+    # cohort. Proves the generator + oncoref's clean_tpm port are faithful.
+    from oncoref import normalization as nz
 
     raw = pd.read_parquet(_ACC_MATRIX[0])
     samples = [c for c in raw.columns if c not in ("Ensembl_Gene_ID", "Symbol")]

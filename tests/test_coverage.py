@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from oncodata import coverage
+from oncoref import coverage
 
 # A controlled 3-gene × 4-patient fixture (threshold 5):
 #   gA expressed in p0,p1   gB in p2   gC in p1 (redundant with gA)   p3 uncovered
@@ -109,7 +109,7 @@ def test_proteoform_paralogs_are_summed(monkeypatch):
     monkeypatch.setattr(coverage, "_panel_ids", lambda gene_ids: {"ENSG_A1", "ENSG_A2", "ENSG_B"})
     # _hit_matrix lazily does `from .proteoforms import proteoform_group_map`, so patch
     # the source symbol it re-resolves on each call.
-    import oncodata.proteoforms as pmod
+    import oncoref.proteoforms as pmod
 
     monkeypatch.setattr(
         pmod, "proteoform_group_map", lambda *, scope="cta": {"A1/A2": ["ENSG_A1", "ENSG_A2"]}
@@ -128,7 +128,7 @@ def test_proteoform_paralogs_are_summed(monkeypatch):
 
 # ---- real-data parity (skipped unless the source-matrix cache is staged) ----
 
-from oncodata import source_matrices as _sm  # noqa: E402
+from oncoref import source_matrices as _sm  # noqa: E402
 
 _LUAD_READY = _sm.is_cached("LUAD") if "LUAD" in _sm.available_cohorts() else False
 

@@ -8,7 +8,7 @@
 
 import pytest
 
-from oncodata import catalog, cli, data_bundle, reference_data
+from oncoref import catalog, cli, data_bundle, reference_data
 
 
 def test_datasets_span_both_backends():
@@ -117,7 +117,7 @@ def test_datasets_disjoint_backends():
     assert bundle.isdisjoint(hpa)
 
 
-# ---- unified `oncodata data` CLI over the catalog ----
+# ---- unified `oncoref data` CLI over the catalog ----
 
 
 def test_cli_data_list(capsys):
@@ -174,13 +174,13 @@ def test_cli_help_never_crashes():
 
 
 def test_inventory_covers_all_held_buckets():
-    from oncodata import data_manifest
+    from oncoref import data_manifest
 
     rows = catalog.inventory()
     names = {r["name"] for r in rows}
     assert set(data_manifest.WHEEL) <= names
     assert {"per-sample-tpm-matrices"} <= names  # the raw source matrices
-    # Every oncodata-domain table is now captured; the held buckets present are
+    # Every oncoref-domain table is now captured; the held buckets present are
     # wheel/bundle/hpa/source (planned only appears while tables remain to port).
     held = {r["held"] for r in rows}
     assert {"wheel", "bundle", "hpa", "source"} <= held
@@ -193,8 +193,8 @@ def test_inventory_wheel_always_available():
 
 
 def test_planned_fully_captured():
-    # Phase R complete: no oncodata-domain table is still 'planned'.
-    from oncodata import data_manifest
+    # Phase R complete: no oncoref-domain table is still 'planned'.
+    from oncoref import data_manifest
 
     assert not data_manifest.PLANNED
     assert not [r for r in catalog.inventory() if r["held"] == "planned"]

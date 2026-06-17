@@ -4,8 +4,8 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-from oncodata import expression_registry as es
-from oncodata import samples
+from oncoref import expression_registry as es
+from oncoref import samples
 
 
 def test_registry_loads_all_sources():

@@ -13,7 +13,7 @@
 """Regenerate the HPA-derived columns of ``cancer-testis-antigens.csv`` from HPA.
 
 This ports the HPA-only producer logic from tsarina (``tsarina.tiers``,
-``scripts/add_cta_gene.py``, ``scripts/regenerate_table.py``) into oncodata so
+``scripts/add_cta_gene.py``, ``scripts/regenerate_table.py``) into oncoref so
 the bundled table's ~47 RNA/protein/restriction/filter columns can be re-derived
 from the Human Protein Atlas alone -- no mass-spec evidence and no pyensembl.
 
@@ -29,8 +29,8 @@ filters, protein IHC columns, the per-modality and synthesized restriction axes,
 from HPA ``rna_tissue_consensus`` (RNA) and ``normal_tissue`` (IHC).
 
 ``restriction`` / ``restriction_confidence`` come from the HPA-only
-:func:`oncodata.cta.synthesize_restriction` (no MS contribution), applied
-row-wise -- matching the provenance oncodata owns.
+:func:`oncoref.cta.synthesize_restriction` (no MS contribution), applied
+row-wise -- matching the provenance oncoref owns.
 
 Public entry point: :func:`regenerate_cta_columns`.
 """
@@ -501,7 +501,7 @@ def regenerate_cta_columns(table: pd.DataFrame) -> pd.DataFrame:
     HPA release. Column order and the preserved columns are kept unchanged.
 
     Downloads HPA v23 (``rna_tissue_consensus`` + ``normal_tissue``) via the
-    oncodata accessors on first use.
+    oncoref accessors on first use.
 
     Parameters
     ----------
@@ -542,7 +542,7 @@ def regenerate_cta_columns(table: pd.DataFrame) -> pd.DataFrame:
     seed["protein_ovary"] = pse.map(lambda v: _protein_tissue_flag(v, "ovary"))
     seed["protein_placenta"] = pse.map(lambda v: _protein_tissue_flag(v, "placenta"))
 
-    # HPA-only synthesis (protein > RNA; no MS) from oncodata.cta.
+    # HPA-only synthesis (protein > RNA; no MS) from oncoref.cta.
     synth = seed.apply(_cta.synthesize_restriction, axis=1, result_type="expand")
     seed["restriction"] = synth[0]
     seed["restriction_confidence"] = synth[1]
