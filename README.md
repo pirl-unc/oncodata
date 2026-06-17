@@ -10,11 +10,16 @@ CLI, and a set of reference plots.
 
 ## oncodata is the base layer
 
-`oncodata` is the **foundation of the openvax/PIRL dependency pyramid** — the
-single upstream **source of truth** for cancer reference data. It depends only on
-pandas / numpy / pyarrow / PyYAML, and it **never imports its consumers**: data
-and logic flow only downward. It does not mirror these definitions from anywhere;
-it owns them.
+`oncodata` is **designed as the base layer** of the openvax/PIRL stack — the
+intended single upstream **source of truth** for cancer reference data, meant to
+become a shared dependency of
+[pirlygenes](https://github.com/pirl-unc/pirlygenes),
+[trufflepig](https://github.com/pirl-unc/trufflepig), and
+[tsarina](https://github.com/pirl-unc/tsarina). Adoption is still in progress —
+most of these don't depend on it yet. Architecturally it stays at the bottom: it
+depends only on pandas / numpy / pyarrow / PyYAML, it **never imports its
+consumers** (data and logic flow only downward), and it **owns** these
+definitions rather than mirroring them from elsewhere.
 
 Anything that needs to know about
 
