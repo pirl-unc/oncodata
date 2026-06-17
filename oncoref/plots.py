@@ -508,14 +508,19 @@ def ici_orr_pooled_forest(*, regimen=None, save=None):
     for code, reg in cells.items():
         if reg is None:
             continue
-        pooled = pooled_ici_response(code, regimen=reg, metric="ORR", verified_only=False)
+        # Dots = every reported source; diamond = the *primary-only* pool so it never
+        # double-counts a trial's overlapping subgroups (include_alternates=False).
+        allsrc = pooled_ici_response(code, regimen=reg, metric="ORR", verified_only=False)
+        clean = pooled_ici_response(
+            code, regimen=reg, metric="ORR", verified_only=False, include_alternates=False
+        )
         pts = [
             (s["value"], s["ci_low"], s["ci_high"], s["n"])
-            for s in pooled["sources"]
+            for s in allsrc["sources"]
             if s["value"] is not None
         ]
-        if pooled["pooled_pct"] is not None:
-            est, lo, hi = pooled["pooled_pct"], pooled["ci_low"], pooled["ci_high"]
+        if clean["pooled_pct"] is not None:
+            est, lo, hi = clean["pooled_pct"], clean["ci_low"], clean["ci_high"]
         else:
             est, lo, hi = anchor.get(code), None, None
         if est is None:

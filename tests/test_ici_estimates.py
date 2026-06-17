@@ -197,6 +197,64 @@ def test_pooled_sources_expose_trial_labels():
     assert {"trial_name", "trial_alias", "trial_nct"} <= set(s)
 
 
+def _num(v):
+    import math
+
+    try:
+        f = float(v)
+        return None if math.isnan(f) else f
+    except (TypeError, ValueError):
+        return None
+
+
+def test_estimates_internal_consistency():
+    """Machine-checkable invariants on the estimates table — catches transcription / drift
+    errors without re-verifying every paper. (Per-paper correctness rests on the audit.)"""
+    df = ici.cancer_ici_response_estimates_df()
+    HARD_PROPORTION = {"ORR", "CRR", "DCR", "PR"}  # value MUST equal 100·responders/n
+    for _, r in df.iterrows():
+        m = str(r["metric"]).upper()
+        tag = f"{r['cancer_code']}/{r['regimen']}/{m}/{r['role']}"
+        assert r["role"] in ("primary", "alternate"), f"{tag}: bad role"
+        assert r["value_basis"] in ("reported", "derived_blend"), f"{tag}: bad value_basis"
+        ref = r["ref"]
+        if isinstance(ref, str) and ref.strip():
+            assert ref.startswith(("PMID:", "DOI:")), f"{tag}: bad ref {ref!r}"
+        v, resp, n = _num(r["value"]), _num(r["responders"]), _num(r["metric_n"])
+        lo, hi = _num(r["ci_low"]), _num(r["ci_high"])
+        if resp is not None and n is not None:
+            assert resp <= n, f"{tag}: responders {resp} > n {n}"
+        if m in HARD_PROPORTION and v is not None:
+            assert 0 <= v <= 100, f"{tag}: proportion value {v} out of range"
+            if resp is not None and n:
+                assert abs(v - 100 * resp / n) <= 2.0, f"{tag}: value {v} != {resp}/{n}"
+        if lo is not None and hi is not None and v is not None:
+            assert lo - 0.6 <= v <= hi + 0.6, f"{tag}: value {v} outside CI [{lo},{hi}]"
+
+
+def test_anchor_orr_in_ballpark_of_estimates_primary():
+    """The representative anchor (cancer-ici-response.csv) and the estimates table's primary
+    ORR for a cell must be in the same ballpark — and there must be exactly ONE primary ORR
+    per cell. The anchor is a deliberately *rounded representative* value (per the table
+    docstring, "not an exact reproducible constant"), so small gaps vs the precise audited
+    value are expected; this only catches GROSS drift (a wrong cell, a 2× transcription
+    error) — i.e. the two tables falling out of sync."""
+    anchor = ici.cancer_ici_response_df()
+    est = ici.cancer_ici_response_estimates_df()
+    prim = est[(est["role"] == "primary") & (est["metric"].str.upper() == "ORR")]
+    by_cell = {}
+    for _, r in prim.iterrows():
+        cell = (r["cancer_code"], r["regimen"])
+        assert cell not in by_cell, f"{cell}: more than one primary ORR row"
+        by_cell[cell] = _num(r["value"])
+    for _, a in anchor.iterrows():
+        cell = (a["cancer_code"], a["regimen"])
+        if cell in by_cell and by_cell[cell] is not None:
+            assert abs(float(a["orr_pct"]) - by_cell[cell]) <= 5.0, (
+                f"{cell}: anchor {a['orr_pct']} far from estimates primary {by_cell[cell]}"
+            )
+
+
 def test_pooled_result_contract():
     r = ici.pooled_ici_response("SKCM", regimen="PD-1", metric="ORR")
     for key in (
