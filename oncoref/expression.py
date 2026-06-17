@@ -72,7 +72,7 @@ from . import data_bundle, source_matrices
 from .cancer_types import cohort_aggregates, resolve_cancer_type
 from .expression_builders import WITHIN_SAMPLE_THRESHOLDS as _WITHIN_SAMPLE_THRESHOLD_COLS
 from .expression_engine import id_columns, sample_columns
-from .gene_ids import unversioned
+from .gene_ids import resolve_ensembl_id, unversioned
 from .load_dataset import _BUNDLED_DATA_DIR, _register_derived_cache, get_data
 from .normalization import clean_tpm
 
@@ -527,9 +527,11 @@ def representative_cohort_samples(
     # Combine cohorts on a CANONICAL gene id only — never the (Ensembl_Gene_ID, Symbol)
     # pair. Cohorts were quantified against different Ensembl releases, so the same locus
     # carries a different release-alias symbol per cohort; merging on the pair fragments one
-    # gene into many mutually-disjoint sparse rows (the pirlygenes#465-class bug). We index
-    # each cohort by the *unversioned* gene id, outer-join on it, and resolve one canonical
-    # symbol per gene afterwards (mirrors the safe key handling in pooled_cohort_stats).
+    # gene into many mutually-disjoint sparse rows (the pirlygenes#465-class bug). We key
+    # each cohort by the canonical gene id — unversioned AND migration-resolved through the
+    # shipped ensembl-id-aliases map (resolve_ensembl_id), so an alt-haplotype/archived id
+    # collapses onto its primary-contig id instead of standing as a separate row — then
+    # resolve one canonical symbol per gene afterwards.
     wide_parts = []
     long_parts = []
     symbols: dict[str, list[str]] = {}  # canonical id -> symbols seen (for the canonical name)
@@ -540,7 +542,12 @@ def representative_cohort_samples(
             rep_cols = rep_cols[:k]
         if normalize == "tpm_clean_log1p":
             shard[rep_cols] = np.log1p(shard[rep_cols].to_numpy(dtype=float))
-        gid = shard["Ensembl_Gene_ID"].astype(str).map(unversioned)
+        gid = shard["Ensembl_Gene_ID"].astype(str).map(resolve_ensembl_id)
+        # a cohort that carries BOTH an alt id and its primary collapses to one row here
+        if gid.duplicated().any():
+            shard = shard.assign(_gid=gid.to_numpy())
+            shard = shard.groupby("_gid", as_index=False).first()
+            gid = shard["_gid"].astype(str)
         for g, s in zip(gid, shard["Symbol"].astype(str)):
             symbols.setdefault(g, []).append(s)
         mat = shard[rep_cols].set_axis(gid.to_numpy(), axis=0)

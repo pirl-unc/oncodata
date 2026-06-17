@@ -266,6 +266,28 @@ def test_representative_wide_does_not_fragment_genes(monkeypatch, tmp_path):
     assert lg.loc[lg["Ensembl_Gene_ID"] == "ENSG234", "Symbol"].nunique() == 1
 
 
+def test_representative_wide_merges_alt_haplotype_aliases(monkeypatch, tmp_path):
+    # An alt-haplotype/archived id in one cohort must collapse onto its primary-contig id
+    # via the shipped ensembl-id-aliases migration map (not just unversioning) when another
+    # cohort carries the primary — so the two cohorts land on ONE canonical row.
+    from oncoref.gene_ids import ensembl_id_aliases
+
+    alt, primary = next((a, p) for a, p in ensembl_id_aliases().items() if a != p)
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
+    d = tmp_path / "cancer-reference-expression-representatives"
+    d.mkdir(parents=True)
+    pd.DataFrame({"Ensembl_Gene_ID": [alt], "Symbol": ["X"], "A__rep1": [1.0]}).to_parquet(
+        d / "A.parquet", index=False
+    )
+    pd.DataFrame({"Ensembl_Gene_ID": [primary], "Symbol": ["X"], "B__rep1": [2.0]}).to_parquet(
+        d / "B.parquet", index=False
+    )
+    w = expression.representative_cohort_samples(format="wide")
+    assert list(w["Ensembl_Gene_ID"]) == [primary]  # one row, the canonical primary
+    assert alt not in set(w["Ensembl_Gene_ID"])
+    assert bool(w[["A__rep1", "B__rep1"]].notna().all(axis=1).iloc[0])  # both cohorts on it
+
+
 def _raw_matrix(tmp_path):
     # A tiny raw-TPM per-sample matrix (genes x samples) whose columns sum near 1e6.
     df = pd.DataFrame(
