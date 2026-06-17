@@ -32,6 +32,41 @@ usually wants — prefer anti-PD-1 monotherapy, fall back to anti-PD-L1 where th
 missing, then to the combination — via the default :data:`REGIMEN_FALLBACK` order;
 pass ``regimen=`` to pin a single regimen instead, or ``fallback=False`` to get the
 full per-regimen mapping.
+
+Curation & pooling criteria
+---------------------------
+The wider evidence base (``cancer-ici-response-estimates.csv``, exposed by
+:func:`cancer_ici_response_estimates_df` and pooled by :func:`pooled_ici_response`)
+follows three rules that matter when curating new trials or interpreting a pooled value:
+
+1. **Reported vs. derived values.** Most estimate rows are ORR/CRR/DCR/… *directly
+   reported* in the cited paper. A handful of anchors in ``cancer-ici-response.csv`` are
+   instead **curator-derived blends** — no single trial reports them. The clearest case is
+   the "all-comer" ORR for MSI/MMR-dependent cancers: ``READ`` 5%, ``COAD`` 5%, ``UCEC``
+   8% are *prevalence-weighted blends* of the MSI-H/dMMR responders (~45–50%) and the
+   MSS/pMMR non-responders (~0%), because the pivotal trials (KEYNOTE-177/-164/-158) enroll
+   ONLY the biomarker-selected subtype. Since no paper reports the blend, the reference
+   audit marks these ``citation_matches=False`` → ``source_verified=False`` (flags
+   ``orr-is-derived-estimate`` / ``orr-is-derived-blend`` / ``all-comer-figure-not-in-cited-paper``).
+   This is *why* ``verified_only=True`` returns no pooled value for them — a derived blend
+   must never be pooled as if it were trial data. When adding such an anchor, record the
+   subtype source it was blended from in ``notes``, not a citation that does not contain
+   the number.
+
+2. **Never double-count patients.** A single trial routinely reports an all-comer cohort
+   AND its own biomarker subgroup (e.g. ``BLCA`` KEYNOTE-052 all-comers + the CPS≥10 subset;
+   ``LUAD`` all-comers + PD-L1≥50%). Those share patients, so summing their denominators
+   inflates ``n``. Each estimate row therefore carries a ``role``: ``"primary"`` (the one
+   representative cited setting) or ``"alternate"`` (other trials/subgroups). Pool only
+   rows describing the **same population and line of therapy**, and never an all-comer
+   cohort together with a subgroup drawn from it. ``pooled_ici_response`` does *not*
+   auto-dedupe overlapping subgroups — it returns the full ``sources`` list and
+   ``value_range`` so the overlap stays visible; ``include_alternates=False`` restricts
+   the pool to ``primary`` rows (one per cancer+regimen), which can never overlap.
+
+3. **Comparability.** ORR shifts with line of therapy, PD-L1/MSI selection, and data
+   cutoff; medians (PFS/OS/DOR) cannot be pooled at all without patient-level data. Treat
+   ``value_range`` as a heterogeneity check before trusting a single pooled number.
 """
 
 from __future__ import annotations
