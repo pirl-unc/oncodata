@@ -40,3 +40,12 @@ def test_incidence_corrections_applied():
     thyroid = cancer_burden("thyroid", metric="world_incidence_pct")
     assert liver != 6.0 and 0 < liver < 10
     assert thyroid != 2.5 and 0 < thyroid < 10
+
+
+def test_head_and_neck_us_mortality_includes_larynx():
+    # ACS Cancer Facts & Figures 2024 Table 1 lists deaths for oral
+    # cavity/pharynx (12,230) and larynx (3,880). The curated category note says
+    # the row aggregates both, so the mortality share should be ~2.6% of 611,720
+    # total cancer deaths, not the oral/pharynx-only share.
+    expected = round(100 * (12_230 + 3_880) / 611_720, 1)
+    assert cancer_burden("head_and_neck", metric="us_mortality_pct") == expected

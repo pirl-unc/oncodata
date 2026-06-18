@@ -13,7 +13,7 @@ melanoma,5.0,1.3,1.7,0.6,high,ACS-CFF2024;GLOBOCAN2022,cutaneous; low mortality 
 ovary,1.6,2.6,1.6,2.1,medium,ACS-CFF2024;GLOBOCAN2022,HGSOC-dominant
 uterus_endometrium,3.0,2.0,2.2,1.0,medium,ACS-CFF2024;GLOBOCAN2022,corpus uteri
 cervix,0.8,0.7,3.3,3.6,high,ACS-CFF2024;GLOBOCAN2022,world>>US (screening/HPV gap)
-head_and_neck,3.5,1.8,5.0,4.5,medium,ACS-CFF2024;GLOBOCAN2022,oral+pharynx+larynx aggregate (incl larynx); world adds nasopharynx
+head_and_neck,3.5,2.6,5.0,4.5,medium,ACS-CFF2024;GLOBOCAN2022,oral+pharynx+larynx aggregate (incl larynx); world adds nasopharynx
 thyroid,2.0,0.4,4.1,0.5,high,ACS-CFF2024;GLOBOCAN2022,lowest mortality:incidence; overdiagnosis (GLOBOCAN2022 821k=4.1%)
 brain_cns,1.4,2.7,1.6,2.5,medium,ACS-CFF2024;GLOBOCAN2022,brain+CNS incl glioma (GBM/LGG)
 non_hodgkin_lymphoma,4.0,3.0,2.8,2.5,medium,ACS-CFF2024;GLOBOCAN2022,incl DLBCL/FL/MCL/BL
