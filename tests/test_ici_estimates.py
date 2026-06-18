@@ -255,6 +255,37 @@ def test_anchor_orr_in_ballpark_of_estimates_primary():
             )
 
 
+def test_audited_anchor_values_match_primary_orr():
+    anchor = ici.cancer_ici_response_df()
+    est = ici.cancer_ici_response_estimates_df()
+    audited = {
+        ("LIHC", "PD-1"): 20.0,  # CheckMate 040 dose-expansion ORR, PMID:28434648
+    }
+    for cell, expected in audited.items():
+        code, regimen = cell
+        a = anchor[(anchor["cancer_code"] == code) & (anchor["regimen"] == regimen)]
+        assert len(a) == 1
+        assert abs(float(a["orr_pct"].iloc[0]) - expected) < 0.01
+
+        p = est[
+            (est["cancer_code"] == code)
+            & (est["regimen"] == regimen)
+            & (est["role"] == "primary")
+            & (est["metric"].str.upper() == "ORR")
+        ]
+        assert len(p) == 1
+        assert abs(float(p["value"].iloc[0]) - expected) < 0.01
+
+    from oncoref import apd1
+
+    apd1_anchor = apd1.cancer_apd1_response_df()
+    row = apd1_anchor[
+        (apd1_anchor["cancer_code"] == "LIHC") & (apd1_anchor["drug_target"] == "PD-1")
+    ]
+    assert len(row) == 1
+    assert abs(float(row["apd1_orr_pct"].iloc[0]) - audited[("LIHC", "PD-1")]) < 0.01
+
+
 def test_pooled_result_contract():
     r = ici.pooled_ici_response("SKCM", regimen="PD-1", metric="ORR")
     for key in (
