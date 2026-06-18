@@ -208,6 +208,10 @@ def _num(v):
         return None
 
 
+def _truthy(v):
+    return str(v).strip().lower() in {"true", "1", "yes"}
+
+
 def test_estimates_internal_consistency():
     """Machine-checkable invariants on the estimates table — catches transcription / drift
     errors without re-verifying every paper. (Per-paper correctness rests on the audit.)"""
@@ -235,6 +239,30 @@ def test_estimates_internal_consistency():
                 assert abs(v - 100 * resp / n) <= 2.0, f"{tag}: value {v} != {resp}/{n}"
         if lo is not None and hi is not None and v is not None:
             assert lo - 0.6 <= v <= hi + 0.6, f"{tag}: value {v} outside CI [{lo},{hi}]"
+
+
+def test_unverified_rows_do_not_claim_source_verification():
+    df = ici.cancer_ici_response_estimates_df()
+    reported = df[
+        (df["value_basis"].astype(str) == "reported") & (~df["source_verified"].map(_truthy))
+    ]
+    notes = reported["note"].fillna("").astype(str)
+    claims_verified = notes.str.contains(
+        r"verified|confirmed|matches full text|confirmed exactly",
+        case=False,
+        regex=True,
+    )
+    explicit_uncertainty = notes.str.contains(
+        r"unverified|not independently confirmed|not confirmed|could not confirm|"
+        r"pending primary confirmation|not supported|does not report|not in abstract|"
+        r"not captured|not source-verified",
+        case=False,
+        regex=True,
+    )
+    bad = reported[claims_verified & ~explicit_uncertainty]
+    assert bad.empty, bad[
+        ["cancer_code", "regimen", "trial_name", "ref", "metric", "note"]
+    ].to_dict("records")
 
 
 def test_anchor_orr_in_ballpark_of_estimates_primary():
