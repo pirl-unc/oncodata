@@ -573,8 +573,8 @@ MM,,CD38,target,isatuximab,antibody,approved,approved_later_line,later_line_appr
 MM,,SLAMF7,target,elotuzumab,antibody,approved,approved_later_line,later_line_approved,confirm prior therapies and indication-specific eligibility,R/R multiple myeloma,Anti-SLAMF7 — approved with lenalidomide+dex; ELOQUENT-2,PMID:26527819
 MM,,BCL2,target,venetoclax,small_molecule,phase_3,late_clinical,late_clinical,late-clinical follow-up; confirm trial or local availability,t(11;14) R/R MM,BCL2 inhibitor — CANOVA trial in t(11;14) subset,PMID:32213337
 CLL,,MS4A1,biomarker,,,,,,,,CD20 — pan-B-cell; rituximab / obinutuzumab target,PMID:21358700
-CLL,,CD5,biomarker,,,,,,,,Aberrant T-cell marker — defining CLL phenotype (CD5+ CD23+ CD20-dim),PMID:18832546
-CLL,,CD23,biomarker,,,,,,,,FCER2 — CLL diagnostic IHC; distinguishes from MCL (CD23-),PMID:18832546
+CLL,,CD5,biomarker,,,,,,,,Aberrant T-cell marker — defining CLL/SLL phenotype with CD23 positivity,PMID:32249238
+CLL,,CD23,biomarker,,,,,,,,FCER2 — CLL/SLL diagnostic IHC; helps distinguish from most MCL,PMID:32249238
 CLL,,IGHV,biomarker,,,,,,,,Unmutated IGHV (U-CLL) — poor prognosis; mutated (M-CLL) — favorable,PMID:10477712
 CLL,,TP53,biomarker,,,,,,,,del(17p) or TP53 mutation — highest-risk; venetoclax + BTK-inhibitor preferred,PMID:22323484
 CLL,,NOTCH1,biomarker,,,,,,,,Recurrent mutation — mutated IGHV independence; ATM subset,PMID:22150006
@@ -584,8 +584,8 @@ CLL,,BTK,target,zanubrutinib,small_molecule,approved,approved_standard,standard_
 CLL,,BTK,target,pirtobrutinib,small_molecule,approved,approved_later_line,later_line_approved,confirm prior therapies and indication-specific eligibility,R/R CLL after covalent BTK-i,Non-covalent BTK-i — overcomes C481 resistance; BRUIN,PMID:37099297
 CLL,,BCL2,target,venetoclax,small_molecule,approved,approved_standard,standard_or_frontline,confirm indication and line of therapy,CLL first-line + R/R,BCL2 inhibitor — ven+obinutuzumab (CLL14) or ven+ibrutinib (CAPTIVATE),PMID:30864090
 CLL,,MS4A1,target,obinutuzumab,antibody,approved,approved_indication_matched,approved_biomarker_matched,confirm biomarker/indication-specific eligibility,previously untreated CLL,Anti-CD20 type II — replaces rituximab in several CLL regimens; CLL11,PMID:24631112
-MCL,,CCND1,biomarker,,,,,,,,t(11;14) CCND1-IGH — pathognomonic for MCL; cyclin D1 overexpression,PMID:9500537
-MCL,,SOX11,biomarker,,,,,,,,Expressed in ~95% MCL — defines classical MCL; distinguishes from CLL,PMID:20554603
+MCL,,CCND1,biomarker,,,,,,,,t(11;14) IGH-CCND1 — defining MCL genetic hallmark in most cases; cyclin D1 overexpression,PMID:34114641;PMID:40381701
+MCL,,SOX11,biomarker,,,,,,,,Nuclear SOX11 expression in ~95% of MCL; useful diagnostic marker including cyclin D1-negative MCL,PMID:19801969
 MCL,,TP53,biomarker,,,,,,,,Mutation / del(17p) — blastoid variant; chemorefractory,PMID:28035779
 MCL,,BTK,target,ibrutinib,small_molecule,approved,approved_standard,standard_or_frontline,confirm indication and line of therapy,R/R MCL,BTK inhibitor — first-line MCL after chemo; LYM-3002,PMID:23782157
 MCL,,BTK,target,acalabrutinib,small_molecule,approved,approved_later_line,later_line_approved,confirm prior therapies and indication-specific eligibility,R/R MCL,Second-gen BTK-i — more selective; approval basis ACE-LY-004,PMID:29126709

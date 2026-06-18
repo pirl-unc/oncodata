@@ -88,7 +88,7 @@ T_ALL,TLX1-TRD,TRD,TCR locus,TLX1,homeobox,subset,true,true,surrogate,enhancer_h
 T_ALL,TLX3-BCL11B,BCL11B,,TLX3,homeobox,subset,true,true,surrogate,enhancer_hijack,medium,PMID:11607818,t(5;14)(q35;q32); TLX3=HOX11L2 overexpression via BCL11B enhancer
 T_ALL,NUP214-ABL1,NUP214,nucleoporin,ABL1,non-RTK kinase,subset,true,true,yes,fusion_transcript,medium,PMID:15361874,episomal amplification 9q34; TKI-sensitive T-ALL
 T_ALL,KMT2A-MLLT10,KMT2A,KMT/HMTase,MLLT10,MLL partner,subset,true,false,yes,fusion_transcript,medium,PMID:8642287,t(10;11); MLLT10=AF10; early T-cell precursor associated
-MCL,CCND1-IGH,IGH,Ig locus,CCND1,cyclin,~95%,true,false,surrogate,ig_enhancer_hijack,high,PMID:8049438,mantle cell lymphoma; t(11;14)(q13;q32); IGH enhancer drives cyclin D1; no chimeric transcript; cyclin D1 IHC surrogate; PMID unverified
+MCL,CCND1-IGH,IGH,Ig locus,CCND1,cyclin,~95%,true,false,surrogate,ig_enhancer_hijack,high,PMID:40381701,mantle cell lymphoma; t(11;14)(q13;q32)/IGH::CCND1 genetic hallmark reported in about 95% of cases; IGH enhancer drives cyclin D1; no chimeric transcript; cyclin D1 IHC/FISH surrogate
 FL,BCL2-IGH,IGH,Ig locus,BCL2,BCL2/apoptosis,~85%,true,false,surrogate,ig_enhancer_hijack,high,PMID:3929080,follicular lymphoma; t(14;18)(q32;q21); IGH enhancer drives BCL2 anti-apoptotic overexpression
 BL,MYC-IGH,IGH,Ig locus,MYC,,~80%,true,false,surrogate,ig_enhancer_hijack,high,PMID:6262918,Burkitt lymphoma; t(8;14)(q24;q32); IGH enhancer drives MYC
 BL,MYC-IGK,IGK,Ig locus,MYC,,minority,true,true,surrogate,ig_enhancer_hijack,high,PMID:6939711,variant t(2;8); IGK light-chain enhancer drives MYC
