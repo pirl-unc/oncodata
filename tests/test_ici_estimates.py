@@ -296,6 +296,7 @@ def test_audited_anchor_values_match_primary_orr():
         ("MDS", "PD-1"): 0.0,  # KEYNOTE-013: no CR/PR by IWG criteria
         ("PAAD", "PD-1"): 0.0,  # KEYNOTE-028 pancreatic cohort: 0/24
         ("SCLC", "PD-1"): 10.0,  # CheckMate 032 nivolumab monotherapy: 10/98
+        ("EPN", "PD-1"): 4.5,  # CheckMate 908 pooled EPN arms: 1/22
     }
     for cell, expected in audited.items():
         code, regimen = cell
@@ -382,6 +383,43 @@ def test_sclc_checkmate032_source_endpoints():
     assert float(combo_hi_nivo["ci_low"]) == 9.0 and float(combo_hi_nivo["ci_high"]) == 31.0
     assert float(combo_hi_nivo["responders"]) == 10
     assert bool(combo_hi_nivo["source_verified"]) is True
+
+
+def test_epn_checkmate908_pooled_orr_counts():
+    est = ici.cancer_ici_response_estimates_df()
+    rows = est[
+        (est["cancer_code"] == "EPN")
+        & (est["regimen"] == "PD-1")
+        & (est["ref"] == "PMID:36808285")
+        & (est["metric"] == "ORR")
+    ]
+
+    primary = rows[rows["role"] == "primary"]
+    assert len(primary) == 1
+    primary = primary.iloc[0]
+    assert primary["drug"] == "nivolumab +/- ipilimumab"
+    assert float(primary["source_n"]) == 22
+    assert float(primary["metric_n"]) == 22
+    assert float(primary["responders"]) == 1
+    assert float(primary["value"]) == 4.5
+    assert bool(primary["source_verified"]) is True
+    assert primary["value_basis"] == "reported"
+    assert _num(primary["ci_low"]) is None and _num(primary["ci_high"]) is None
+
+    combo = rows[rows["role"] == "alternate"]
+    assert len(combo) == 1
+    combo = combo.iloc[0]
+    assert float(combo["metric_n"]) == 10
+    assert float(combo["responders"]) == 0
+    assert combo["value_basis"] == "reported_context"
+
+    pooled = ici.pooled_ici_response("EPN", regimen="PD-1", metric="ORR", verified_only=False)
+    assert pooled["responders_total"] == 1
+    assert pooled["n_total"] == 22
+    assert pooled["n_pooled"] == 1
+    assert pooled["n_studies"] == 1
+    assert pooled["pooled_pct"] == 4.5
+    assert pooled["refs"] == ["PMID:36808285"]
 
 
 def test_sarc028_expansion_source_endpoints_and_pools():

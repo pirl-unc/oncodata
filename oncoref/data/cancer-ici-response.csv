@@ -21,7 +21,7 @@ COAD_MSS,PD-1,0.0,pembrolizumab,KEYNOTE-016,,NCT01876511,MSS,PMID:26028255,high,
 CTCL,PD-1,38.0,pembrolizumab,CITN-10,,NCT02243579,mycosis fungoides / Sezary,PMID:31532724,high,ORR 38% (9/24); 2 CR + 7 PR; durable
 DIPG,PD-1,0.0,nivolumab,CheckMate 908,CA209-908,NCT03130959,diffuse midline glioma,PMID:36808285,high,0/45; no objective responses
 DLBC,PD-1,10.0,nivolumab,CheckMate 139,CA209-139,NCT02038933,relapsed/refractory DLBCL post-ASCT,PMID:30620669,medium,auto-HCT-failed ORR 10% (3/34); transplant-ineligible 3%; PMBCL exception (pembro ~41% KEYNOTE-170)
-EPN,PD-1,4.5,nivolumab,CheckMate 908,CA209-908,NCT03130959,relapsed/refractory ependymoma,PMID:36808285,low,"1 PR among 22 ependymoma pts (nivo +/- ipi arms pooled), CheckMate-908; near-zero/immune-cold"
+EPN,PD-1,4.5,nivolumab +/- ipilimumab,CheckMate 908,CA209-908,NCT03130959,relapsed/refractory ependymoma pooled NIVO3 +/- IPI1 arms,PMID:36808285,low,"Pooled CheckMate 908 EPN ORR: 1/22 across NIVO3 (1/12 PR) and NIVO3+IPI1 (0/10) arms; near-zero/immune-cold"
 ESCA,PD-1,18.0,nivolumab,ATTRACTION-3,ONO-4538-24,NCT02569242,pretreated; esophageal SCC,PMID:31582355,medium,nivo ~19%; KEYNOTE-181 ESCC subgroup ~17%
 ESCA,PD-1+CTLA-4,28,nivolumab+ipilimumab,CheckMate 648,CA209-648,NCT03143153,1L advanced ESCC; all-comers,PMID:35108470,high,"nivo+ipi all-comers ORR 28% (PD-L1>=1% 35%), CheckMate-648 (Doki 2022); 27% was the chemo control arm"
 FL,PD-1,4.0,nivolumab,CheckMate 140,,NCT02038946,relapsed/refractory follicular,DOI:10.1182/blood.2019004753,high,ORR 4% (4/92); checkpoint monotherapy largely inactive
