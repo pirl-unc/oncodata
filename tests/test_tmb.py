@@ -7,6 +7,17 @@
 from oncoref import cancer_types, tmb
 
 
+def test_tmb_reference_ids_use_prefixed_pmid_or_doi():
+    df = tmb.cancer_tmb_df()
+    for ref in df["pmid_doi"]:
+        if ref is None or str(ref).strip().lower() in {"", "nan", "none"}:
+            continue
+        parts = [p.strip() for p in str(ref).split(";") if p.strip()]
+        assert parts
+        for part in parts:
+            assert part.startswith(("PMID:", "DOI:")), part
+
+
 def test_tmb_map_nonempty_floats():
     mapping = tmb.cancer_tmb()
     assert mapping

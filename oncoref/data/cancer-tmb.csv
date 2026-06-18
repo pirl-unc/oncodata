@@ -41,14 +41,14 @@ SARC_OS,1.2,,Grobner 2018,PMID:29489754,medium,Osteosarcoma pediatric WGS ~1.2; 
 SARC_EWS,0.6,,Grobner 2018,PMID:29489754,high,Ewing sarcoma ~0.6; EWSR1-FLI1 fusion-driven; very few SNVs.
 SARC_RMS_ERMS,0.8,,Grobner 2018,PMID:29489754,low,Embryonal RMS; low pediatric TMB; RAS-pathway; subtype median approximate.
 SARC_RMS_ARMS,0.4,,Grobner 2018,PMID:29489754,low,Alveolar RMS; PAX3/7-FOXO1 fusion-driven; very low SNV burden; approximate.
-SARC_CHON,0.9,,Meijer 2025,PMC11949235,low,Chondrosarcoma; low TMB; IDH1/2-driven.
-SARC_CHOR,0.53,,Chordoma WGS,PMC11172617,medium,Chordoma skull-base WGS; brachyury-driven; rare MMR cases hypermutate.
+SARC_CHON,0.9,,Meijer 2025,PMID:40117529,low,Chondrosarcoma; low TMB; IDH1/2-driven.
+SARC_CHOR,0.53,,Chordoma WGS,PMID:38892063,medium,Chordoma skull-base WGS; brachyury-driven; rare MMR cases hypermutate.
 NBL,0.6,,Grobner 2018,PMID:29489754,high,Neuroblastoma ~0.6; relapse higher.
 WILMS,0.2,,Grobner 2018,PMID:29489754,low,Wilms tumor; very low pediatric TMB; per-entity median approximate.
 RT,0.1,,Lawrence 2013,PMID:23770567,medium,Rhabdoid tumor ~0.1; SMARCB1-driven near-silent genome.
 ATRT,0.2,,Grobner 2018,PMID:29489754,medium,AT/RT; lowest-mutation pediatric brain tumor; SMARCB1/SMARCA4-driven.
 MBL,0.3,,Lawrence 2013,PMID:23770567,high,Medulloblastoma ~0.3; rare germline-MMR/POLE hypermutant cases.
-RB,0.085,,Retinoblastoma WGS,PMC7918943,medium,Retinoblastoma ~0.085 substitutions/Mb; RB1-loss driven near-silent.
+RB,0.085,,Retinoblastoma WGS,PMID:33670346,medium,Retinoblastoma ~0.085 substitutions/Mb; RB1-loss driven near-silent.
 HEPB,0.02,,Grobner 2018,PMID:29489754,medium,Hepatoblastoma; lowest pediatric TMB; CTNNB1-driven.
 MM,1.6,,Lawrence 2013,PMID:23770567,high,Multiple myeloma WES median ~1.6; increases at relapse.
 CLL,0.6,,Lawrence 2013,PMID:23770567,high,CLL WES median ~0.6; low.
@@ -58,16 +58,16 @@ HL,2.0,,Liang 2019,PMID:30108156,low,Hodgkin; panel TMB inflated vs WES; approxi
 BL,2.0,,Love 2012,PMID:23143597,medium,Burkitt; AID/MYC-driven moderate burden; ~2 approximate WES.
 B_ALL,0.3,,Grobner 2018,PMID:29489754,low,B-ALL; very low pediatric TMB; CMMRD/relapse cases far higher.
 T_ALL,0.5,,Grobner 2018,PMID:29489754,low,T-ALL; low; slightly higher than B-ALL; approximate.
-MDS,0.3,,MDS genomics review,PMC3897298,medium,MDS ~9 somatic mutations/exome; rises with IPSS risk.
+MDS,0.3,,MDS genomics review,PMID:23290440,medium,MDS ~9 somatic mutations/exome; rises with IPSS risk.
 MPN,,,,,none,Myeloproliferative neoplasm; driver-defined (JAK2/CALR/MPL); no published per-Mb median.
 CML,,,,,none,Chronic myeloid leukemia; BCR-ABL1-defined; very few additional mutations in chronic phase.
 CTCL,3.0,,Park 2021,PMID:33574607,low,CTCL/mycosis fungoides; UV-signature; stage-dependent; advanced much higher.
 NET_PANCREAS,1.9,,Backman 2021,PMID:34326338,medium,Pancreatic NET well-diff median ~1.9 (vs NEC ~5.0); low.
 SCLC,8.6,,George 2015,PMID:26168399,high,Small cell lung; high ~8.6; smoking signature.
 NEC_MERKEL,5.3,,Knepper 2019,PMID:31399473,medium,Merkel cell carcinoma median ~5.3; bimodal MCPyV-neg(UV) high vs MCPyV-pos low.
-MTC,1.0,148,Romei 2019,PMC6817656,low,"Sporadic medullary thyroid; single-driver RET/RAS; ~1 mut/Mb inferred from panel (148 cases, 89% single-mutation)."
+MTC,1.0,148,Romei 2019,PMID:31605946,low,"Sporadic medullary thyroid; single-driver RET/RAS; ~1 mut/Mb inferred from panel (148 cases, 89% single-mutation)."
 ADCC,0.31,,Ho 2013,PMID:23685749,high,Adenoid cystic carcinoma ~0.31; MYB-NFIB fusion-driven; very low.
-NPC,0.95,,Nasopharyngeal WES,PMC9498130,medium,Nasopharyngeal carcinoma median ~0.95-1.0; EBV-driven low SNV burden.
+NPC,0.95,,Nasopharyngeal WES,PMID:36135044,medium,Nasopharyngeal carcinoma median ~0.95-1.0; EBV-driven low SNV burden.
 NUTM,1.0,,Stathis 2019,PMID:31180909,high,NUTM1 fusion sole driver; very low TMB (range 0-16).
 BRCA_Basal,1.8,,TCGA-Breast;Barroso-Sousa 2020,PMID:23000897;PMID:31504112,low,TNBC/basal-like: highest TMB among breast subtypes
 BRCA_HER2,1.6,,TCGA-Breast;Barroso-Sousa 2020,PMID:23000897;PMID:31504112,low,HER2-enriched: elevated vs luminal
