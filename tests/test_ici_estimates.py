@@ -217,7 +217,11 @@ def test_estimates_internal_consistency():
         m = str(r["metric"]).upper()
         tag = f"{r['cancer_code']}/{r['regimen']}/{m}/{r['role']}"
         assert r["role"] in ("primary", "alternate"), f"{tag}: bad role"
-        assert r["value_basis"] in ("reported", "derived_blend"), f"{tag}: bad value_basis"
+        assert r["value_basis"] in (
+            "reported",
+            "derived_blend",
+            "reported_context",
+        ), f"{tag}: bad value_basis"
         ref = r["ref"]
         if isinstance(ref, str) and ref.strip():
             assert ref.startswith(("PMID:", "DOI:", "NCT")), f"{tag}: bad ref {ref!r}"
@@ -350,6 +354,81 @@ def test_sclc_checkmate032_source_endpoints():
     assert float(combo_hi_nivo["ci_low"]) == 9.0 and float(combo_hi_nivo["ci_high"]) == 31.0
     assert float(combo_hi_nivo["responders"]) == 10
     assert bool(combo_hi_nivo["source_verified"]) is True
+
+
+def test_sarc028_expansion_source_endpoints_and_pools():
+    est = ici.cancer_ici_response_estimates_df()
+    doi = "DOI:10.1200/JCO.2019.37.15_suppl.11015"
+
+    def row(code, metric, role="primary"):
+        m = est[
+            (est["cancer_code"] == code)
+            & (est["regimen"] == "PD-1")
+            & (est["role"] == role)
+            & (est["metric"] == metric)
+            & (est["ref"] == doi)
+        ]
+        assert len(m) == 1
+        return m.iloc[0]
+
+    ddlps_orr = row("SARC_DDLPS", "ORR")
+    assert float(ddlps_orr["source_n"]) == 40
+    assert float(ddlps_orr["value"]) == 10.0
+    assert float(ddlps_orr["metric_n"]) == 39 and float(ddlps_orr["responders"]) == 4
+    assert bool(ddlps_orr["source_verified"]) is True
+
+    ddlps_pfs = row("SARC_DDLPS", "PFS")
+    assert float(ddlps_pfs["value"]) == 2.0
+    assert float(ddlps_pfs["ci_low"]) == 2.0 and float(ddlps_pfs["ci_high"]) == 4.0
+    ddlps_pfs_rate = row("SARC_DDLPS", "PFS_RATE")
+    assert float(ddlps_pfs_rate["value"]) == 44.0
+    assert float(ddlps_pfs_rate["ci_low"]) == 28.0 and float(ddlps_pfs_rate["ci_high"]) == 60.0
+    ddlps_os = row("SARC_DDLPS", "OS")
+    assert float(ddlps_os["value"]) == 13.0 and float(ddlps_os["ci_low"]) == 8.0
+
+    ups_orr = row("SARC_UPS", "ORR")
+    assert float(ups_orr["source_n"]) == 40
+    assert float(ups_orr["value"]) == 23.0
+    assert float(ups_orr["metric_n"]) == 40 and float(ups_orr["responders"]) == 9
+    ups_crr = row("SARC_UPS", "CRR")
+    assert float(ups_crr["value"]) == 5.0
+    assert float(ups_crr["metric_n"]) == 40 and float(ups_crr["responders"]) == 2
+    ups_pfs = row("SARC_UPS", "PFS")
+    assert float(ups_pfs["value"]) == 3.0
+    assert float(ups_pfs["ci_low"]) == 2.0 and float(ups_pfs["ci_high"]) == 5.0
+    ups_pfs_rate = row("SARC_UPS", "PFS_RATE")
+    assert float(ups_pfs_rate["value"]) == 50.0
+    assert float(ups_pfs_rate["ci_low"]) == 35.0 and float(ups_pfs_rate["ci_high"]) == 65.0
+    ups_os = row("SARC_UPS", "OS")
+    assert float(ups_os["value"]) == 12.0
+    assert float(ups_os["ci_low"]) == 7.0 and float(ups_os["ci_high"]) == 34.0
+
+    for code, responders, n, pooled in (
+        ("SARC_DDLPS", 4, 39, 10.3),
+        ("SARC_UPS", 9, 40, 22.5),
+    ):
+        pooled_orr = ici.pooled_ici_response(
+            code,
+            regimen="PD-1",
+            metric="ORR",
+            verified_only=False,
+        )
+        assert pooled_orr["responders_total"] == responders
+        assert pooled_orr["n_total"] == n
+        assert pooled_orr["n_pooled"] == 1
+        assert pooled_orr["pooled_pct"] == pooled
+        assert pooled_orr["refs"] == [doi]
+        assert all("context" not in str(s["setting"]).lower() for s in pooled_orr["sources"])
+        assert all("comparator" not in str(s["setting"]).lower() for s in pooled_orr["sources"])
+        assert all("initial" not in str(s["setting"]).lower() for s in pooled_orr["sources"])
+
+    context = est[
+        (est["cancer_code"].isin(["SARC_DDLPS", "SARC_UPS"]))
+        & (est["regimen"] == "PD-1")
+        & (est["role"] == "alternate")
+        & (est["metric"] == "ORR")
+    ]
+    assert set(context["value_basis"]) == {"reported_context"}
 
 
 def test_pooled_result_contract():

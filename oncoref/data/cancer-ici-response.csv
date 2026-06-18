@@ -74,7 +74,7 @@ SARC_ANGIO,PD-1+CTLA-4,25.0,nivolumab+ipilimumab,DART/SWOG S1609,S1609 cohort 51
 SARC_ASPS,PD-L1,37.0,atezolizumab,atezolizumab alveolar soft part sarcoma phase 2,ML39345,NCT03141684,advanced ASPS,PMID:37672694,medium,alveolar soft part sarcoma; PD-L1 proxy (no anti-PD-1 monotherapy data); atezolizumab FDA-approved 2022; ORR 19/52
 SARC_CHON,PD-1,20,pembrolizumab,SARC028,,NCT02301039,advanced/metastatic bone cohort,PMID:28988646,low,"chondrosarcoma 1/5 deep PR (>50% reduction), SARC028 bone cohort; tiny n"
 SARC_CHOR,PD-1,12.0,pembrolizumab,AcSe Pembrolizumab,UC-0105/1612,NCT03012620,advanced chordoma,PMID:37429302,medium,chordoma ORR 12% (4/34)
-SARC_DDLPS,PD-1,10,pembrolizumab,SARC028,,NCT02301039,advanced/metastatic 2L+,DOI:10.1200/JCO.2019.37.15_suppl.11015,low,"dedifferentiated LPS, SARC028 expansion cohort n=40 ORR 10% (Burgess 2019); initial n=10 cohort was 20%"
+SARC_DDLPS,PD-1,10,pembrolizumab,SARC028,,NCT02301039,advanced/metastatic 2L+,DOI:10.1200/JCO.2019.37.15_suppl.11015,low,"LPS final expansion ORR 10% (4/39 evaluable; 40 enrolled); PFS 2 mo (95% CI 2-4); initial 2/10 cohort overlaps and is context only"
 SARC_DSRCT,PD-1,12.5,pembrolizumab,AcSe Pembrolizumab,,NCT03012620,desmoplastic small round cell tumor,PMID:37429302,low,1/8 PR; otherwise immune-cold
 SARC_EPITH,PD-1,16.7,pembrolizumab,AcSe Pembrolizumab,,NCT03012620,advanced epithelioid sarcoma,PMID:37429302,low,1/6 PR; small n; consistent with KEYNOTE-051 single PR
 SARC_EWS,PD-1,0.0,pembrolizumab,SARC028,,NCT02301039,advanced/metastatic bone cohort,PMID:28988646,low,Ewing sarcoma 0/13; immune-cold
@@ -84,7 +84,7 @@ SARC_LMS,PD-1,0.0,pembrolizumab,SARC028,,NCT02301039,advanced/metastatic 2L+,PMI
 SARC_OS,PD-1,5.0,pembrolizumab,SARC028,,NCT02301039,advanced/metastatic bone cohort,PMID:28988646,low,osteosarcoma 1/22 in the bone cohort
 SARC_SMARCA4,PD-1,25.0,pembrolizumab,AcSe Pembrolizumab,UC-0105/1612,NCT03012620,SMARCA4/SMARCB1-deficient sarcoma,PMID:37429302,medium,ORR 25% (3/12); rhabdoid/SMARCA4-deficient immunogenic despite low TMB
 SARC_SYN,PD-1,10.0,pembrolizumab,SARC028,,NCT02301039,advanced/metastatic 2L+,PMID:28988646,low,synovial sarcoma 1/10; translocation sarcoma; immune-cold
-SARC_UPS,PD-1,23,pembrolizumab,SARC028,,NCT02301039,advanced/metastatic 2L+,DOI:10.1200/JCO.2019.37.15_suppl.11015,medium,"UPS, SARC028 expansion cohort n=40 ORR 23% (Burgess 2019); initial n=10 cohort was 40%; most ICI-responsive STS"
+SARC_UPS,PD-1,23,pembrolizumab,SARC028,,NCT02301039,advanced/metastatic 2L+,DOI:10.1200/JCO.2019.37.15_suppl.11015,medium,"UPS final expansion ORR 23% (9/40; 2 CR + 7 PR); PFS 3 mo (95% CI 2-5); met primary endpoint"
 SCLC,PD-1,10.0,nivolumab,CheckMate 032,CA209-032,NCT01928394,pretreated; all-comers,PMID:27269741,medium,Nivolumab monotherapy ORR 10% (10/98; 95% CI 5-18) in CheckMate 032; combo arms 23%/19%; KEYNOTE-028 PD-L1-selected higher but not representative
 SCLC,PD-1+CTLA-4,23.0,nivolumab+ipilimumab,CheckMate 032,CA209-032,NCT01928394,recurrent >=1 prior,PMID:27269741,high,Antonia 2016 Lancet Oncol; nivo1+ipi3
 SCLC,PD-L1,2.3,atezolizumab,IFCT-1603,,NCT03059667,2L post-platinum,PMID:30664989,high,single-agent anti-PD-L1 essentially inactive in SCLC
