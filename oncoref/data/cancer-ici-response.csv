@@ -85,7 +85,7 @@ SARC_OS,PD-1,5.0,pembrolizumab,SARC028,,NCT02301039,advanced/metastatic bone coh
 SARC_SMARCA4,PD-1,25.0,pembrolizumab,AcSe Pembrolizumab,UC-0105/1612,NCT03012620,SMARCA4/SMARCB1-deficient sarcoma,PMID:37429302,medium,ORR 25% (3/12); rhabdoid/SMARCA4-deficient immunogenic despite low TMB
 SARC_SYN,PD-1,10.0,pembrolizumab,SARC028,,NCT02301039,advanced/metastatic 2L+,PMID:28988646,low,synovial sarcoma 1/10; translocation sarcoma; immune-cold
 SARC_UPS,PD-1,23,pembrolizumab,SARC028,,NCT02301039,advanced/metastatic 2L+,DOI:10.1200/JCO.2019.37.15_suppl.11015,medium,"UPS, SARC028 expansion cohort n=40 ORR 23% (Burgess 2019); initial n=10 cohort was 40%; most ICI-responsive STS"
-SCLC,PD-1,13.0,nivolumab,CheckMate 032,CA209-032,NCT01928394,pretreated; all-comers,PMID:27269741,medium,~10-19%; nivo mono ~10%; KEYNOTE-028 PD-L1-selected was higher (~33%) but not representative
+SCLC,PD-1,10.0,nivolumab,CheckMate 032,CA209-032,NCT01928394,pretreated; all-comers,PMID:27269741,medium,Nivolumab monotherapy ORR 10% (10/98; 95% CI 5-18) in CheckMate 032; combo arms 23%/19%; KEYNOTE-028 PD-L1-selected higher but not representative
 SCLC,PD-1+CTLA-4,23.0,nivolumab+ipilimumab,CheckMate 032,CA209-032,NCT01928394,recurrent >=1 prior,PMID:27269741,high,Antonia 2016 Lancet Oncol; nivo1+ipi3
 SCLC,PD-L1,2.3,atezolizumab,IFCT-1603,,NCT03059667,2L post-platinum,PMID:30664989,high,single-agent anti-PD-L1 essentially inactive in SCLC
 SKCM,PD-1,42.0,nivolumab,CheckMate 067,CA209-067,NCT01844505,first-line advanced; nivo monotherapy arm,PMID:28889792,high,Nivo mono ~42-45% (CheckMate-067); pembro KEYNOTE-006 primary 33-37% / longer-FU ~42% (PMID:25891173); aPD1 monotherapy ~40-45% in melanoma

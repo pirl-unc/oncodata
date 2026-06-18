@@ -15,7 +15,7 @@ CESC,15.0,pembrolizumab,KEYNOTE-158,MK-3475-158,NCT02628067,pretreated; PD-L1+ (
 HL,71.0,nivolumab,CheckMate 205,CA209-205,NCT02181738,relapsed/refractory post-ASCT,PMID:29584546,high,Very high responder; KEYNOTE-087 pembro ~69%,PD-1
 NEC_MERKEL,56.0,pembrolizumab,KEYNOTE-017,CITN-09,NCT02267603,first-line advanced; all-comers,PMID:30726175,high,Very high responder; CR ~24%,PD-1
 BRCA_Basal,5.0,pembrolizumab,KEYNOTE-086,MK-3475-086,NCT02447003,pretreated metastatic TNBC; all-comers,PMID:30475950,medium,Cohort A (pretreated) ~5%; PD-L1+ untreated cohort B ~21%,PD-1
-SCLC,13.0,nivolumab,CheckMate 032,CA209-032,NCT01928394,pretreated; all-comers,PMID:27269741,medium,~10-19%; nivo mono ~10%; KEYNOTE-028 PD-L1-selected was higher (~33%) but not representative,PD-1
+SCLC,10.0,nivolumab,CheckMate 032,CA209-032,NCT01928394,pretreated; all-comers,PMID:27269741,medium,Nivolumab monotherapy ORR 10% (10/98; 95% CI 5-18) in CheckMate 032; combo arms 23%/19%; KEYNOTE-028 PD-L1-selected higher but not representative,PD-1
 MESO,10.0,pembrolizumab,KEYNOTE-158,MK-3475-158,NCT02628067,pretreated; all-comers,PMID:33836153,low,Reported ~8-20% across studies,PD-1
 NPC,25.0,pembrolizumab,KEYNOTE-028,MK-3475-028,NCT02054806,pretreated; PD-L1+ selected,PMID:28837405,medium,KN-028 NPC cohort ~26%,PD-1
 PRAD,4.0,pembrolizumab,KEYNOTE-199,MK-3475-199,NCT02787005,pretreated mCRPC,PMID:31774688,high,Near-zero anchor; ~5% PD-L1+ / ~3% PD-L1-,PD-1
