@@ -263,6 +263,7 @@ def test_audited_anchor_values_match_primary_orr():
         ("LIHC", "PD-1"): 20.0,  # CheckMate 040 dose-expansion ORR, PMID:28434648
         ("MDS", "PD-1"): 0.0,  # KEYNOTE-013: no CR/PR by IWG criteria
         ("PAAD", "PD-1"): 0.0,  # KEYNOTE-028 pancreatic cohort: 0/24
+        ("SCLC", "PD-1"): 10.0,  # CheckMate 032 nivolumab monotherapy: 10/98
     }
     for cell, expected in audited.items():
         code, regimen = cell
@@ -313,6 +314,42 @@ def test_paad_keynote028_source_endpoints():
     assert os["ref"] == "NCT02054806"
     assert float(os["value"]) == 3.9
     assert float(os["ci_low"]) == 2.8 and float(os["ci_high"]) == 5.5
+
+
+def test_sclc_checkmate032_source_endpoints():
+    est = ici.cancer_ici_response_estimates_df()
+    rows = est[(est["cancer_code"] == "SCLC") & (est["ref"] == "PMID:27269741")]
+
+    def row(regimen, role, drug, metric, metric_n=None):
+        m = rows[
+            (rows["regimen"] == regimen)
+            & (rows["role"] == role)
+            & (rows["drug"] == drug)
+            & (rows["metric"] == metric)
+        ]
+        if metric_n is not None:
+            m = m[m["metric_n"] == metric_n]
+        assert len(m) == 1
+        return m.iloc[0]
+
+    mono = row("PD-1", "primary", "nivolumab", "ORR")
+    assert mono["trial_alias"] == "CA209-032"
+    assert mono["trial_nct"] == "NCT01928394"
+    assert float(mono["value"]) == 10.0
+    assert float(mono["ci_low"]) == 5.0 and float(mono["ci_high"]) == 18.0
+    assert float(mono["metric_n"]) == 98 and float(mono["responders"]) == 10
+
+    combo_hi_ipi = row("PD-1", "alternate", "nivolumab + ipilimumab", "ORR", 61)
+    assert float(combo_hi_ipi["value"]) == 23.0
+    assert float(combo_hi_ipi["ci_low"]) == 13.0 and float(combo_hi_ipi["ci_high"]) == 36.0
+    assert float(combo_hi_ipi["metric_n"]) == 61 and float(combo_hi_ipi["responders"]) == 14
+    assert bool(combo_hi_ipi["source_verified"]) is True
+
+    combo_hi_nivo = row("PD-1", "alternate", "nivolumab + ipilimumab", "ORR", 54)
+    assert float(combo_hi_nivo["value"]) == 19.0
+    assert float(combo_hi_nivo["ci_low"]) == 9.0 and float(combo_hi_nivo["ci_high"]) == 31.0
+    assert float(combo_hi_nivo["responders"]) == 10
+    assert bool(combo_hi_nivo["source_verified"]) is True
 
 
 def test_pooled_result_contract():
