@@ -9,7 +9,7 @@ BLCA,28.6,pembrolizumab,KEYNOTE-052,MK-3475-052,NCT02335424,first-line cisplatin
 COAD,5.0,pembrolizumab,KEYNOTE-177,MK-3475-177,NCT02563002,all-comers (response is MSI-dependent),PMID:33264544,medium,All-comer ~5%; only the ~13% MSI-H/dMMR respond (MSI-H ~45%; MSS ~0%),PD-1
 READ,2,pembrolizumab,KEYNOTE-177,MK-3475-177,NCT02563002,all-comers (response is MSI-dependent),PMID:33264544,medium,derived all-comer = ~0.045*43.8 = ~2%; rectal dMMR prevalence ~3-5% (much lower than colon ~13%); KEYNOTE-177 MSI-H ORR 43.8%; subtypes in READ_MSI/READ_MSS,PD-1
 STAD,12.0,pembrolizumab,KEYNOTE-059,MK-3475-059,NCT02335411,third-line; all-comers,PMID:29543932,medium,CPS>=1 ~16%; monotherapy indication later withdrawn,PD-1
-LIHC,17.0,nivolumab,CheckMate 040,CA209-040,NCT01658878,sorafenib-naive & -experienced,PMID:28434648,medium,Reported 15-20% across dose-escalation/expansion,PD-1
+LIHC,20.0,nivolumab,CheckMate 040,CA209-040,NCT01658878,sorafenib-naive & -experienced,PMID:28434648,medium,Dose-expansion ORR 20% (42/214); dose-escalation ORR 15% (7/48),PD-1
 ESCA,18.0,nivolumab,ATTRACTION-3,ONO-4538-24,NCT02569242,pretreated; esophageal SCC,PMID:31582355,medium,nivo ~19%; KEYNOTE-181 ESCC subgroup ~17%,PD-1
 CESC,15.0,pembrolizumab,KEYNOTE-158,MK-3475-158,NCT02628067,pretreated; PD-L1+ (CPS>=1) selected,PMID:30943124,high,All responders were PD-L1+; all-comer ~12%,PD-1
 HL,71.0,nivolumab,CheckMate 205,CA209-205,NCT02181738,relapsed/refractory post-ASCT,PMID:29584546,high,Very high responder; KEYNOTE-087 pembro ~69%,PD-1

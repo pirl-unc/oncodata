@@ -37,7 +37,7 @@ KIRC,PD-1,25.0,nivolumab,CheckMate 025,CA209-025,NCT01668784,pretreated (post-VE
 KIRC,PD-1+CTLA-4,42.0,nivolumab+ipilimumab,CheckMate 214,CA209-214,NCT02231749,1L IMDC intermediate/poor-risk,PMID:29562145,high,Motzer 2018; intermediate/poor-risk co-primary (not ITT); CR 9%
 KIRC,PD-L1,25.0,atezolizumab,IMmotion150,WO29074,NCT01984242,1L metastatic mono arm,PMID:29867230,high,mono missed PFS vs sunitinib; combo arm 32%
 KIRP,PD-1,25.0,pembrolizumab,KEYNOTE-427 cohort B,MK-3475-427,NCT02853344,papillary RCC 1L,PMID:33529058,medium,papillary nccRCC ORR 25.4%
-LIHC,PD-1,17.0,nivolumab,CheckMate 040,CA209-040,NCT01658878,sorafenib-naive & -experienced,PMID:28434648,medium,Reported 15-20% across dose-escalation/expansion
+LIHC,PD-1,20.0,nivolumab,CheckMate 040,CA209-040,NCT01658878,sorafenib-naive & -experienced,PMID:28434648,medium,Dose-expansion ORR 20% (42/214); dose-escalation ORR 15% (7/48)
 LIHC,PD-1+CTLA-4,32.0,nivolumab+ipilimumab,CheckMate 040,CA209-040,NCT01658878,sorafenib-experienced,PMID:33001135,high,Yau 2020; arm A approved dose
 LIHC,PD-L1,17.0,durvalumab,HIMALAYA,D419CC00002,NCT03298451,1L unresectable mono arm,DOI:10.1056/EVIDoa2100070,medium,mono OS non-inferior to sorafenib; STRIDE combo 20.1%
 LUAD,PD-1,19.0,nivolumab,CheckMate 057,CA209-057,NCT01673867,pretreated non-squamous; PD-L1 unselected (all-comer),PMID:26412456,high,All-comer mono ORR 19.2% (Borghaei 2015); PD-L1>=1% ~31% / >=50% ~36%; KEYNOTE-024 PD-L1 TPS>=50% 1L was 45% (PMID:27718847) — population-matched to all-comer TMB/expression per audit
