@@ -58,6 +58,20 @@ def resolve_ensembl_id(gene_id: str) -> str:
 
 
 @lru_cache(maxsize=1)
+def ensembl_id_alias_symbols() -> dict[str, str]:
+    """``{primary_contig_gene_id (unversioned): gene_symbol}`` — the curated canonical
+    symbol for a migrated/consolidated locus, from the alias table (rows with no symbol,
+    e.g. archive replacements, are skipped)."""
+    df = get_data("ensembl-id-aliases", copy=False)
+    out: dict[str, str] = {}
+    for primary, symbol in zip(df["primary_contig_id"], df["symbol"]):
+        sym = str(symbol).strip()
+        if sym and sym.lower() != "nan":
+            out[_unversioned(str(primary))] = sym
+    return out
+
+
+@lru_cache(maxsize=1)
 def symbol_synonyms() -> dict[str, str]:
     """``{ALIAS (uppercased): official_symbol}`` from NCBI gene synonyms."""
     df = get_data("ncbi-symbol-synonyms", copy=False)

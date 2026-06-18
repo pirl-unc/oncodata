@@ -674,6 +674,29 @@ def test_pooled_cohort_stats_availability_and_heterogeneity(monkeypatch):
     assert out.loc["E1", "max"] == 30.0
 
 
+def test_pooled_cohort_stats_merges_alt_haplotype_aliases(monkeypatch):
+    # #465-class fix, consistent with representative_cohort_samples: when one cohort
+    # carries an alt-haplotype/archived id and another carries its primary-contig id,
+    # pooling must collapse them onto ONE canonical gene (resolved through the shipped
+    # ensembl-id-aliases migration map), not leave two mutually-disjoint sparse rows.
+    from oncoref.gene_ids import ensembl_id_aliases
+
+    alt, primary = next((a, p) for a, p in ensembl_id_aliases().items() if a != p)
+    a = pd.DataFrame({"Ensembl_Gene_ID": [alt], "Symbol": ["G"], "s1": [10.0]})
+    b = pd.DataFrame({"Ensembl_Gene_ID": [primary], "Symbol": ["G"], "x1": [20.0]})
+    frames = {"A": a, "B": b}
+    monkeypatch.setattr(expression, "per_sample_expression", lambda code, **k: frames[code].copy())
+    monkeypatch.setattr(expression, "_resolve_cancer_types", lambda ct, **k: list(ct))
+
+    out = expression.pooled_cohort_stats(["A", "B"]).set_index("Ensembl_Gene_ID")
+    assert list(out.index) == [primary]  # one canonical row, the primary id
+    assert alt not in set(out.index)
+    # both cohorts pooled onto it (mean of the two single-sample cohorts)
+    assert out.loc[primary, "n_cohorts"] == 2
+    assert out.loc[primary, "n_samples"] == 2
+    assert out.loc[primary, "mean"] == pytest.approx(15.0)
+
+
 def test_pooled_cohort_stats_expands_aggregate_cohorts(monkeypatch):
     # An aggregate code (CRC = COAD + READ) pools its member subtypes, not the
     # rollup label (which has no per-sample matrix of its own).

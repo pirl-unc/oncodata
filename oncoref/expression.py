@@ -59,7 +59,7 @@ from __future__ import annotations
 
 import os
 import warnings
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
@@ -72,7 +72,7 @@ from . import data_bundle, source_matrices
 from .cancer_types import cohort_aggregates, resolve_cancer_type
 from .expression_builders import WITHIN_SAMPLE_THRESHOLDS as _WITHIN_SAMPLE_THRESHOLD_COLS
 from .expression_engine import id_columns, sample_columns
-from .gene_ids import resolve_ensembl_id, unversioned
+from .gene_ids import ensembl_id_alias_symbols, resolve_ensembl_id, unversioned
 from .load_dataset import _BUNDLED_DATA_DIR, _register_derived_cache, get_data
 from .normalization import clean_tpm
 
@@ -484,6 +484,29 @@ def cohort_stats(
     return out
 
 
+def _canonicalize_gene_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Re-key one cohort's rows onto the **canonical** gene id so a locus can't be
+    fragmented across cohorts (the pirlygenes#465-class bug).
+
+    Each ``Ensembl_Gene_ID`` is unversioned *and* migration-resolved through the shipped
+    ensembl-id-aliases map (:func:`resolve_ensembl_id`), so an alt-haplotype / archived id
+    collapses onto its primary-contig id. When a cohort carries BOTH an alt id and its
+    primary (they now share a canonical id), the **primary-contig row is kept
+    deterministically** — the row whose unversioned id already equals its canonical id is
+    sorted first, then one row per canonical id survives. Returns ``df`` with
+    ``Ensembl_Gene_ID`` rewritten and at most one row per gene; the fast path (no
+    collisions) only rewrites the column."""
+    canon = df["Ensembl_Gene_ID"].astype(str).map(resolve_ensembl_id)
+    if not canon.duplicated().any():
+        return df.assign(Ensembl_Gene_ID=canon.to_numpy())
+    orig = df["Ensembl_Gene_ID"].astype(str).map(unversioned)
+    is_primary = orig.to_numpy() == canon.to_numpy()
+    out = df.assign(Ensembl_Gene_ID=canon.to_numpy(), _primary=is_primary)
+    out = out.sort_values("_primary", ascending=False, kind="stable")
+    out = out.groupby("Ensembl_Gene_ID", as_index=False, sort=False).first()
+    return out.drop(columns="_primary")
+
+
 def representative_cohort_samples(
     cancer_types: str | Iterable[str] | None = None,
     *,
@@ -534,7 +557,7 @@ def representative_cohort_samples(
     # resolve one canonical symbol per gene afterwards.
     wide_parts = []
     long_parts = []
-    symbols: dict[str, list[str]] = {}  # canonical id -> symbols seen (for the canonical name)
+    symbols: dict[str, Counter] = defaultdict(Counter)  # canonical id -> symbol counts
     for code in codes:
         shard = pd.read_parquet(root / f"{code}.parquet")
         rep_cols = sample_columns(shard)
@@ -542,14 +565,12 @@ def representative_cohort_samples(
             rep_cols = rep_cols[:k]
         if normalize == "tpm_clean_log1p":
             shard[rep_cols] = np.log1p(shard[rep_cols].to_numpy(dtype=float))
-        gid = shard["Ensembl_Gene_ID"].astype(str).map(resolve_ensembl_id)
-        # a cohort that carries BOTH an alt id and its primary collapses to one row here
-        if gid.duplicated().any():
-            shard = shard.assign(_gid=gid.to_numpy())
-            shard = shard.groupby("_gid", as_index=False).first()
-            gid = shard["_gid"].astype(str)
+        # Key on the canonical gene id (unversion + migration-resolve), collapsing an
+        # alt-haplotype row onto its primary-contig sibling within the cohort first.
+        shard = _canonicalize_gene_rows(shard)
+        gid = shard["Ensembl_Gene_ID"].astype(str)
         for g, s in zip(gid, shard["Symbol"].astype(str)):
-            symbols.setdefault(g, []).append(s)
+            symbols[g][s] += 1
         mat = shard[rep_cols].set_axis(gid.to_numpy(), axis=0)
         if format == "wide":
             wide_parts.append(mat)
@@ -560,11 +581,17 @@ def representative_cohort_samples(
             melted.insert(1, "cancer_code", code)
             long_parts.append(melted)
 
+    alias_symbols = ensembl_id_alias_symbols()
+
     def _canonical_symbol(gid: str) -> str:
-        # Prefer a real name over the raw-ENSG backfill that release-unaware cohorts carry;
-        # the most common alias wins (deterministic), else the id itself.
-        named = [s for s in symbols.get(gid, []) if s and s != gid]
-        return Counter(named).most_common(1)[0][0] if named else gid
+        # The curated symbol for a migrated locus is authoritative and wins outright;
+        # otherwise prefer a real name over the raw-ENSG backfill that release-unaware
+        # cohorts carry (the most common alias across cohorts, deterministic), else the id.
+        auth = alias_symbols.get(gid)
+        if auth:
+            return auth
+        named = Counter({s: c for s, c in symbols.get(gid, {}).items() if s and s != gid})
+        return named.most_common(1)[0][0] if named else gid
 
     if format == "wide":
         if not wide_parts:
@@ -1051,6 +1078,12 @@ def pooled_cohort_stats(
         df = per_sample_expression(
             code, normalize=normalize, auto_fetch=auto_fetch, proteoform=proteoform, scope=scope
         )
+        if not proteoform:
+            # Pool on the CANONICAL gene id so an alt-haplotype/archived id collapses onto
+            # its primary-contig sibling instead of standing as a separate sparse row (the
+            # #465 fix, consistent with representative_cohort_samples). The proteoform key
+            # space is already release-stable, so it's keyed as-is.
+            df = _canonicalize_gene_rows(df)
         id_cols = id_columns(df)
         samples = sample_columns(df)
         if not samples:
