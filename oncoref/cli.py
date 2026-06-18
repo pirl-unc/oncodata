@@ -290,6 +290,10 @@ def _cmd_plot(args: argparse.Namespace) -> int:
         "burden-category-bars": plots.burden_category_bars,
         "apd1-response-signature": plots.apd1_response_signature_scatter,
     }
+    # Only pass threshold_tpm when the user explicitly set it, so each plot keeps its own
+    # default (50 TPM for the TPM-based plots, within-sample p95 for the patient heatmap)
+    # rather than being forced onto a single CLI-wide value.
+    tpm = {} if args.threshold_tpm is None else {"threshold_tpm": args.threshold_tpm}
     try:
         if args.which in ("incidence-vs-mortality", "burden-category-bars"):
             kwargs = {"region": args.region}
@@ -298,18 +302,18 @@ def _cmd_plot(args: argparse.Namespace) -> int:
         elif args.which == "cta-expression-heatmap":
             kwargs = {"stat": args.stat}
         elif args.which == "cta-addressable-burden":
-            kwargs = {"source": args.source, "threshold_tpm": args.threshold_tpm}
+            kwargs = {"source": args.source, **tpm}
         elif args.which == "cta-patient-heatmap":
-            kwargs = {"threshold_tpm": args.threshold_tpm}
+            kwargs = {**tpm}
         elif args.which in ("cta-burden-vs-response", "cta-specific-9mer-load"):
-            kwargs = {"against": args.against, "threshold_tpm": args.threshold_tpm}
+            kwargs = {"against": args.against, **tpm}
         elif args.which in ("cta-coverage-curves", "cta-coverage-stacked"):
             if not args.codes:
                 print(f"Error: {args.which} needs --codes", file=sys.stderr)
                 return 1
             kwargs = {
                 "cancer_types": [c.strip() for c in args.codes.split(",")],
-                "threshold_tpm": args.threshold_tpm,
+                **tpm,
             }
         else:
             kwargs = {}
@@ -546,8 +550,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p_plot.add_argument(
         "--threshold-tpm",
         type=float,
-        default=10.0,
-        help="Clean-TPM 'expressed' cut for the per-sample CTA plots",
+        default=None,
+        help=(
+            "Clean-TPM 'expressed' cut for the per-sample CTA plots. Omit to use each "
+            "plot's default (50 TPM, or within-sample p95 for the patient heatmap)."
+        ),
     )
     p_plot.add_argument(
         "--codes",

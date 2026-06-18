@@ -51,10 +51,99 @@ def ensembl_id_aliases() -> dict[str, str]:
 
 
 def resolve_ensembl_id(gene_id: str) -> str:
-    """Map an alt-haplotype Ensembl gene id to its primary-contig id (unversioned);
-    returns the id unchanged if it isn't an alias."""
+    """Map an Ensembl gene id to its canonical primary-assembly id (unversioned),
+    resolving alt-haplotype / patch copies and cross-release ID turnover through the
+    shipped ensembl-id-aliases map; returns the id unchanged if it isn't an alias."""
     key = _unversioned(gene_id)
     return ensembl_id_aliases().get(key, key)
+
+
+def canonical_gene_id(identifier: str, *, source_version: str | None = None) -> str | None:
+    """Map **any** gene identifier into the harmonized canonical ENSG space.
+
+    The single entry point a consumer reaches for when harmonizing arbitrary inputs
+    (oncoref#135): accepts an Ensembl gene id from *any* release/assembly — versioned or
+    not, alt-haplotype, patch, or a retired/old-release id — or an HGNC/NCBI gene
+    **symbol**, and returns the canonical (newest primary-assembly) ENSG, or ``None`` if
+    it can't be resolved.
+
+    - An ``ENSG…`` id is unversioned and run through the alias / cross-release migration
+      map (:func:`resolve_ensembl_id`) — so e.g. GRCh37 ``GGNBP2`` ``ENSG00000005955`` →
+      ``ENSG00000278311``. The id is returned as-is when it's already canonical / unknown.
+    - Anything else is treated as a symbol and resolved via the installed Ensembl
+      releases + NCBI synonyms (lazy import of the genome layer; needs the ``genome``
+      extra). Symbol resolution already returns a canonical primary-assembly id.
+
+    ``source_version`` (e.g. ``"GRCh37"`` / ``"75"``) is accepted for forward
+    compatibility and caller intent; the migration map is release-agnostic today."""
+    s = str(identifier).strip()
+    if not s:
+        return None
+    if s.upper().startswith("ENSG"):
+        return resolve_ensembl_id(s)
+    from .genome import canonical_gene_id_and_name  # lazy: avoids genome/pyensembl dep here
+
+    gid, _ = canonical_gene_id_and_name(s)
+    return gid
+
+
+def canonical_gene_ids(
+    identifiers: list[str], *, source_version: str | None = None
+) -> list[str | None]:
+    """Batch :func:`canonical_gene_id` → one canonical ENSG (or ``None``) per input."""
+    return [canonical_gene_id(x, source_version=source_version) for x in identifiers]
+
+
+def canonical_gene_space() -> pd.DataFrame:
+    """The authoritative **canonical gene-ID space** (oncoref#135 item 4): one row per
+    primary-assembly Ensembl gene — ``ensembl_gene_id``, ``symbol``, ``biotype``,
+    ``seqname``, ``ensembl_release`` — that the alias/migration map resolves *into*.
+    Filter on ``biotype == "protein_coding"`` to drop the large ncRNA/pseudogene tail.
+    Defensive copy."""
+    return get_data("canonical-gene-space").copy()
+
+
+@lru_cache(maxsize=1)
+def _canonical_gene_index() -> dict[str, tuple[str, str]]:
+    """``{ensembl_gene_id (unversioned): (symbol, biotype)}`` over the canonical space."""
+    df = get_data("canonical-gene-space", copy=False)
+    return {
+        _unversioned(str(g)): (str(s), str(b))
+        for g, s, b in zip(df["ensembl_gene_id"], df["symbol"], df["biotype"])
+    }
+
+
+def is_canonical_gene(gene_id: str) -> bool:
+    """Is ``gene_id`` (after alias/migration resolution) a member of the canonical
+    primary-assembly gene space? ``False`` for RefSeq-lift / non-Ensembl / retired-without-
+    successor ids that have no canonical entry."""
+    return resolve_ensembl_id(gene_id) in _canonical_gene_index()
+
+
+def gene_biotype(gene_id: str) -> str | None:
+    """Ensembl biotype (``"protein_coding"``, ``"lncRNA"``, …) of the canonical gene
+    ``gene_id`` resolves to, or ``None`` if it isn't in the canonical space."""
+    hit = _canonical_gene_index().get(resolve_ensembl_id(gene_id))
+    return hit[1] if hit else None
+
+
+def is_protein_coding_gene(gene_id: str) -> bool:
+    """``True`` iff ``gene_id`` resolves to a ``protein_coding`` canonical gene."""
+    return gene_biotype(gene_id) == "protein_coding"
+
+
+@lru_cache(maxsize=1)
+def ensembl_id_alias_symbols() -> dict[str, str]:
+    """``{primary_contig_gene_id (unversioned): gene_symbol}`` — the curated canonical
+    symbol for a migrated/consolidated locus, from the alias table (rows with no symbol,
+    e.g. archive replacements, are skipped)."""
+    df = get_data("ensembl-id-aliases", copy=False)
+    out: dict[str, str] = {}
+    for primary, symbol in zip(df["primary_contig_id"], df["symbol"]):
+        sym = str(symbol).strip()
+        if sym and sym.lower() != "nan":
+            out[_unversioned(str(primary))] = sym
+    return out
 
 
 @lru_cache(maxsize=1)

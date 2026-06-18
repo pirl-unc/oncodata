@@ -248,6 +248,26 @@ def proteoform_key(gene: str, *, scope: str = "cta") -> str:
     return sym if sym is not None else unversioned(gene)
 
 
+def canonical_proteoform_id(gene: str, *, scope: str = "genome") -> str:
+    """The canonical **proteoform** key for a gene, **genome-wide by default**
+    (oncoref#135 item 5) — the protein-level analogue of
+    :func:`oncoref.gene_ids.canonical_gene_id`.
+
+    A gene that uniquely owns its protein keys to its own unversioned ENSG; a gene in an
+    identical-protein group keys to the group's proteoform symbol (``HBA1/2``, ``NY-ESO-1``,
+    ``XAGE1A/B``) — the member ENSGs are summed away. This is :func:`proteoform_key` with
+    the genome scope as the default (``proteoform_key`` defaults to the CTA layer); pass
+    ``scope="cta"`` for the CTA registry."""
+    return proteoform_key(gene, scope=scope)
+
+
+def canonical_proteoform_ids(genes, *, scope: str = "genome") -> dict[str, str]:
+    """Batch :func:`canonical_proteoform_id` → total ``{unversioned ENSG → proteoform key}``
+    (genome-wide by default). The protein-level analogue of
+    :func:`oncoref.gene_ids.canonical_gene_ids`."""
+    return gene_to_proteoform_id(genes, scope=scope)
+
+
 def gene_to_proteoform() -> dict[str, str]:
     """``{member gene ID: proteoform label}`` (Ensembl IDs only) — multi-member
     groups only. For a **total** map (every gene → its class, singletons included)

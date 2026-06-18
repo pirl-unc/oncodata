@@ -59,6 +59,7 @@ from __future__ import annotations
 
 import os
 import warnings
+from collections import Counter, defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
@@ -71,6 +72,7 @@ from . import data_bundle, source_matrices
 from .cancer_types import cohort_aggregates, resolve_cancer_type
 from .expression_builders import WITHIN_SAMPLE_THRESHOLDS as _WITHIN_SAMPLE_THRESHOLD_COLS
 from .expression_engine import id_columns, sample_columns
+from .gene_ids import ensembl_id_alias_symbols, resolve_ensembl_id, unversioned
 from .load_dataset import _BUNDLED_DATA_DIR, _register_derived_cache, get_data
 from .normalization import clean_tpm
 
@@ -482,6 +484,42 @@ def cohort_stats(
     return out
 
 
+def _canonicalize_gene_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Re-key one cohort's rows onto the **canonical** gene id so a locus can't be
+    fragmented across cohorts (the pirlygenes#465-class bug).
+
+    Each ``Ensembl_Gene_ID`` is unversioned *and* migration-resolved through the shipped
+    ensembl-id-aliases map (:func:`resolve_ensembl_id`), so an alt-haplotype / patch /
+    retired id collapses onto its canonical primary-assembly id. When a cohort carries
+    BOTH an alias id and its canonical sibling (a full-assembly quantification annotates
+    the gene on the primary contig *and* its alt-haplotype copy), their per-sample TPMs
+    are **summed** under the canonical id: RNA-seq reads multi-map between the copies, so
+    each row individually under-counts the gene — the same rationale as proteoform
+    summation, one level up (gene rather than protein). A cross-release retired id and its
+    successor never co-occur in one sample, so summing them degenerates to the lone value
+    (a relabel). All-``NaN`` cells stay ``NaN`` (``min_count=1``) so an unmeasured gene is
+    never turned into a measured zero — the canonical symbol is taken from the
+    primary-contig row (sorted first) deterministically. The fast path (no collisions)
+    only rewrites the id column."""
+    canon = df["Ensembl_Gene_ID"].astype(str).map(resolve_ensembl_id)
+    if not canon.duplicated().any():
+        return df.assign(Ensembl_Gene_ID=canon.to_numpy())
+    orig = df["Ensembl_Gene_ID"].astype(str).map(unversioned)
+    is_primary = orig.to_numpy() == canon.to_numpy()
+    df = df.assign(Ensembl_Gene_ID=canon.to_numpy(), _primary=is_primary)
+    df = df.sort_values("_primary", ascending=False, kind="stable").drop(columns="_primary")
+    num_cols = df.select_dtypes("number").columns.tolist()
+    obj_cols = [c for c in df.columns if c != "Ensembl_Gene_ID" and c not in num_cols]
+    grouped = df.groupby("Ensembl_Gene_ID", sort=False)
+    parts = []
+    if obj_cols:  # canonical symbol / id columns: keep the primary-contig row's value
+        parts.append(grouped[obj_cols].first())
+    if num_cols:  # per-sample TPM: SUM alt-haplotype reads into the canonical gene
+        parts.append(grouped[num_cols].sum(min_count=1))
+    out = pd.concat(parts, axis=1).reset_index()
+    return out[list(df.columns)]
+
+
 def representative_cohort_samples(
     cancer_types: str | Iterable[str] | None = None,
     *,
@@ -521,35 +559,72 @@ def representative_cohort_samples(
         requested = _resolve_cancer_types(cancer_types, expand_aggregates=True)
         codes = [c for c in dict.fromkeys(requested) if c in available]
 
-    base = ["Ensembl_Gene_ID", "Symbol"]  # representatives are a gene-level artifact
-    wide = None
+    base = ["Ensembl_Gene_ID", "Symbol"]
+    # Combine cohorts on a CANONICAL gene id only — never the (Ensembl_Gene_ID, Symbol)
+    # pair. Cohorts were quantified against different Ensembl releases, so the same locus
+    # carries a different release-alias symbol per cohort; merging on the pair fragments one
+    # gene into many mutually-disjoint sparse rows (the pirlygenes#465-class bug). We key
+    # each cohort by the canonical gene id — unversioned AND migration-resolved through the
+    # shipped ensembl-id-aliases map (resolve_ensembl_id), so an alt-haplotype/archived id
+    # collapses onto its primary-contig id instead of standing as a separate row — then
+    # resolve one canonical symbol per gene afterwards.
+    wide_parts = []
     long_parts = []
+    symbols: dict[str, Counter] = defaultdict(Counter)  # canonical id -> symbol counts
     for code in codes:
         shard = pd.read_parquet(root / f"{code}.parquet")
         rep_cols = sample_columns(shard)
         if k is not None:
             rep_cols = rep_cols[:k]
+        # Key on the canonical gene id (unversion + migration-resolve), collapsing an
+        # alt-haplotype row onto its primary-contig sibling within the cohort first. The
+        # shard ships in LINEAR clean TPM, so the alt-copy sum happens in linear space;
+        # the log1p transform (if any) is applied AFTER — never sum log-space values
+        # (log1p(a)+log1p(b) != log1p(a+b)), mirroring the proteoform linear-then-log1p
+        # contract in per_sample_expression.
+        shard = _canonicalize_gene_rows(shard)
         if normalize == "tpm_clean_log1p":
             shard[rep_cols] = np.log1p(shard[rep_cols].to_numpy(dtype=float))
+        gid = shard["Ensembl_Gene_ID"].astype(str)
+        for g, s in zip(gid, shard["Symbol"].astype(str)):
+            symbols[g][s] += 1
+        mat = shard[rep_cols].set_axis(gid.to_numpy(), axis=0)
         if format == "wide":
-            part = shard[base + rep_cols]
-            wide = part if wide is None else wide.merge(part, on=base, how="outer")
+            wide_parts.append(mat)
         else:
-            melted = shard[base + rep_cols].melt(
-                id_vars=base, var_name="representative_id", value_name="expression"
+            melted = mat.reset_index(names="Ensembl_Gene_ID").melt(
+                id_vars="Ensembl_Gene_ID", var_name="representative_id", value_name="expression"
             )
-            melted.insert(2, "cancer_code", code)
+            melted.insert(1, "cancer_code", code)
             long_parts.append(melted)
 
+    alias_symbols = ensembl_id_alias_symbols()
+
+    def _canonical_symbol(gid: str) -> str:
+        # The curated symbol for a migrated locus is authoritative and wins outright;
+        # otherwise prefer a real name over the raw-ENSG backfill that release-unaware
+        # cohorts carry (the most common alias across cohorts, deterministic), else the id.
+        auth = alias_symbols.get(gid)
+        if auth:
+            return auth
+        named = Counter({s: c for s, c in symbols.get(gid, {}).items() if s and s != gid})
+        return named.most_common(1)[0][0] if named else gid
+
     if format == "wide":
-        if wide is None:
+        if not wide_parts:
             return pd.DataFrame(columns=base)
-        return wide
+        combined = pd.concat(wide_parts, axis=1, join="outer").sort_index()
+        if combined.index.has_duplicates:  # belt-and-suspenders: one row per gene id
+            combined = combined.groupby(level=0).first()
+        out = combined.reset_index(names="Ensembl_Gene_ID")
+        out.insert(1, "Symbol", out["Ensembl_Gene_ID"].map(_canonical_symbol))
+        return out
 
     if not long_parts:
         cols = [*base, "cancer_code", "representative_id", "expression"]
         return pd.DataFrame(columns=cols)
     long = pd.concat(long_parts, ignore_index=True)
+    long.insert(1, "Symbol", long["Ensembl_Gene_ID"].map(_canonical_symbol))
     if include_provenance:
         prov_path = root / "_provenance.csv"
         if prov_path.exists():
@@ -957,11 +1032,11 @@ def pan_cancer_expression(
     if genes is not None:
         wanted = {genes} if isinstance(genes, str) else set(genes)
         wanted = {str(g) for g in wanted}
-        unversioned = {g.split(".")[0] for g in wanted}
+        wanted_unversioned = {unversioned(g) for g in wanted}
         ids = df["Ensembl_Gene_ID"].astype(str)
         mask = (
             ids.isin(wanted)
-            | ids.str.split(".").str[0].isin(unversioned)
+            | ids.map(unversioned).isin(wanted_unversioned)
             | df["Symbol"].astype(str).isin(wanted)
         )
         df = df[mask].reset_index(drop=True)
@@ -1016,10 +1091,26 @@ def pooled_cohort_stats(
     sample_frames: list[pd.DataFrame] = []  # per cohort: key-indexed sample matrix
     cohort_means: list[pd.Series] = []  # per cohort: key -> per-gene mean
     id_rows: list[pd.DataFrame] = []  # per cohort: id columns, key-indexed
+    # The alt-haplotype sum (below) must happen in LINEAR TPM, so fetch the linear basis
+    # and apply the log1p transform AFTER collapsing — log1p(a)+log1p(b) != log1p(a+b)
+    # (the proteoform linear-then-log1p contract). tpm_clean / tpm_raw are already linear;
+    # tpm_clean_hk is a per-column rescale that commutes with the sum. Proteoform pooling
+    # is keyed on the release-stable proteoform key, so it isn't alias-canonicalized and
+    # per_sample_expression already handles its linear-then-transform.
+    fetch_norm = "tpm_clean" if (normalize == "tpm_clean_log1p" and not proteoform) else normalize
     for code in codes:
         df = per_sample_expression(
-            code, normalize=normalize, auto_fetch=auto_fetch, proteoform=proteoform, scope=scope
+            code, normalize=fetch_norm, auto_fetch=auto_fetch, proteoform=proteoform, scope=scope
         )
+        if not proteoform:
+            # Pool on the CANONICAL gene id so an alt-haplotype/archived id collapses onto
+            # its primary-contig sibling instead of standing as a separate sparse row (the
+            # #465 fix, consistent with representative_cohort_samples). The proteoform key
+            # space is already release-stable, so it's keyed as-is.
+            df = _canonicalize_gene_rows(df)
+            if normalize == "tpm_clean_log1p":  # transform AFTER the linear alt-copy sum
+                cols = sample_columns(df)
+                df[cols] = np.log1p(df[cols].to_numpy(dtype=float))
         id_cols = id_columns(df)
         samples = sample_columns(df)
         if not samples:

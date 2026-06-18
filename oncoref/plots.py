@@ -27,7 +27,11 @@ from __future__ import annotations
 from functools import lru_cache
 
 from .apd1 import cancer_apd1_response
-from .cancer_types import cancer_type_registry, format_cancer_code_label
+from .cancer_types import (
+    cancer_lineage_group,
+    cancer_type_registry,
+    format_cancer_code_label,
+)
 from .cta import cta_gene_id_to_name, cta_gene_ids
 from .expression import (
     available_percentile_cohorts,
@@ -63,9 +67,16 @@ def _plt():
     return _PLT
 
 
+@lru_cache(maxsize=1)
 def _family_by_code() -> dict[str, str]:
+    """``{code -> coarse lineage group}`` — the ~8 cell-of-origin groups (Epithelial,
+    Sarcoma, Heme, CNS, Melanoma, Germ cell, Neuroendocrine, Embryonal; ``other`` if
+    unmapped) used for plot colouring, matching the pirlygenes lineage palette. This is
+    a deliberate coarsening of the registry's fine ``family`` field via
+    :func:`cancer_lineage_group` so plots have a small, legible, collision-free legend.
+    Cached (read-only); callers must not mutate the returned dict."""
     reg = cancer_type_registry()
-    return dict(zip(reg["code"].astype(str), reg["family"].astype(str)))
+    return {str(c): (cancer_lineage_group(str(c)) or "other") for c in reg["code"]}
 
 
 @lru_cache(maxsize=1)
@@ -81,53 +92,33 @@ def _stable_palette() -> tuple:
 
 @lru_cache(maxsize=1)
 def _family_color_map() -> dict:
-    """Stable ``{registry family -> color}`` over the FULL registry, assigned in
-    sorted-family order so the color is deterministic and identical in every plot
-    (not dependent on which subset of cancers a given plot happens to show)."""
-    palette = _stable_palette()
-    families = sorted({*_family_by_code().values(), "?"})
-    return {f: palette[i % len(palette)] for i, f in enumerate(families)}
+    """Stable ``{lineage group -> color}`` over the full set of groups (``tab10``,
+    alphabetical, ``other`` = neutral grey) — deterministic and identical in every plot,
+    and few enough groups (~8) for a clean, collision-free legend. Mirrors the pirlygenes
+    lineage palette."""
+    plt = _plt()
+    groups = sorted(set(_family_by_code().values()) - {"other"})
+    cmap = plt.get_cmap("tab10")
+    colors = {g: cmap(i % 10) for i, g in enumerate(groups)}
+    colors["other"] = (0.6, 0.6, 0.6, 1.0)
+    return colors
 
 
 def _family_colors(codes):
-    """``({code -> color}, {family -> color})`` by registry family. Colors are a
-    stable, deterministic per-family assignment (see :func:`_family_color_map`); the
-    returned family map carries only the families present in ``codes`` (for legends)."""
+    """``({code -> color}, {lineage group -> color})`` by coarse lineage group. Colors
+    are a stable, deterministic per-group assignment (see :func:`_family_color_map`); the
+    returned group map carries only the groups present in ``codes`` (for legends)."""
     fam_by_code = _family_by_code()
     full = _family_color_map()
-    present = sorted({fam_by_code.get(c, "?") for c in codes})
-    fam_color = {f: full[f] for f in present}
-    return {c: full[fam_by_code.get(c, "?")] for c in codes}, fam_color
+    present = sorted({fam_by_code.get(c, "other") for c in codes})
+    fam_color = {f: full.get(f, full["other"]) for f in present}
+    return {c: full.get(fam_by_code.get(c, "other"), full["other"]) for c in codes}, fam_color
 
 
 def _save(fig, save):
     if save is not None:
         fig.savefig(save, dpi=150, bbox_inches="tight")
     return fig
-
-
-@lru_cache(maxsize=1)
-def _cohort_sample_counts() -> dict:
-    """``{cancer_code: n_samples}`` from the per-sample matrix registry — the
-    cohort size used to rank cohorts in the by-cohort figures."""
-    from . import source_matrices
-
-    reg = source_matrices.registry()
-    counts: dict[str, int] = {}
-    for code, n in zip(reg["cancer_code"].astype(str), reg["n_samples"]):
-        counts[code] = max(counts.get(code, 0), int(n))  # largest source if several
-    return counts
-
-
-def _top_cohorts_by_samples(codes, top_n):
-    """The ``top_n`` of ``codes`` by cohort sample count (largest first); all of them
-    if ``top_n`` is ``None`` or there are no more than ``top_n``. Ties / unknown counts
-    fall back to a stable code order so the selection is deterministic."""
-    codes = list(codes)
-    if top_n is None or len(codes) <= top_n:
-        return codes
-    counts = _cohort_sample_counts()
-    return sorted(codes, key=lambda c: (-counts.get(c, 0), c))[:top_n]
 
 
 # ---------- shared plot primitives (the centralized rendering layer) ----------
@@ -146,6 +137,26 @@ def _family_legend_handles(plt, fam_color):
     ]
 
 
+def _repel_labels(ax, texts):
+    """Nudge point labels apart so they don't overlap, drawing thin leader lines back to
+    the points (uses ``adjustText`` when installed; a no-op fallback otherwise). Best-effort
+    and cosmetic — it must never break figure generation, so any failure degrades to
+    un-repelled labels rather than raising."""
+    if not texts:
+        return
+    try:
+        from adjustText import adjust_text
+
+        adjust_text(
+            texts,
+            ax=ax,
+            expand=(1.05, 1.2),
+            arrowprops={"arrowstyle": "-", "color": "0.6", "lw": 0.4},
+        )
+    except Exception:  # cosmetic label placement — never fatal to figure generation
+        return
+
+
 def _family_scatter(
     points,
     *,
@@ -154,26 +165,22 @@ def _family_scatter(
     title,
     logx=False,
     annotate=True,
-    figsize=(9, 7),
+    figsize=(12, 8),
     legend_loc="best",
     save=None,
 ):
-    """Scatter of ``(code, x, y)`` points coloured by registry family, with optional
-    point annotations + a family legend. The shared per-cancer scatter scaffold."""
+    """Scatter of ``(code, x, y)`` points coloured by lineage group, with optional point
+    annotations (de-overlapped via :func:`_repel_labels`) + a legend. The shared
+    per-cancer scatter scaffold."""
     plt = _plt()
     codes = [p[0] for p in points]
     colors, fam_color = _family_colors(codes)
     fig, ax = plt.subplots(figsize=figsize)
+    texts = []
     for code, x, y in points:
         ax.scatter(x, y, color=colors[code], s=70, edgecolor="white", linewidth=0.6, zorder=3)
         if annotate:
-            ax.annotate(
-                format_cancer_code_label(code),
-                (x, y),
-                fontsize=6,
-                xytext=(3, 3),
-                textcoords="offset points",
-            )
+            texts.append(ax.text(x, y, format_cancer_code_label(code), fontsize=6, zorder=4))
     if logx:
         ax.set_xscale("log")
     ax.set_xlabel(xlabel)
@@ -187,6 +194,7 @@ def _family_scatter(
         loc=legend_loc,
         framealpha=0.9,
     )
+    _repel_labels(ax, texts)  # keep labels from overlapping (no-op without adjustText)
     fig.tight_layout()
     return _save(fig, save)
 
@@ -200,11 +208,11 @@ def _ranked_family_barh(pairs, *, xlabel, title, legend=False, save=None):
     codes = [p[0] for p in pairs]
     values = [p[1] for p in pairs]
     colors, fam_color = _family_colors(codes)
-    fig, ax = plt.subplots(figsize=(9, max(4, 0.32 * len(codes))))
+    fig, ax = plt.subplots(figsize=(10, max(5, 0.40 * len(codes))))
     y = np.arange(len(codes))
     ax.barh(y, values, color=[colors[c] for c in codes])
     ax.set_yticks(y)
-    ax.set_yticklabels([format_cancer_code_label(c) for c in codes], fontsize=7)
+    ax.set_yticklabels([format_cancer_code_label(c) for c in codes], fontsize=8)
     ax.invert_yaxis()  # first pair at the top
     ax.set_xlabel(xlabel)
     ax.set_title(title)
@@ -236,9 +244,9 @@ def _cohort_gene_heatmap(grid, *, title, cbar_label, cmap, lognorm=False, floor=
     fig, ax = plt.subplots(figsize=(max(8, 0.42 * len(cols)), max(6, 0.34 * len(rows))))
     im = ax.imshow(data, aspect="auto", cmap=cmap, norm=norm)
     ax.set_xticks(range(len(cols)))
-    ax.set_xticklabels(cols, rotation=90, fontsize=6)
+    ax.set_xticklabels(cols, rotation=90, fontsize=7)
     ax.set_yticks(range(len(rows)))
-    ax.set_yticklabels([format_cancer_code_label(c) for c in rows], fontsize=6)
+    ax.set_yticklabels([format_cancer_code_label(c) for c in rows], fontsize=7)
     ax.set_title(title)
     cbar = fig.colorbar(im, ax=ax, fraction=0.025, pad=0.01)
     cbar.set_label(cbar_label)
@@ -455,7 +463,7 @@ def ici_regimen_comparison(*, save=None, min_regimens=1):
     plt = _plt()
     palette = _stable_palette()
     reg_color = {r: palette[i] for i, r in enumerate(REGIMEN_FALLBACK)}
-    fig, ax = plt.subplots(figsize=(10, max(5, 0.3 * len(ordered))))
+    fig, ax = plt.subplots(figsize=(11, max(6, 0.42 * len(ordered))))
     for y, c in enumerate(ordered):
         present = [(r, by_regimen[r][c]) for r in REGIMEN_FALLBACK if c in by_regimen[r]]
         xs = [v for _, v in present]
@@ -464,7 +472,7 @@ def ici_regimen_comparison(*, save=None, min_regimens=1):
         for r, v in present:
             ax.scatter(v, y, color=reg_color[r], s=48, edgecolor="white", linewidth=0.5, zorder=2)
     ax.set_yticks(range(len(ordered)))
-    ax.set_yticklabels([format_cancer_code_label(c) for c in ordered], fontsize=6)
+    ax.set_yticklabels([format_cancer_code_label(c) for c in ordered], fontsize=8)
     ax.set_xlabel("Objective response rate (%)")
     ax.set_title(f"ICI response by regimen and cancer type ({len(ordered)} types)")
     ax.grid(True, axis="x", alpha=0.3)
@@ -473,6 +481,118 @@ def ici_regimen_comparison(*, save=None, min_regimens=1):
         for r in REGIMEN_FALLBACK
     ]
     ax.legend(handles=handles, fontsize=7, loc="lower right", title="regimen")
+    fig.tight_layout()
+    return _save(fig, save)
+
+
+def ici_orr_pooled_forest(*, regimen=None, save=None):
+    """Forest plot of ICI objective response rate, one cancer type per row:
+
+    - **small grey dots** = each individual reported trial estimate (with a thin 95% CI
+      whisker where the trial reported one; dot size ∝ √n),
+    - **colored diamond** = the pooled responder-weighted estimate (Σresponders/Σn) with
+      its 95% Wilson CI as a thick bar, colored by lineage family.
+
+    Where no trial reports responders+n (so no pool is possible) the row shows the curated
+    representative anchor as the diamond, without a CI. With ``regimen=None`` each cancer
+    is shown at its fallback-resolved regimen (anti-PD-1 → anti-PD-L1 → combo); pass a
+    regimen to pin one. Rows are sorted by the estimate (highest at top)."""
+    from .ici import (
+        cancer_ici_regimen,
+        cancer_ici_response,
+        pooled_ici_response,
+    )
+
+    plt = _plt()
+    anchor = cancer_ici_response() if regimen is None else cancer_ici_response(regimen=regimen)
+    cells = {c: (cancer_ici_regimen(c) if regimen is None else regimen) for c in anchor}
+
+    rows = []  # (code, regimen, est, lo, hi, [(value, ci_lo, ci_hi, n), ...])
+    for code, reg in cells.items():
+        if reg is None:
+            continue
+        # Dots = every reported source; diamond = the *primary-only* pool so it never
+        # double-counts a trial's overlapping subgroups (include_alternates=False).
+        allsrc = pooled_ici_response(code, regimen=reg, metric="ORR", verified_only=False)
+        clean = pooled_ici_response(
+            code, regimen=reg, metric="ORR", verified_only=False, include_alternates=False
+        )
+        pts = [
+            (s["value"], s["ci_low"], s["ci_high"], s["n"])
+            for s in allsrc["sources"]
+            if s["value"] is not None
+        ]
+        if clean["pooled_pct"] is not None:
+            est, lo, hi = clean["pooled_pct"], clean["ci_low"], clean["ci_high"]
+        else:
+            est, lo, hi = anchor.get(code), None, None
+        if est is None:
+            continue
+        rows.append((code, reg, est, lo, hi, pts))
+
+    if not rows:
+        raise ValueError("no cancer types to plot")
+    rows.sort(key=lambda r: r[2])  # ascending; invert_yaxis puts the highest on top
+    code_color, _ = _family_colors([r[0] for r in rows])
+
+    fig, ax = plt.subplots(figsize=(11, max(6, 0.42 * len(rows))))
+    for y in range(0, len(rows), 2):  # alternating row bands to trace label -> point
+        ax.axhspan(y - 0.5, y + 0.5, color="#f4f4f4", zorder=0)
+    for y, (code, _reg, est, lo, hi, pts) in enumerate(rows):
+        # individual trial estimates (grey), with CI whiskers + √n sizing
+        for v, clo, chi, n in pts:
+            if clo is not None and chi is not None:
+                ax.plot([clo, chi], [y, y], color="#bbbbbb", lw=1.0, zorder=1)
+            size = 18 + 6 * (n**0.5) if n else 22
+            ax.scatter(
+                v,
+                y,
+                s=min(size, 90),
+                facecolor="none",
+                edgecolor="#888888",
+                linewidth=0.8,
+                zorder=2,
+            )
+        # pooled / anchor estimate (family-colored diamond + Wilson CI bar)
+        col = code_color[code]
+        if lo is not None and hi is not None:
+            ax.plot([lo, hi], [y, y], color=col, lw=2.6, alpha=0.85, zorder=3)
+        ax.scatter(est, y, marker="D", s=46, color=col, edgecolor="black", linewidth=0.5, zorder=4)
+
+    ax.set_yticks(range(len(rows)))
+    ax.set_yticklabels(
+        [f"{format_cancer_code_label(c)} [{reg}]" for c, reg, *_ in rows], fontsize=8
+    )
+    ax.set_ylim(-0.7, len(rows) - 0.3)
+    ax.set_xlabel("Objective response rate (%)")
+    ax.set_xlim(left=-2)
+    scope = "fallback-resolved regimen" if regimen is None else regimen
+    ax.set_title(
+        f"ICI ORR by cancer type — pooled estimate vs individual trials "
+        f"({len(rows)} types, {scope})"
+    )
+    ax.grid(True, axis="x", alpha=0.3)
+    # rows are sorted ascending and y grows upward, so the highest ORR is already on top
+    handles = [
+        plt.Line2D(
+            [],
+            [],
+            marker="D",
+            linestyle="",
+            color="#444444",
+            label="pooled estimate (Wilson 95% CI)",
+        ),
+        plt.Line2D(
+            [],
+            [],
+            marker="o",
+            linestyle="",
+            markerfacecolor="none",
+            markeredgecolor="#888888",
+            label="individual trial (95% CI)",
+        ),
+    ]
+    ax.legend(handles=handles, fontsize=7, loc="lower right")
     fig.tight_layout()
     return _save(fig, save)
 
@@ -561,7 +681,7 @@ def cta_expression_heatmap(
     n_cohorts=30,
     n_ctas=30,
     high_tpm=30.0,
-    proteoform=False,
+    proteoform=True,
     save=None,
 ):
     """Heatmap of cancer-testis-antigen expression — rows are cohorts, columns are
@@ -587,6 +707,13 @@ def cta_expression_heatmap(
         raise ValueError(f"stat must be one of {sorted(_STAT_PERCENTILE_COL)}")
     if cohorts is None:
         cohorts = available_percentile_cohorts(proteoform=proteoform)
+        if not cohorts and proteoform:
+            # No proteoform percentile shards present: recompute on the fly for cohorts
+            # whose per-sample matrix is cached; if none are, fall back to per-gene.
+            cohorts = _cached_per_sample_cohorts()
+            if not cohorts:
+                proteoform = False
+                cohorts = available_percentile_cohorts(proteoform=False)
     if not cohorts:
         variant = "proteoform-summed " if proteoform else ""
         raise ValueError(
@@ -671,7 +798,7 @@ def cta_addressable_burden(
     *,
     source="within_sample",
     threshold=0.95,
-    threshold_tpm=10.0,
+    threshold_tpm=50.0,
     metric="us_incidence_pct",
     n=25,
     save=None,
@@ -732,62 +859,77 @@ def _cached_per_sample_cohorts():
 
 def cta_patient_count_heatmap(
     *,
-    threshold_tpm=10.0,
+    threshold=0.95,
+    threshold_tpm=None,
     cohorts=None,
     n_cohorts=30,
     n_ctas=30,
-    value="fraction",
     save=None,
 ):
-    """Heatmap of **per-patient CTA prevalence** — rows are cohorts, columns are
-    CTAs, each cell is the fraction (or count) of that cohort's patients expressing
-    the CTA above ``threshold_tpm`` clean TPM.
+    """Heatmap of **per-patient CTA prevalence**, proteoform-aggregated (CTAG1A/B =
+    NY-ESO-1 collapse once) — rows are cohorts, columns are CTAs.
 
-    Unlike :func:`cta_expression_heatmap` (cohort summary TPM), this is computed from
-    the full per-sample matrices, so it answers "in what fraction of *patients* is
-    this antigen expressed". ``cohorts`` defaults to every cohort whose per-sample
-    matrix is cached; ``value`` is ``"fraction"`` (0–1) or ``"count"`` (patients).
-    Rows/cols are the top ``n_cohorts``/``n_ctas`` by prevalence."""
+    By default each cell is the fraction of a cohort's patients in whom the antigen
+    ranks in the top ``(1 - threshold)`` *within that patient* — ``threshold=0.95`` →
+    the within-sample **p95** (top 5%) convention pirlygenes uses, far more stringent
+    than a flat low-TPM cut. Pass ``threshold_tpm=<TPM>`` instead to use the absolute
+    "fraction of patients with clean TPM ≥ threshold" from the per-sample matrices.
+
+    Columns are ordered by **mean prevalence across the shown cohorts** (most broadly
+    expressed antigen first); rows by their single best CTA. ``cohorts`` defaults to
+    every cohort with a cached per-sample matrix."""
     import pandas as pd
 
-    from .coverage import cta_patient_fractions
-
-    if value not in ("fraction", "count"):
-        raise ValueError("value must be 'fraction' or 'count'")
     cohorts = list(cohorts) if cohorts is not None else _cached_per_sample_cohorts()
     if not cohorts:
         raise ValueError(
             "no cohorts with a cached per-sample matrix — fetch them via "
             "source_matrices.fetch(code) (or stage them) first."
         )
-    col = "fraction_expressing" if value == "fraction" else "n_patients_expressing"
     rows = {}
     key_to_symbol = {}
-    for code in cohorts:
-        pf = cta_patient_fractions(code, threshold_tpm=threshold_tpm)
-        # Index by the proteoform_key (unique per antigen after the collapse) so the
-        # per-cohort Series align cleanly; the column display label comes from Symbol.
-        rows[code] = pf.groupby("proteoform_key")[col].max()
-        key_to_symbol.update(zip(pf["proteoform_key"].astype(str), pf["Symbol"].astype(str)))
+    if threshold_tpm is not None:
+        from .coverage import cta_patient_fractions
+
+        for code in cohorts:
+            pf = cta_patient_fractions(code, threshold_tpm=threshold_tpm)
+            rows[code] = pf.groupby("proteoform_key")["fraction_expressing"].max()
+            key_to_symbol.update(zip(pf["proteoform_key"].astype(str), pf["Symbol"].astype(str)))
+        thr_label = f"> {threshold_tpm:g} TPM"
+    else:
+        from .proteoforms import gene_to_proteoform_id
+
+        # within-sample top-fraction is genome-wide ranking; restrict to the CTA panel by
+        # its proteoform keys (the canonical ENSG of a collapsed group may sit outside the
+        # CTA id set, so match keys, not ENSGs — same trick as _cta_expression_matrix).
+        cta_keys = set(gene_to_proteoform_id(sorted(cta_gene_ids())).values())
+        for code in cohorts:
+            df = within_sample_top_fraction(code, threshold=threshold, proteoform=True, scope="cta")
+            frac_col = next(c for c in df.columns if c.startswith("frac_samples_top"))
+            key = df["proteoform_key"].astype(str)
+            mask = key.isin(cta_keys)
+            rows[code] = pd.Series(df.loc[mask, frac_col].to_numpy(), index=key[mask])
+            key_to_symbol.update(zip(key[mask], df.loc[mask, "Symbol"].astype(str)))
+        thr_label = f"within-sample p{round(threshold * 100)}"
     matrix = pd.DataFrame(rows).T  # cohorts × CTA proteoform keys
     if matrix.empty or matrix.shape[1] == 0:
-        raise ValueError("no CTA expressed above the threshold in the selected cohorts")
+        raise ValueError("no CTA prevalence in the selected cohorts")
 
-    top_ctas = matrix.max(axis=0).sort_values(ascending=False).head(n_ctas).index
+    # Columns: most broadly-prevalent CTAs first (mean prevalence ACROSS cohorts).
+    top_ctas = matrix.mean(axis=0, skipna=True).sort_values(ascending=False).head(n_ctas).index
     row_score = matrix[top_ctas].max(axis=1)
     top_cohorts = row_score.sort_values(ascending=False).head(n_cohorts).index
     grid = matrix.loc[top_cohorts, top_ctas].fillna(0.0)
     # Label columns by the proteoform symbol (NY-ESO-1, CT83), not the ENSG-or-symbol key.
     grid = grid.rename(columns=lambda key: key_to_symbol.get(str(key), str(key)))
 
-    unit = "fraction of patients" if value == "fraction" else "patients"
     return _cohort_gene_heatmap(
         grid,
         title=(
-            f"CTA per-patient prevalence (> {threshold_tpm:g} TPM) — "
+            f"CTA per-patient prevalence ({thr_label}) — "
             f"{len(top_cohorts)} cohorts × {len(top_ctas)} CTAs"
         ),
-        cbar_label=unit,
+        cbar_label="fraction of patients",
         cmap="viridis",
         save=save,
     )
@@ -796,83 +938,67 @@ def cta_patient_count_heatmap(
 def cta_coverage_curves(
     cancer_types,
     *,
-    threshold_tpm=10.0,
+    threshold_tpm=50.0,
     max_genes=20,
-    n_label=5,
-    top_n=40,
+    top_n=10,
     save=None,
 ):
-    """Greedy **antigen-coverage curves** — for each cohort, the cumulative fraction
-    of patients covered as CTAs are added to the panel in greedy set-cover order
-    (:func:`oncoref.coverage.greedy_coverage`). Answers "how many antigens does a
-    panel need to reach most patients of this cancer".
+    """Greedy **antigen-coverage curves**, the **top ``top_n`` cohorts by final coverage
+    overlaid on one axes** — for each cohort, the cumulative fraction of patients covered
+    as CTAs are added to the panel in greedy set-cover order
+    (:func:`oncoref.coverage.greedy_coverage`, proteoform-aggregated). Answers "how many
+    antigens a panel needs to reach most patients", and lets cancers be compared directly.
 
+    Curves are colored by lineage group; the legend gives each cohort's final coverage.
     ``cancer_types`` is a code or iterable of codes (each needs a cached per-sample
-    matrix). Rendered as **small multiples** — one panel per cohort, sorted by final
-    coverage (broadest first) — with the leading antigens labeled on each curve, so
-    you can read *which* CTAs carry the coverage and how fast it plateaus. ``n_label``
-    caps how many antigen names are annotated per panel. ``top_n`` (default 40) keeps
-    only the largest cohorts by sample count so the grid stays legible; pass
-    ``top_n=None`` for every cohort."""
+    matrix); coverage is computed for all of them and the broadest ``top_n`` (default 10)
+    are drawn (pass ``top_n=None`` for all)."""
     import numpy as np
 
     from .coverage import greedy_coverage
 
     codes = [cancer_types] if isinstance(cancer_types, str) else list(cancer_types)
-    requested = len(codes)
-    codes = _top_cohorts_by_samples(codes, top_n)
-    capped = len(codes) < requested
     plt = _plt()
 
-    curves = []  # (code, x, y, symbols)
+    curves = []  # (code, x, y)
     for code in codes:
         gc = greedy_coverage(code, threshold_tpm=threshold_tpm, max_genes=max_genes)
         if gc.empty:
             continue
         x = np.concatenate([[0], gc["rank"].to_numpy()])
         y = np.concatenate([[0.0], gc["cumulative_fraction"].to_numpy()])
-        curves.append((code, x, y, [str(s) for s in gc["Symbol"]]))
+        curves.append((code, x, y))
     if not curves:
         raise ValueError(
             "no coverage curve could be drawn — are the cohorts' per-sample matrices "
             "cached, and does any CTA clear the threshold?"
         )
     curves.sort(key=lambda t: t[2][-1], reverse=True)  # broadest coverage first
+    total = len(curves)
+    shown = curves[:top_n] if top_n else curves
+    # Distinct per-cohort colors — lineage colors would collide for the several
+    # same-lineage cohorts usually in the top-coverage set (e.g. multiple sarcomas).
+    cmap = plt.get_cmap("tab10" if len(shown) <= 10 else "tab20")
+    code_color = {code: cmap(i % cmap.N) for i, (code, _, _) in enumerate(shown)}
 
-    ncol = min(6, len(curves))
-    nrow = (len(curves) + ncol - 1) // ncol
-    fig, axes = plt.subplots(
-        nrow, ncol, figsize=(ncol * 3.0, nrow * 2.4), sharex=True, sharey=True, squeeze=False
-    )
-    axes = axes.ravel()
-    fam_color, _ = _antigen_family_colors({s for _, _, _, syms in curves for s in syms})
-    for ax, (code, x, y, syms) in zip(axes, curves):
-        ax.step(x, y, where="post", color="#3b4cc0", lw=1.3)
-        ax.fill_between(x, y, step="post", alpha=0.12, color="#3b4cc0")
-        for rank, sym in enumerate(syms[:n_label], start=1):
-            ax.annotate(
-                sym,
-                (x[rank], y[rank]),
-                fontsize=5,
-                rotation=40,
-                textcoords="offset points",
-                xytext=(2, 2),
-                color=fam_color.get(sym, "#333333"),
-            )
-            ax.plot(x[rank], y[rank], "o", ms=3, color=fam_color.get(sym, "#333333"))
-        ax.set_title(f"{format_cancer_code_label(code)}  ({y[-1]:.0%})", fontsize=8)
-        ax.set_ylim(0, 1)
-        ax.set_xlim(0, max(max_genes, x[-1]))
-        ax.grid(True, alpha=0.25)
-        ax.tick_params(labelsize=6)
-    for ax in axes[len(curves) :]:
-        ax.set_visible(False)
-    fig.supxlabel("number of CTAs in panel (greedy set cover)", fontsize=9)
-    fig.supylabel(f"fraction of patients covered (≥1 CTA > {threshold_tpm:g} TPM)", fontsize=9)
-    suffix = (
-        f"top {len(curves)} of {requested} by sample count" if capped else f"{len(curves)} cohorts"
-    )
-    fig.suptitle(f"CTA antigen-coverage curves ({suffix})", fontsize=11)
+    fig, ax = plt.subplots(figsize=(9, 6))
+    for code, x, y in shown:
+        ax.step(
+            x,
+            y,
+            where="post",
+            color=code_color[code],
+            lw=2.0,
+            label=f"{format_cancer_code_label(code)} ({y[-1]:.0%})",
+        )
+    ax.set_xlabel("number of CTAs in panel (greedy set cover)")
+    ax.set_ylabel(f"fraction of patients covered (≥1 CTA > {threshold_tpm:g} TPM)")
+    ax.set_ylim(0, 1)
+    ax.set_xlim(0, max_genes)
+    ax.grid(True, alpha=0.3)
+    scope = f"top {len(shown)} of {total} cohorts by coverage" if top_n else f"{total} cohorts"
+    ax.set_title(f"CTA antigen-coverage curves — {scope}")
+    ax.legend(fontsize=7, loc="lower right", ncol=2, title="cohort (final coverage)")
     fig.tight_layout()
     return _save(fig, save)
 
@@ -880,7 +1006,7 @@ def cta_coverage_curves(
 def cta_coverage_stacked_bars(
     cancer_types,
     *,
-    threshold_tpm=10.0,
+    threshold_tpm=50.0,
     max_genes=12,
     top_n=40,
     save=None,
@@ -893,14 +1019,13 @@ def cta_coverage_stacked_bars(
 
     Complements :func:`cta_coverage_curves` (cumulative step curve) by showing *which*
     antigens carry the coverage. ``cancer_types`` is a code or iterable; each needs a
-    cached per-sample matrix. ``max_genes`` caps the segments per cohort; ``top_n``
-    (default 40) keeps only the largest cohorts by sample count (pass ``None`` for all)."""
+    cached per-sample matrix. ``max_genes`` caps the segments per cohort; coverage is
+    computed for all cohorts and the broadest ``top_n`` (default 40) are shown, **sorted
+    by fraction of patients covered (highest at top)** (pass ``top_n=None`` for all)."""
     from .coverage import greedy_coverage
 
     codes = [cancer_types] if isinstance(cancer_types, str) else list(cancer_types)
-    requested = len(codes)
-    codes = _top_cohorts_by_samples(codes, top_n)
-    capped = len(codes) < requested
+    total = len(codes)
     coverage_by_code = {}
     for code in codes:
         gc = greedy_coverage(code, threshold_tpm=threshold_tpm, max_genes=max_genes)
@@ -911,18 +1036,30 @@ def cta_coverage_stacked_bars(
             "no coverage to plot — are the cohorts' per-sample matrices cached, and "
             "does any CTA clear the threshold?"
         )
-    all_syms = {str(s) for gc in coverage_by_code.values() for s in gc["Symbol"]}
+    # Rank cohorts by fraction of patients covered (highest first), then cap.
+    ordered = sorted(
+        coverage_by_code.items(),
+        key=lambda kv: float(kv[1]["cumulative_fraction"].iloc[-1]),
+        reverse=True,
+    )
+    if top_n:
+        ordered = ordered[:top_n]
+    all_syms = {str(s) for _, gc in ordered for s in gc["Symbol"]}
     sym_color, fam_color = _antigen_family_colors(all_syms)
 
     rows = []
-    for code, gc in coverage_by_code.items():
+    for code, gc in ordered:
         covered = float(gc["cumulative_fraction"].iloc[-1])
         segs = [
             (str(r.Symbol), float(r.marginal_fraction), sym_color[str(r.Symbol)])
             for r in gc.itertuples()
         ]
         rows.append((f"{format_cancer_code_label(code)}  ({covered:.0%})", segs))
-    suffix = f"top {len(rows)} of {requested} by sample count" if capped else f"{len(rows)} cohorts"
+    suffix = (
+        f"top {len(rows)} of {total} cohorts by coverage"
+        if top_n and total > len(rows)
+        else f"{len(rows)} cohorts"
+    )
     return _stacked_barh(
         rows,
         xlabel=f"fraction of patients covered (≥1 CTA > {threshold_tpm:g} TPM)",
@@ -960,7 +1097,7 @@ def burden_category_bars(*, region="us", n=None, save=None):
     )
 
 
-def cta_burden_vs_response(*, against="apd1", threshold_tpm=10.0, cohorts=None, save=None):
+def cta_burden_vs_response(*, against="apd1", threshold_tpm=50.0, cohorts=None, save=None):
     """Scatter of a cohort's **mean CTA antigen load** (mean number of CTAs a patient
     expresses above ``threshold_tpm``, from
     :func:`oncoref.coverage.mean_antigens_per_patient`) vs its anti-PD-1 ORR
@@ -1038,7 +1175,7 @@ def apd1_response_signature_scatter(signature="t_cell_inflamed", *, cohorts=None
     )
 
 
-def cta_specific_9mer_load(*, against="tmb", threshold_tpm=10.0, cohorts=None, save=None):
+def cta_specific_9mer_load(*, against="tmb", threshold_tpm=50.0, cohorts=None, save=None):
     """Scatter of a cohort's **mean per-patient CTA-specific 9-mer load**
     (:func:`oncoref.peptides.cta_specific_9mer_load`) vs its median TMB
     (``against="tmb"``) or anti-PD-1 ORR (``against="apd1"``), one point per cancer

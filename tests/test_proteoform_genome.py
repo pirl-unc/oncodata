@@ -9,10 +9,26 @@
 import pytest
 
 from oncoref.proteoforms import (
+    canonical_proteoform_id,
+    canonical_proteoform_ids,
     proteoform_group_map,
     proteoform_groups,
     proteoform_symbol_map,
 )
+
+
+def test_canonical_proteoform_id_defaults_to_genome():
+    # The public protein-level entry point (oncoref#135 item 5): genome-wide by default.
+    # An identical-protein family collapses to its proteoform symbol; a gene that uniquely
+    # owns its protein keys to its own unversioned ENSG.
+    assert canonical_proteoform_id("ENSG00000206172") == "HBA1/2"  # HBA1
+    assert canonical_proteoform_id("ENSG00000188536") == "HBA1/2"  # HBA2 -> same key
+    assert canonical_proteoform_id("ENSG00000141510") == "ENSG00000141510"  # TP53 singleton
+    assert canonical_proteoform_ids(["ENSG00000206172", "ENSG00000188536", "ENSG00000141510"]) == {
+        "ENSG00000206172": "HBA1/2",
+        "ENSG00000188536": "HBA1/2",
+        "ENSG00000141510": "ENSG00000141510",
+    }
 
 
 def test_genome_scope_is_a_superset_of_cta():

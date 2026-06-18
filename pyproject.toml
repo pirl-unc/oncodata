@@ -37,12 +37,14 @@ dependencies = [
 [project.optional-dependencies]
 plots = [
     "matplotlib",
+    "adjustText",
 ]
 dev = [
     "pytest",
     "pytest-cov",
     "ruff",
     "matplotlib",
+    "adjustText",
 ]
 
 [project.scripts]

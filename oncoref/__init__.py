@@ -122,6 +122,18 @@ from .fusions import (
     protein_family,
 )
 from .gene_families import TECHNICAL_RNA_FAMILIES
+from .gene_ids import (
+    canonical_gene_id,
+    canonical_gene_ids,
+    canonical_gene_space,
+    ensembl_id_aliases,
+    gene_biotype,
+    is_canonical_gene,
+    is_protein_coding_gene,
+    resolve_ensembl_id,
+    resolve_symbol,
+    unversioned,
+)
 from .gene_qc import TECHNICAL_RNA_GROUPS, GeneQcClass, classify_gene_qc, is_rescue_feature
 from .genome import (
     aggregate_gene_expression,
@@ -141,12 +153,15 @@ from .hpa import (
     hpa_single_cell,
 )
 from .ici import (
+    PROPORTION_METRICS,
     REGIMEN_FALLBACK,
     REGIMEN_LABELS,
     cancer_ici_regimen,
     cancer_ici_response,
     cancer_ici_response_df,
+    cancer_ici_response_estimates_df,
     ici_regimens,
+    pooled_ici_response,
 )
 from .incidence import (
     burden_category,
@@ -180,6 +195,8 @@ from .peptides import (
     cta_specific_9mer_weights,
 )
 from .proteoforms import (
+    canonical_proteoform_id,
+    canonical_proteoform_ids,
     collapse_to_proteoforms,
     expression_level,
     gene_to_proteoform,
@@ -216,6 +233,7 @@ __all__ = [
     "CANCER_TYPE_ALIASES",
     "CANCER_TYPE_NAMES",
     "OTHER_TECHNICAL_FRACTION",
+    "PROPORTION_METRICS",
     "REGIMEN_FALLBACK",
     "REGIMEN_LABELS",
     "RIBOSOMAL_PROTEIN_FRACTION",
@@ -248,6 +266,7 @@ __all__ = [
     "cancer_ici_regimen",
     "cancer_ici_response",
     "cancer_ici_response_df",
+    "cancer_ici_response_estimates_df",
     "cancer_lineage_group",
     "cancer_lineage_group_overrides",
     "cancer_lineage_groups",
@@ -269,8 +288,13 @@ __all__ = [
     "cancer_types_in_family",
     "cancer_types_with_fusion",
     "canonical_cancer_code",
+    "canonical_gene_id",
     "canonical_gene_id_and_name",
+    "canonical_gene_ids",
     "canonical_gene_ids_and_names",
+    "canonical_gene_space",
+    "canonical_proteoform_id",
+    "canonical_proteoform_ids",
     "classify_gene_qc",
     "clean_tpm",
     "cohort_aggregate_members",
@@ -302,6 +326,7 @@ __all__ = [
     "cta_unfiltered_gene_ids",
     "cta_unfiltered_gene_names",
     "drop_technical_rna",
+    "ensembl_id_aliases",
     "expression_level",
     "expression_source",
     "expression_sources",
@@ -315,6 +340,7 @@ __all__ = [
     "fpkm_to_tpm",
     "fusion_partners",
     "fusion_status",
+    "gene_biotype",
     "gene_cell_type_ntpm",
     "gene_cohort_mean_expression",
     "gene_cohort_percentiles",
@@ -335,8 +361,10 @@ __all__ = [
     "hpa_single_cell",
     "ici_regimens",
     "id_columns",
+    "is_canonical_gene",
     "is_expression_value_col",
     "is_mixture_cohort",
+    "is_protein_coding_gene",
     "is_rescue_feature",
     "known_cohort_ids",
     "log1p_transform",
@@ -352,6 +380,7 @@ __all__ = [
     "per_sample_expression",
     "percentile_rank",
     "pooled_cohort_stats",
+    "pooled_ici_response",
     "protein_family",
     "proteoform_aliases",
     "proteoform_cohort_mean_expression",
@@ -371,6 +400,8 @@ __all__ = [
     "renormalize_to_million",
     "representative_cohort_samples",
     "resolve_cancer_type",
+    "resolve_ensembl_id",
+    "resolve_symbol",
     "response_signature_direction",
     "response_signature_genes",
     "response_signature_names",
@@ -385,6 +416,7 @@ __all__ = [
     "sources_for_cancer_code",
     "tissue_of_origin",
     "tpm_to_housekeeping_normalized",
+    "unversioned",
     "viral_status",
     "within_sample_top_fraction",
 ]

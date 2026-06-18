@@ -51,6 +51,10 @@ def test_within_sample_top_fractions_requires_samples():
 @pytest.fixture
 def within_sample_cache(monkeypatch, tmp_path):
     monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
+    # Isolate the per-sample source-matrix cache too, so a cohort with no shard is
+    # genuinely unresolvable (otherwise an ambient staged matrix, e.g. BRCA, lets the
+    # reader recompute on the fly and the missing-cohort test stops raising).
+    monkeypatch.setenv("CANCERDATA_SOURCE_MATRICES", str(tmp_path / "source-matrices"))
     shard_dir = tmp_path / "cancer-reference-expression-within-sample-top5"
     shard_dir.mkdir(parents=True)
     pd.DataFrame(

@@ -227,6 +227,110 @@ def test_representatives_provenance_requires_long_format():
         expression.representative_cohort_samples("PRAD", include_provenance=True)
 
 
+def test_representative_wide_does_not_fragment_genes(monkeypatch, tmp_path):
+    # The #465-class bug: cohorts quantified on different Ensembl releases carry the SAME
+    # locus under different alias symbols (and one as the raw id). The wide combiner must
+    # key on the canonical gene id, so the gene stays ONE row covered by all cohorts —
+    # never three mutually-disjoint sparse alias rows.
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
+    d = tmp_path / "cancer-reference-expression-representatives"
+    d.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["ENSG234", "ENSG999"],
+            "Symbol": ["AP000959.1", "PRAME"],
+            "A__rep1": [1.0, 2.0],
+        }
+    ).to_parquet(d / "A.parquet", index=False)
+    pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["ENSG234", "ENSG888"],
+            "Symbol": ["RP11-844P9.5", "MAGEA4"],
+            "B__rep1": [3.0, 4.0],
+        }
+    ).to_parquet(d / "B.parquet", index=False)
+    pd.DataFrame(
+        {"Ensembl_Gene_ID": ["ENSG234"], "Symbol": ["ENSG234"], "C__rep1": [5.0]}  # raw-id backfill
+    ).to_parquet(d / "C.parquet", index=False)
+
+    w = expression.representative_cohort_samples(format="wide")
+    assert len(w) == w["Ensembl_Gene_ID"].nunique()  # one row per gene id (no fragmentation)
+    shared = w[w["Ensembl_Gene_ID"] == "ENSG234"]
+    assert len(shared) == 1
+    assert shared["Symbol"].iloc[0] != "ENSG234"  # canonical symbol prefers a real alias
+    # all three cohorts' values land on that single row
+    assert bool(shared[["A__rep1", "B__rep1", "C__rep1"]].notna().all(axis=1).iloc[0])
+
+    # the long form carries the same canonical symbol (so a downstream pivot won't fragment)
+    lg = expression.representative_cohort_samples(format="long")
+    assert lg.loc[lg["Ensembl_Gene_ID"] == "ENSG234", "Symbol"].nunique() == 1
+
+
+def test_representative_wide_merges_alt_haplotype_aliases(monkeypatch, tmp_path):
+    # An alt-haplotype/archived id in one cohort must collapse onto its primary-contig id
+    # via the shipped ensembl-id-aliases migration map (not just unversioning) when another
+    # cohort carries the primary — so the two cohorts land on ONE canonical row.
+    from oncoref.gene_ids import ensembl_id_aliases
+
+    alt, primary = next((a, p) for a, p in ensembl_id_aliases().items() if a != p)
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
+    d = tmp_path / "cancer-reference-expression-representatives"
+    d.mkdir(parents=True)
+    pd.DataFrame({"Ensembl_Gene_ID": [alt], "Symbol": ["X"], "A__rep1": [1.0]}).to_parquet(
+        d / "A.parquet", index=False
+    )
+    pd.DataFrame({"Ensembl_Gene_ID": [primary], "Symbol": ["X"], "B__rep1": [2.0]}).to_parquet(
+        d / "B.parquet", index=False
+    )
+    w = expression.representative_cohort_samples(format="wide")
+    assert list(w["Ensembl_Gene_ID"]) == [primary]  # one row, the canonical primary
+    assert alt not in set(w["Ensembl_Gene_ID"])
+    assert bool(w[["A__rep1", "B__rep1"]].notna().all(axis=1).iloc[0])  # both cohorts on it
+
+
+def test_representative_wide_sums_alt_haplotype_within_cohort(monkeypatch, tmp_path):
+    # When one cohort carries BOTH an alt-haplotype id and its primary (a full-assembly
+    # quantification annotates the gene on both contigs), their per-sample TPMs must be
+    # SUMMED under the canonical id (reads multi-map between copies), not deduped to one.
+    from oncoref.gene_ids import ensembl_id_aliases
+
+    alt, primary = next((a, p) for a, p in ensembl_id_aliases().items() if a != p)
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
+    d = tmp_path / "cancer-reference-expression-representatives"
+    d.mkdir(parents=True)
+    # one cohort, one representative, the gene present under both ids
+    pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": [primary, alt],
+            "Symbol": ["G", "G-alt"],
+            "A__rep1": [10.0, 3.0],
+        }
+    ).to_parquet(d / "A.parquet", index=False)
+
+    w = expression.representative_cohort_samples(format="wide")
+    assert list(w["Ensembl_Gene_ID"]) == [primary]  # collapsed onto the canonical id
+    assert w["A__rep1"].iloc[0] == pytest.approx(13.0)  # 10 + 3 summed, not 10 or 3
+
+
+def test_representative_log1p_sums_in_linear_space(monkeypatch, tmp_path):
+    # The alt-haplotype sum must be taken in LINEAR TPM, then log1p applied — never
+    # sum log-space values: log1p(10)+log1p(3) != log1p(10+3).
+    from oncoref.gene_ids import ensembl_id_aliases
+
+    alt, primary = next((a, p) for a, p in ensembl_id_aliases().items() if a != p)
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
+    d = tmp_path / "cancer-reference-expression-representatives"
+    d.mkdir(parents=True)
+    pd.DataFrame(
+        {"Ensembl_Gene_ID": [primary, alt], "Symbol": ["G", "G-alt"], "A__rep1": [10.0, 3.0]}
+    ).to_parquet(d / "A.parquet", index=False)
+
+    w = expression.representative_cohort_samples(format="wide", normalize="tpm_clean_log1p")
+    assert list(w["Ensembl_Gene_ID"]) == [primary]
+    assert w["A__rep1"].iloc[0] == pytest.approx(np.log1p(13.0))  # log1p(10+3)
+    assert w["A__rep1"].iloc[0] != pytest.approx(np.log1p(10.0) + np.log1p(3.0))  # NOT Σlog1p
+
+
 def _raw_matrix(tmp_path):
     # A tiny raw-TPM per-sample matrix (genes x samples) whose columns sum near 1e6.
     df = pd.DataFrame(
@@ -611,6 +715,50 @@ def test_pooled_cohort_stats_availability_and_heterogeneity(monkeypatch):
     # Off-panel cells are never imputed to zero: E1's max is BIG's max (30), not
     # dragged down by SMALL's missing samples.
     assert out.loc["E1", "max"] == 30.0
+
+
+def test_pooled_cohort_stats_merges_alt_haplotype_aliases(monkeypatch):
+    # #465-class fix, consistent with representative_cohort_samples: when one cohort
+    # carries an alt-haplotype/archived id and another carries its primary-contig id,
+    # pooling must collapse them onto ONE canonical gene (resolved through the shipped
+    # ensembl-id-aliases migration map), not leave two mutually-disjoint sparse rows.
+    from oncoref.gene_ids import ensembl_id_aliases
+
+    alt, primary = next((a, p) for a, p in ensembl_id_aliases().items() if a != p)
+    a = pd.DataFrame({"Ensembl_Gene_ID": [alt], "Symbol": ["G"], "s1": [10.0]})
+    b = pd.DataFrame({"Ensembl_Gene_ID": [primary], "Symbol": ["G"], "x1": [20.0]})
+    frames = {"A": a, "B": b}
+    monkeypatch.setattr(expression, "per_sample_expression", lambda code, **k: frames[code].copy())
+    monkeypatch.setattr(expression, "_resolve_cancer_types", lambda ct, **k: list(ct))
+
+    out = expression.pooled_cohort_stats(["A", "B"]).set_index("Ensembl_Gene_ID")
+    assert list(out.index) == [primary]  # one canonical row, the primary id
+    assert alt not in set(out.index)
+    # both cohorts pooled onto it (mean of the two single-sample cohorts)
+    assert out.loc[primary, "n_cohorts"] == 2
+    assert out.loc[primary, "n_samples"] == 2
+    assert out.loc[primary, "mean"] == pytest.approx(15.0)
+
+
+def test_pooled_log1p_sums_alt_haplotype_in_linear_space(monkeypatch):
+    # Within one cohort an alt id + its primary co-occur; pooling in log1p space must
+    # SUM them in linear TPM then log1p, not sum log-space values.
+    from oncoref.gene_ids import ensembl_id_aliases
+
+    alt, primary = next((a, p) for a, p in ensembl_id_aliases().items() if a != p)
+    frame = pd.DataFrame(
+        {"Ensembl_Gene_ID": [primary, alt], "Symbol": ["G", "G"], "s1": [10.0, 3.0]}
+    )
+    # per_sample_expression is monkeypatched to a fixed LINEAR frame regardless of the
+    # normalize it's now called with (pooled fetches the linear basis for log1p).
+    monkeypatch.setattr(expression, "per_sample_expression", lambda code, **k: frame.copy())
+    monkeypatch.setattr(expression, "_resolve_cancer_types", lambda ct, **k: list(ct))
+
+    out = expression.pooled_cohort_stats(["A"], normalize="tpm_clean_log1p").set_index(
+        "Ensembl_Gene_ID"
+    )
+    assert list(out.index) == [primary]
+    assert out.loc[primary, "mean"] == pytest.approx(np.log1p(13.0))  # log1p(10+3)
 
 
 def test_pooled_cohort_stats_expands_aggregate_cohorts(monkeypatch):
