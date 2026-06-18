@@ -293,9 +293,7 @@ def test_audited_anchor_values_match_primary_orr():
 def test_paad_keynote028_source_endpoints():
     est = ici.cancer_ici_response_estimates_df()
     rows = est[
-        (est["cancer_code"] == "PAAD")
-        & (est["regimen"] == "PD-1")
-        & (est["role"] == "primary")
+        (est["cancer_code"] == "PAAD") & (est["regimen"] == "PD-1") & (est["role"] == "primary")
     ]
     by_metric = {str(r["metric"]): r for _, r in rows.iterrows()}
     assert {"ORR", "PFS", "OS"} <= set(by_metric)
