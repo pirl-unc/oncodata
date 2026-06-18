@@ -63,7 +63,7 @@ TGCT,0.0,pembrolizumab,Hoosier GU14-206,,NCT02499952,platinum-refractory germ ce
 ACINIC,4.6,pembrolizumab,KEYNOTE-158,MK-3475-158,NCT02628067,advanced salivary gland carcinoma,PMID:35777186,low,pan-salivary ORR 4.6% (5/109); not acinic-isolated; non-ACC salivary dual ipi+nivo ~16%,PD-1
 DLBC,10.0,nivolumab,CheckMate 139,CA209-139,NCT02038933,relapsed/refractory DLBCL post-ASCT,PMID:30620669,medium,auto-HCT-failed ORR 10% (3/34); transplant-ineligible 3%; PMBCL exception (pembro ~41% KEYNOTE-170),PD-1
 FL,4.0,nivolumab,CheckMate 140,,NCT02038946,relapsed/refractory follicular,DOI:10.1182/blood.2019004753,high,ORR 4% (4/92); checkpoint monotherapy largely inactive,PD-1
-MDS,3.6,pembrolizumab,KEYNOTE-013,MK-3475-013,NCT01953692,post-HMA myelodysplastic syndrome,DOI:10.1080/10428194.2022.2034155,medium,1/28 PR (3.6%); marrow-CR 11%; essentially inactive,PD-1
+MDS,0.0,pembrolizumab,KEYNOTE-013,MK-3475-013,NCT01953692,post-HMA myelodysplastic syndrome,DOI:10.1080/10428194.2022.2034155,medium,No CR/PR by IWG criteria (0/28); marrow CR 19% (5/28); essentially inactive by ORR,PD-1
 MM,0.0,pembrolizumab,KEYNOTE-013,MK-3475-013,NCT01953692,relapsed/refractory myeloma,PMID:30937889,high,0/27; monotherapy inactive; combos halted for excess mortality,PD-1
 CLL,0.0,pembrolizumab,Mayo Clinic phase 2 pembrolizumab CLL/Richter trial,MC1485,NCT02332980,relapsed CLL,DOI:10.1182/blood-2017-02-765685,high,0/16 in CLL proper; Richter transformation responds (~44%) but is DLBCL-like,PD-1
 NBL,0.0,pembrolizumab,KEYNOTE-051,MK-3475-051,NCT02332668,relapsed/refractory neuroblastoma,PMID:31812554,high,no responses; immune-cold; low MHC-I,PD-1

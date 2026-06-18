@@ -260,6 +260,7 @@ def test_audited_anchor_values_match_primary_orr():
     est = ici.cancer_ici_response_estimates_df()
     audited = {
         ("LIHC", "PD-1"): 20.0,  # CheckMate 040 dose-expansion ORR, PMID:28434648
+        ("MDS", "PD-1"): 0.0,  # KEYNOTE-013: no CR/PR by IWG criteria
     }
     for cell, expected in audited.items():
         code, regimen = cell
@@ -279,11 +280,12 @@ def test_audited_anchor_values_match_primary_orr():
     from oncoref import apd1
 
     apd1_anchor = apd1.cancer_apd1_response_df()
-    row = apd1_anchor[
-        (apd1_anchor["cancer_code"] == "LIHC") & (apd1_anchor["drug_target"] == "PD-1")
-    ]
-    assert len(row) == 1
-    assert abs(float(row["apd1_orr_pct"].iloc[0]) - audited[("LIHC", "PD-1")]) < 0.01
+    for (code, regimen), expected in audited.items():
+        row = apd1_anchor[
+            (apd1_anchor["cancer_code"] == code) & (apd1_anchor["drug_target"] == regimen)
+        ]
+        assert len(row) == 1
+        assert abs(float(row["apd1_orr_pct"].iloc[0]) - expected) < 0.01
 
 
 def test_pooled_result_contract():
