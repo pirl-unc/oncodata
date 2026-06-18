@@ -312,6 +312,25 @@ def test_representative_wide_sums_alt_haplotype_within_cohort(monkeypatch, tmp_p
     assert w["A__rep1"].iloc[0] == pytest.approx(13.0)  # 10 + 3 summed, not 10 or 3
 
 
+def test_representative_log1p_sums_in_linear_space(monkeypatch, tmp_path):
+    # The alt-haplotype sum must be taken in LINEAR TPM, then log1p applied — never
+    # sum log-space values: log1p(10)+log1p(3) != log1p(10+3).
+    from oncoref.gene_ids import ensembl_id_aliases
+
+    alt, primary = next((a, p) for a, p in ensembl_id_aliases().items() if a != p)
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
+    d = tmp_path / "cancer-reference-expression-representatives"
+    d.mkdir(parents=True)
+    pd.DataFrame(
+        {"Ensembl_Gene_ID": [primary, alt], "Symbol": ["G", "G-alt"], "A__rep1": [10.0, 3.0]}
+    ).to_parquet(d / "A.parquet", index=False)
+
+    w = expression.representative_cohort_samples(format="wide", normalize="tpm_clean_log1p")
+    assert list(w["Ensembl_Gene_ID"]) == [primary]
+    assert w["A__rep1"].iloc[0] == pytest.approx(np.log1p(13.0))  # log1p(10+3)
+    assert w["A__rep1"].iloc[0] != pytest.approx(np.log1p(10.0) + np.log1p(3.0))  # NOT Σlog1p
+
+
 def _raw_matrix(tmp_path):
     # A tiny raw-TPM per-sample matrix (genes x samples) whose columns sum near 1e6.
     df = pd.DataFrame(
@@ -719,6 +738,27 @@ def test_pooled_cohort_stats_merges_alt_haplotype_aliases(monkeypatch):
     assert out.loc[primary, "n_cohorts"] == 2
     assert out.loc[primary, "n_samples"] == 2
     assert out.loc[primary, "mean"] == pytest.approx(15.0)
+
+
+def test_pooled_log1p_sums_alt_haplotype_in_linear_space(monkeypatch):
+    # Within one cohort an alt id + its primary co-occur; pooling in log1p space must
+    # SUM them in linear TPM then log1p, not sum log-space values.
+    from oncoref.gene_ids import ensembl_id_aliases
+
+    alt, primary = next((a, p) for a, p in ensembl_id_aliases().items() if a != p)
+    frame = pd.DataFrame(
+        {"Ensembl_Gene_ID": [primary, alt], "Symbol": ["G", "G"], "s1": [10.0, 3.0]}
+    )
+    # per_sample_expression is monkeypatched to a fixed LINEAR frame regardless of the
+    # normalize it's now called with (pooled fetches the linear basis for log1p).
+    monkeypatch.setattr(expression, "per_sample_expression", lambda code, **k: frame.copy())
+    monkeypatch.setattr(expression, "_resolve_cancer_types", lambda ct, **k: list(ct))
+
+    out = expression.pooled_cohort_stats(["A"], normalize="tpm_clean_log1p").set_index(
+        "Ensembl_Gene_ID"
+    )
+    assert list(out.index) == [primary]
+    assert out.loc[primary, "mean"] == pytest.approx(np.log1p(13.0))  # log1p(10+3)
 
 
 def test_pooled_cohort_stats_expands_aggregate_cohorts(monkeypatch):

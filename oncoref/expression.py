@@ -576,11 +576,15 @@ def representative_cohort_samples(
         rep_cols = sample_columns(shard)
         if k is not None:
             rep_cols = rep_cols[:k]
+        # Key on the canonical gene id (unversion + migration-resolve), collapsing an
+        # alt-haplotype row onto its primary-contig sibling within the cohort first. The
+        # shard ships in LINEAR clean TPM, so the alt-copy sum happens in linear space;
+        # the log1p transform (if any) is applied AFTER — never sum log-space values
+        # (log1p(a)+log1p(b) != log1p(a+b)), mirroring the proteoform linear-then-log1p
+        # contract in per_sample_expression.
+        shard = _canonicalize_gene_rows(shard)
         if normalize == "tpm_clean_log1p":
             shard[rep_cols] = np.log1p(shard[rep_cols].to_numpy(dtype=float))
-        # Key on the canonical gene id (unversion + migration-resolve), collapsing an
-        # alt-haplotype row onto its primary-contig sibling within the cohort first.
-        shard = _canonicalize_gene_rows(shard)
         gid = shard["Ensembl_Gene_ID"].astype(str)
         for g, s in zip(gid, shard["Symbol"].astype(str)):
             symbols[g][s] += 1
@@ -1087,9 +1091,16 @@ def pooled_cohort_stats(
     sample_frames: list[pd.DataFrame] = []  # per cohort: key-indexed sample matrix
     cohort_means: list[pd.Series] = []  # per cohort: key -> per-gene mean
     id_rows: list[pd.DataFrame] = []  # per cohort: id columns, key-indexed
+    # The alt-haplotype sum (below) must happen in LINEAR TPM, so fetch the linear basis
+    # and apply the log1p transform AFTER collapsing — log1p(a)+log1p(b) != log1p(a+b)
+    # (the proteoform linear-then-log1p contract). tpm_clean / tpm_raw are already linear;
+    # tpm_clean_hk is a per-column rescale that commutes with the sum. Proteoform pooling
+    # is keyed on the release-stable proteoform key, so it isn't alias-canonicalized and
+    # per_sample_expression already handles its linear-then-transform.
+    fetch_norm = "tpm_clean" if (normalize == "tpm_clean_log1p" and not proteoform) else normalize
     for code in codes:
         df = per_sample_expression(
-            code, normalize=normalize, auto_fetch=auto_fetch, proteoform=proteoform, scope=scope
+            code, normalize=fetch_norm, auto_fetch=auto_fetch, proteoform=proteoform, scope=scope
         )
         if not proteoform:
             # Pool on the CANONICAL gene id so an alt-haplotype/archived id collapses onto
@@ -1097,6 +1108,9 @@ def pooled_cohort_stats(
             # #465 fix, consistent with representative_cohort_samples). The proteoform key
             # space is already release-stable, so it's keyed as-is.
             df = _canonicalize_gene_rows(df)
+            if normalize == "tpm_clean_log1p":  # transform AFTER the linear alt-copy sum
+                cols = sample_columns(df)
+                df[cols] = np.log1p(df[cols].to_numpy(dtype=float))
         id_cols = id_columns(df)
         samples = sample_columns(df)
         if not samples:

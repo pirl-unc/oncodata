@@ -36,6 +36,18 @@ def test_alias_table_is_migration_aware_and_acyclic():
     assert all(k != v for k, v in aliases.items()), "no self-maps"
     # cross-release migration: GRCh37 GGNBP2 retired -> its current primary-assembly id
     assert g.resolve_ensembl_id("ENSG00000005955") == "ENSG00000278311"
+    # resolution is idempotent (targets are canonical, never themselves keys)
+    for k in list(aliases)[:2000]:
+        assert g.resolve_ensembl_id(g.resolve_ensembl_id(k)) == g.resolve_ensembl_id(k)
+
+
+def test_every_alias_target_is_in_the_canonical_space():
+    # resolve_ensembl_id must always land in the canonical gene space, so a resolved id
+    # has a biotype and passes is_canonical_gene — otherwise the migration map and the
+    # space artifact disagree about what "canonical" means.
+    space = set(g.canonical_gene_space()["ensembl_gene_id"])
+    targets = set(g.ensembl_id_aliases().values())
+    assert targets <= space, sorted(targets - space)[:5]
 
 
 def test_canonical_gene_id_any_identifier():
