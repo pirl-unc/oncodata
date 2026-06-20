@@ -37,12 +37,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .cancer_types import format_cancer_code_label, resolve_cancer_type
 from .cancer_genes import cancer_key_genes_df, cancer_type_genes_df
+from .cancer_types import format_cancer_code_label, resolve_cancer_type
 from .cta import cta_gene_id_to_name, cta_gene_ids
 from .expression import per_sample_expression
 from .expression_engine import ID_COLUMNS as _ANTIGEN_ID_COLS
-from .gene_families import gene_family_ids, gene_families, housekeeping_gene_ids
+from .gene_families import gene_families, gene_family_ids, housekeeping_gene_ids
 from .gene_ids import canonical_gene_space, resolve_symbol, symbol_synonyms
 
 #: Default clean-TPM threshold for "expressed in a patient". 10 TPM is a common
