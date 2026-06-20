@@ -600,3 +600,27 @@ def test_regenerate_plots_runner_references_real_functions():
     for family, name, fn_attr, kwargs in jobs:
         assert family and name and isinstance(kwargs, dict)
         assert callable(getattr(plots, fn_attr, None)), f"{fn_attr} is not a plots function"
+
+
+def test_regenerate_plots_runner_writes_all_figures_pdf(tmp_path):
+    import importlib.util
+    from pathlib import Path
+
+    import matplotlib.pyplot as plt
+
+    runner = Path(__file__).resolve().parent.parent / "scripts" / "regenerate_plots.py"
+    spec = importlib.util.spec_from_file_location("_regen_plots", runner)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    rels = ["first/one.png", "second/two.png"]
+    for rel in rels:
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        plt.imsave(path, [[[0.2, 0.4, 0.6], [0.9, 0.8, 0.1]]])
+
+    pdf = mod._write_all_figures_pdf(tmp_path, rels)
+
+    assert pdf == tmp_path / "all-figures.pdf"
+    assert pdf.exists()
+    assert pdf.stat().st_size > 0

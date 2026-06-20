@@ -40,6 +40,10 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
+import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
@@ -148,6 +152,29 @@ def _update_latest(run_dir: Path) -> None:
         pass  # symlinks may be unavailable (e.g. some Windows setups)
 
 
+def _write_all_figures_pdf(run_dir: Path, generated: list[str]) -> Path | None:
+    pngs = [run_dir / rel for rel in generated if rel.endswith(".png")]
+    if not pngs:
+        return None
+
+    pdf = run_dir / "all-figures.pdf"
+    with PdfPages(pdf) as pages:
+        for png in pngs:
+            image = mpimg.imread(png)
+            height, width = image.shape[:2]
+            aspect = width / height if height else 1
+            fig_width = 11
+            fig_height = max(4, min(11, fig_width / aspect + 0.6))
+            fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+            ax.imshow(image)
+            ax.set_axis_off()
+            fig.suptitle(png.relative_to(run_dir).as_posix(), fontsize=10)
+            fig.tight_layout(rect=(0, 0, 1, 0.96))
+            pages.savefig(fig)
+            plt.close(fig)
+    return pdf
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
@@ -189,11 +216,17 @@ def main() -> int:
         print(f"  SKIP  cta_curation  ({type(e).__name__}: {e})", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
 
+    pdf = _write_all_figures_pdf(run_dir, done)
+    if pdf is not None:
+        print(f"  ok    {pdf.name}")
+
     index = run_dir / "index.md"
     lines = [
         f"# oncoref figures — {run_dir.name}",
         "",
         f"{len(done)} generated, {len(skipped)} skipped.",
+        "",
+        f"Combined PDF: `{pdf.name}`" if pdf is not None else "Combined PDF: not generated.",
         "",
         "## Generated",
         *(f"- `{p}`" for p in done),
