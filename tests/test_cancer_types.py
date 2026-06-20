@@ -94,6 +94,16 @@ def test_cohort_registry_is_validation_authority():
     assert isinstance(ids, frozenset)
 
 
+def test_cohort_source_version_parses_ensembl_release():
+    # The per-cohort source_version for auditing the canonical gene-ID space: a code
+    # resolves to its source cohort, whose provenance records the harmonized Ensembl
+    # release. The shipped cohorts are harmonized to Ensembl 112.
+    assert cancer_types.cohort_source_version("LUAD") == "112"
+    assert cancer_types.cohort_source_version("ACC") == "112"
+    # an unknown code has no recorded source version (rather than raising)
+    assert cancer_types.cohort_source_version("NOT_A_REAL_CODE") is None
+
+
 def test_clear_caches_allows_reload(monkeypatch):
     # The names view caches the registry; clearing forces a re-read.
     assert "PRAD" in cd.CANCER_TYPE_NAMES

@@ -34,7 +34,9 @@ def test_unknown_cohort_raises():
 def test_release_url_is_per_cohort():
     url = sm.release_url("LUAD")
     assert url.endswith("LUAD_per_sample_tpm.parquet")
-    assert f"source-v{sm.DATA_VERSION}" in url
+    # source matrices are pinned to SOURCE_MATRIX_VERSION (raw inputs), independent of the
+    # derived-bundle DATA_VERSION, so a canonical-space bundle bump can't repoint them.
+    assert f"source-v{sm.SOURCE_MATRIX_VERSION}" in url
 
 
 def test_cache_and_fetch(monkeypatch, tmp_path):

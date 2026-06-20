@@ -295,6 +295,39 @@ def _cmd_plot(args: argparse.Namespace) -> int:
     # rather than being forced onto a single CLI-wide value.
     tpm = {} if args.threshold_tpm is None else {"threshold_tpm": args.threshold_tpm}
     try:
+        if args.which == "patient-coverage":
+            from . import coverage
+
+            threshold = (
+                args.threshold
+                if args.threshold is not None
+                else (args.threshold_tpm if args.threshold_tpm is not None else 25)
+            )
+            result = coverage.render_patient_coverage(
+                args.gene_set,
+                cohorts=[c.strip() for c in args.codes.split(",")] if args.codes else None,
+                threshold=threshold,
+                out_dir=args.out,
+            )
+            if result["n_cohorts"] == 0:
+                print(
+                    f"Error: no cohorts with cached per-sample data and coverage for "
+                    f"gene set {result['label']!r}",
+                    file=sys.stderr,
+                )
+                return 1
+            print(f"{result['label']}: {result['n_cohorts']} cohorts (> {threshold:g} TPM)")
+            for kind, path in result["paths"].items():
+                print(f"  {kind}: {path}")
+            return 0
+        if args.which == "cta-curation":
+            from . import cta_curation_plots
+
+            result = cta_curation_plots.render(out_dir=args.out)
+            print(f"CTA curation figures ({result['n_genes']} evidence rows):")
+            for kind, path in result["paths"].items():
+                print(f"  {kind}: {path}")
+            return 0
         if args.which in ("incidence-vs-mortality", "burden-category-bars"):
             kwargs = {"region": args.region}
         elif args.which == "apd1-response-signature":
@@ -517,10 +550,16 @@ def _build_parser() -> argparse.ArgumentParser:
             "cta-specific-9mer-load",
             "burden-category-bars",
             "apd1-response-signature",
+            "patient-coverage",
+            "cta-curation",
         ],
         help="Which plot to render",
     )
-    p_plot.add_argument("--out", required=True, help="Output PNG path")
+    p_plot.add_argument(
+        "--out",
+        required=True,
+        help="Output PNG path, or output directory for patient-coverage/cta-curation",
+    )
     p_plot.add_argument(
         "--signature",
         default="t_cell_inflamed",
@@ -557,9 +596,23 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     p_plot.add_argument(
+        "--threshold",
+        type=float,
+        default=None,
+        help="Patient-coverage TPM cutoff (alias-style option matching pirlygenes).",
+    )
+    p_plot.add_argument(
+        "--gene-set",
+        default="cta",
+        help=(
+            "Gene set for patient-coverage: cta, mito, housekeeping, family:<name>, "
+            "therapy:<agent_class>, lineage:<code>, or a CSV/TSV/TXT path"
+        ),
+    )
+    p_plot.add_argument(
         "--codes",
         default=None,
-        help="Comma-separated cancer codes (for cta-coverage-curves)",
+        help="Comma-separated cancer codes (for cta coverage plots or patient-coverage)",
     )
     p_plot.set_defaults(func=_cmd_plot)
 

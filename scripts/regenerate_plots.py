@@ -43,7 +43,7 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT))
 
-from oncoref import plots  # noqa: E402
+from oncoref import cta_curation_plots, plots  # noqa: E402
 from oncoref.plots import _cached_per_sample_cohorts  # noqa: E402
 
 
@@ -177,6 +177,17 @@ def main() -> int:
             skipped.append((f"{family}/{name}", f"{type(e).__name__}: {e}"))
             print(f"  SKIP  {family}/{name}  ({type(e).__name__}: {e})", file=sys.stderr)
             traceback.print_exc(file=sys.stderr)
+
+    curation_dir = run_dir / "cta_curation"
+    try:
+        result = cta_curation_plots.render(out_dir=curation_dir)
+        for path in result["paths"].values():
+            done.append(f"cta_curation/{path.name}")
+            print(f"  ok    cta_curation/{path.name}")
+    except Exception as e:
+        skipped.append(("cta_curation", f"{type(e).__name__}: {e}"))
+        print(f"  SKIP  cta_curation  ({type(e).__name__}: {e})", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
 
     index = run_dir / "index.md"
     lines = [

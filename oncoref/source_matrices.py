@@ -26,7 +26,7 @@ one monolithic blob.
 A shipped registry (``source-matrices.csv``: cancer_code, source_cohort,
 n_samples) lists what's available without any download. Cache layout:
 
-    ~/.cache/oncoref/source-matrices/v<DATA_VERSION>/<CODE>.parquet
+    ~/.cache/oncoref/source-matrices/v<SOURCE_MATRIX_VERSION>/<CODE>.parquet
 """
 
 from __future__ import annotations
@@ -43,11 +43,13 @@ import pandas as pd
 
 from .cancer_types import resolve_cancer_type
 from .load_dataset import get_data
-from .version import DATA_VERSION
+from .version import SOURCE_MATRIX_VERSION
 
-#: Per-cohort matrices are release assets on a dedicated tag of oncoref's repo.
+#: Per-cohort matrices are release assets on a dedicated tag of oncoref's repo. Pinned to
+#: SOURCE_MATRIX_VERSION (the raw-input version), NOT the derived-bundle DATA_VERSION — a
+#: canonical-space bundle re-release must not repoint or orphan these unchanged raw matrices.
 GITHUB_REPO = "pirl-unc/oncoref"
-RELEASE_TAG = f"source-v{DATA_VERSION}"
+RELEASE_TAG = f"source-v{SOURCE_MATRIX_VERSION}"
 
 #: Env var overriding the per-cohort cache root.
 CACHE_DIR_ENV_VAR = "CANCERDATA_SOURCE_MATRICES"
@@ -95,7 +97,7 @@ def cache_dir() -> Path:
         if override
         else (Path.home() / ".cache" / "oncoref" / "source-matrices")
     )
-    out = base / f"v{DATA_VERSION}"
+    out = base / f"v{SOURCE_MATRIX_VERSION}"
     out.mkdir(parents=True, exist_ok=True)
     return out
 

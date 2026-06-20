@@ -59,7 +59,8 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from oncoref.expression import SHARD_DATASETS
+from oncoref.cancer_types import cohort_source_version
+from oncoref.expression import SHARD_DATASETS, _canonicalize_gene_rows, sample_columns
 from oncoref.expression_builders import (
     cohort_medoids,
     cohort_percentile_vectors,
@@ -142,8 +143,14 @@ def _select_source(code: str, candidates: list[tuple[str, Path]], code_to_source
 
 
 def build_clean(path: Path) -> pd.DataFrame:
-    """Clean-TPM matrix for one source's per-sample matrix (genes x samples + ids)."""
+    """Clean-TPM matrix for one source's per-sample matrix (genes x samples + ids).
+
+    Canonicalize the raw matrix first (sum alt-haplotype/patch copies in LINEAR TPM,
+    relabel retired ids), exactly as the runtime `_load_per_sample_matrix` does, so the
+    shipped percentile/representative shards are natively dense in the canonical gene-ID
+    space and match the on-the-fly recompute path (oncoref#135 item 6)."""
     raw = pd.read_parquet(path)
+    raw = _canonicalize_gene_rows(raw, sample_cols=sample_columns(raw))
     samples = [c for c in raw.columns if c not in _BASE]
     gene_table = raw[_BASE]
     clean = clean_tpm(raw[samples], gene_table=gene_table)
@@ -198,11 +205,13 @@ def rebuild(cache: Path, ref: Path, out: Path, *, limit: int | None, validate: b
         rep_ids = [f"{code}__rep{i}" for i in range(1, len(rep_cols) + 1)]
         reps = reps.rename(columns=dict(zip(rep_cols, rep_ids)))
         reps.to_parquet(rep_dir / f"{code}.parquet", index=False, compression="zstd")
+        source_version = cohort_source_version(code)
         for rep_id in rep_ids:
             provenance.append(
                 {
                     "representative_id": rep_id,
                     "source_cohort": code_to_source.get(code, code),
+                    "source_version": source_version,  # harmonized Ensembl release
                     "n_cohort_samples": len(samples),
                 }
             )

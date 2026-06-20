@@ -185,10 +185,11 @@ def test_trial_columns_split_and_clean():
     ifct = row("SCLC", "PD-L1")  # IFCT-1603: name IS the protocol code -> no alias
     assert ifct["trial_name"] == "IFCT-1603" and ifct["trial_nct"] == "NCT03059667"
     assert not str(ifct["trial_alias"]).strip() or str(ifct["trial_alias"]) == "nan"
-    # PAAD now uses the direct KEYNOTE-028 pancreatic cohort rather than a
-    # derived no-citation near-zero anchor.
+    # formerly pooled/basket PAAD is anchored to KEYNOTE-028 pancreatic cohort
     paad = row("PAAD", "PD-1")
-    assert paad["trial_name"] == "KEYNOTE-028" and paad["trial_nct"] == "NCT02054806"
+    assert paad["trial_name"] == "KEYNOTE-028"
+    assert paad["trial_alias"] == "MK-3475-028"
+    assert paad["trial_nct"] == "NCT02054806"
 
 
 def test_pooled_sources_expose_trial_labels():
@@ -206,6 +207,26 @@ def _num(v):
         return None if math.isnan(f) else f
     except (TypeError, ValueError):
         return None
+
+
+def test_nbl_response_rows_require_source_denominator():
+    # KEYNOTE-051 supplementary material gives an NBL PD-L1 screening denominator, but
+    # not the treated/evaluable response denominator needed for poolable ORR.
+    from oncoref import apd1
+
+    est = ici.cancer_ici_response_estimates_df()
+    nbl_orr = est[(est["cancer_code"] == "NBL") & (est["metric"].str.upper() == "ORR")]
+    missing_n = nbl_orr[nbl_orr["metric_n"].map(_num).isna()]
+    assert missing_n.empty
+
+    has_source_denominator = not nbl_orr.empty and nbl_orr["metric_n"].map(_num).notna().all()
+    compact_tables = {
+        "cancer-ici-response.csv": ici.cancer_ici_response_df(),
+        "cancer-apd1-response.csv": apd1.cancer_apd1_response_df(),
+    }
+    for table_name, df in compact_tables.items():
+        if (df["cancer_code"] == "NBL").any():
+            assert has_source_denominator, f"{table_name}: NBL row requires source-denominated ORR"
 
 
 def _truthy(v):

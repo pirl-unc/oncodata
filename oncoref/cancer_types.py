@@ -22,10 +22,15 @@ in ``data/cohort-registry.csv`` and ``data/cancer-cohort-aggregates.csv``.
 
 from __future__ import annotations
 
+import re
 import threading
 from functools import lru_cache
 
 from .load_dataset import get_data
+
+#: Ensembl release a cohort's gene ids were harmonized to, parsed from registry provenance
+#: (e.g. "…harmonized to Ensembl release 112…" / "…Ensembl release 112 gene lengths…").
+_ENSEMBL_RELEASE_RE = re.compile(r"Ensembl\s+release\s+(\d{2,3})", re.I)
 
 # Hand-curated common-name aliases. Keyed by lowercase / underscored
 # variant; values are canonical codes from cancer-type-registry.csv.
@@ -798,6 +803,24 @@ def cohort_kind(cohort_id):
     df = cohort_registry_df()
     hit = df.loc[df["cohort_id"].astype(str) == str(cohort_id), "kind"]
     return str(hit.iloc[0]) if len(hit) else None
+
+
+def cohort_source_version(cancer_type):
+    """The Ensembl release a cohort's gene ids were harmonized to (e.g. ``"112"``), or
+    ``None`` if its registry provenance doesn't record one.
+
+    The per-cohort ``source_version`` for auditing the canonical gene-ID space
+    (oncoref#135 item 6): accepts a cancer code (resolved to its source cohort via
+    ``source-matrices.csv``) or a ``cohort_id`` directly, and parses the harmonized
+    Ensembl release from the registry ``provenance`` text."""
+    code = resolve_cancer_type(cancer_type, strict=False) or str(cancer_type)
+    sm = get_data("source-matrices", copy=False)
+    hit = sm.loc[sm["cancer_code"].astype(str) == str(code), "source_cohort"]
+    cohort_id = str(hit.iloc[0]) if len(hit) else str(cancer_type)
+    reg = cohort_registry_df()
+    prov = reg.loc[reg["cohort_id"].astype(str) == cohort_id, "provenance"]
+    m = _ENSEMBL_RELEASE_RE.search(str(prov.iloc[0]) if len(prov) else "")
+    return m.group(1) if m else None
 
 
 def known_cohort_ids():

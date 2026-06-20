@@ -9,17 +9,17 @@ BLCA,28.6,pembrolizumab,KEYNOTE-052,MK-3475-052,NCT02335424,first-line cisplatin
 COAD,5.0,pembrolizumab,KEYNOTE-177,MK-3475-177,NCT02563002,all-comers (response is MSI-dependent),PMID:33264544,medium,All-comer ~5%; only the ~13% MSI-H/dMMR respond (MSI-H ~45%; MSS ~0%),PD-1
 READ,2,pembrolizumab,KEYNOTE-177,MK-3475-177,NCT02563002,all-comers (response is MSI-dependent),PMID:33264544,medium,derived all-comer = ~0.045*43.8 = ~2%; rectal dMMR prevalence ~3-5% (much lower than colon ~13%); KEYNOTE-177 MSI-H ORR 43.8%; subtypes in READ_MSI/READ_MSS,PD-1
 STAD,12.0,pembrolizumab,KEYNOTE-059,MK-3475-059,NCT02335411,third-line; all-comers,PMID:29543932,medium,CPS>=1 ~16%; monotherapy indication later withdrawn,PD-1
-LIHC,20.0,nivolumab,CheckMate 040,CA209-040,NCT01658878,sorafenib-naive & -experienced,PMID:28434648,medium,Dose-expansion ORR 20% (42/214); dose-escalation ORR 15% (7/48),PD-1
+LIHC,20.0,nivolumab,CheckMate 040,CA209-040,NCT01658878,sorafenib-naive & -experienced dose-expansion cohort,PMID:28434648,high,CheckMate 040 dose-expansion ORR 20% (42/214; 95% CI 15-26); dose-escalation cohort 15% is an alternate estimate,PD-1
 ESCA,18.0,nivolumab,ATTRACTION-3,ONO-4538-24,NCT02569242,pretreated; esophageal SCC,PMID:31582355,medium,nivo ~19%; KEYNOTE-181 ESCC subgroup ~17%,PD-1
 CESC,15.0,pembrolizumab,KEYNOTE-158,MK-3475-158,NCT02628067,pretreated; PD-L1+ (CPS>=1) selected,PMID:30943124,high,All responders were PD-L1+; all-comer ~12%,PD-1
 HL,71.0,nivolumab,CheckMate 205,CA209-205,NCT02181738,relapsed/refractory post-ASCT,PMID:29584546,high,Very high responder; KEYNOTE-087 pembro ~69%,PD-1
 NEC_MERKEL,56.0,pembrolizumab,KEYNOTE-017,CITN-09,NCT02267603,first-line advanced; all-comers,PMID:30726175,high,Very high responder; CR ~24%,PD-1
 BRCA_Basal,5.0,pembrolizumab,KEYNOTE-086,MK-3475-086,NCT02447003,pretreated metastatic TNBC; all-comers,PMID:30475950,medium,Cohort A (pretreated) ~5%; PD-L1+ untreated cohort B ~21%,PD-1
-SCLC,10.0,nivolumab,CheckMate 032,CA209-032,NCT01928394,pretreated; all-comers,PMID:27269741,medium,Nivolumab monotherapy ORR 10% (10/98; 95% CI 5-18) in CheckMate 032; combo arms 23%/19%; KEYNOTE-028 PD-L1-selected higher but not representative,PD-1
+SCLC,10.0,nivolumab,CheckMate 032,CA209-032,NCT01928394,pretreated all-comers,PMID:27269741,high,Nivolumab monotherapy ORR 10% (10/98; 95% CI 5-18) in CheckMate 032; combination arms tracked separately,PD-1
 MESO,10.0,pembrolizumab,KEYNOTE-158,MK-3475-158,NCT02628067,pretreated; all-comers,PMID:33836153,low,Reported ~8-20% across studies,PD-1
 NPC,25.0,pembrolizumab,KEYNOTE-028,MK-3475-028,NCT02054806,pretreated; PD-L1+ selected,PMID:28837405,medium,KN-028 NPC cohort ~26%,PD-1
 PRAD,4.0,pembrolizumab,KEYNOTE-199,MK-3475-199,NCT02787005,pretreated mCRPC,PMID:31774688,high,Near-zero anchor; ~5% PD-L1+ / ~3% PD-L1-,PD-1
-PAAD,0.0,pembrolizumab,KEYNOTE-028,MK-3475-028,NCT02054806,PD-L1-positive advanced pancreatic cancer,PMID:30557521,medium,ORR 0% (0/24; 95% CI 0.0-14.2) in KEYNOTE-028 pancreatic cohort; rare MSI-H/dMMR PDAC is a biomarker-selected exception,PD-1
+PAAD,0.0,pembrolizumab,KEYNOTE-028,MK-3475-028,NCT02054806,PD-L1-positive advanced pancreatic cancer,PMID:30557521,low,KEYNOTE-028 pancreatic cohort ORR 0% (0/24; 95% CI 0.0-14.2); MSI-H/dMMR pancreatic subset tracked separately in estimates,PD-1
 GBM,8.0,nivolumab,CheckMate 143,CA209-143,NCT02017717,recurrent; all-comers,PMID:32437507,high,Near-zero anchor; vs bevacizumab 23%,PD-1
 COAD_MSI,43.8,pembrolizumab,KEYNOTE-177,MK-3475-177,NCT02563002,first-line; MSI-H/dMMR,PMID:33264544,high,MSI-H/dMMR colon; immune-hot; the canonical aPD1-responsive subtype,PD-1
 COAD_MSS,0.0,pembrolizumab,KEYNOTE-016,,NCT01876511,MSS,PMID:26028255,high,Microsatellite-stable colon; immune-cold; ~0% response,PD-1
@@ -66,7 +66,6 @@ FL,4.0,nivolumab,CheckMate 140,,NCT02038946,relapsed/refractory follicular,DOI:1
 MDS,0.0,pembrolizumab,KEYNOTE-013,MK-3475-013,NCT01953692,post-HMA myelodysplastic syndrome,DOI:10.1080/10428194.2022.2034155,medium,No CR/PR by IWG criteria (0/28); marrow CR 19% (5/28); essentially inactive by ORR,PD-1
 MM,0.0,pembrolizumab,KEYNOTE-013,MK-3475-013,NCT01953692,relapsed/refractory myeloma,PMID:30937889,high,0/27; monotherapy inactive; combos halted for excess mortality,PD-1
 CLL,0.0,pembrolizumab,Mayo Clinic phase 2 pembrolizumab CLL/Richter trial,MC1485,NCT02332980,relapsed CLL,DOI:10.1182/blood-2017-02-765685,high,0/16 in CLL proper; Richter transformation responds (~44%) but is DLBCL-like,PD-1
-NBL,0.0,pembrolizumab,KEYNOTE-051,MK-3475-051,NCT02332668,relapsed/refractory neuroblastoma,PMID:31812554,high,no responses; immune-cold; low MHC-I,PD-1
 MBL,0.0,nivolumab,CheckMate 908,CA209-908,NCT03130959,relapsed/refractory medulloblastoma,PMID:36808285,high,0/30 (nivo and nivo+ipi); immune-cold,PD-1
 EPN,4.5,nivolumab +/- ipilimumab,CheckMate 908,CA209-908,NCT03130959,relapsed/refractory ependymoma pooled NIVO3 +/- IPI1 arms,PMID:36808285,low,"Pooled CheckMate 908 EPN ORR: 1/22 across NIVO3 (1/12 PR) and NIVO3+IPI1 (0/10) arms; near-zero/immune-cold",PD-1
 DIPG,0.0,nivolumab,CheckMate 908,CA209-908,NCT03130959,diffuse midline glioma,PMID:36808285,high,0/45; no objective responses,PD-1

@@ -10,15 +10,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__version__ = "1.7.0"
+__version__ = "1.8.0"
 
-# Version of the downloadable data bundle (the heavy per-cohort expression
-# tarball). Bump ONLY when the reference data changes — it pins the bundle
-# filename, GitHub-release tag, and on-disk cache. Decoupled from __version__ so
-# a code-only release reuses the last uploaded bundle. The expression bundle is
-# added in a later milestone; until then this pins the cache layout the
-# fetch/cache CLI resolves against (inherited from the pirlygenes releases).
-DATA_VERSION = "5.22.6"
+# Version of the downloadable data bundle (the heavy per-cohort percentile +
+# representative shards). Bump when the DERIVED reference artifacts change — it pins
+# the bundle filename, GitHub-release tag, and on-disk cache. Decoupled from
+# __version__ so a code-only release reuses the last uploaded bundle. 5.23.0 made the
+# shards dense in the canonical gene-ID space (oncoref#135 item 6); the raw inputs
+# behind them did not change, so SOURCE_MATRIX_VERSION stayed put.
+DATA_VERSION = "5.23.0"
+
+# Version of the per-cohort RAW source matrices (source_matrices.py). Independent of
+# DATA_VERSION: the source matrices are the unchanging raw-TPM inputs, while DATA_VERSION
+# tracks the derived bundle that's rebuilt from them. Canonicalization happens downstream
+# (read/build time), so a canonical-space bundle bump must NOT repoint — or orphan the
+# local caches of — these raw matrices. Bump only when a cohort's raw matrix changes.
+SOURCE_MATRIX_VERSION = "5.22.6"
 
 version_string = f"v{__version__}"
 

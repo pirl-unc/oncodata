@@ -38,6 +38,7 @@ dependencies = [
 plots = [
     "matplotlib",
     "adjustText",
+    "matplotlib_venn>=1.0",
 ]
 dev = [
     "pytest",
@@ -45,6 +46,7 @@ dev = [
     "ruff",
     "matplotlib",
     "adjustText",
+    "matplotlib_venn>=1.0",
 ]
 
 [project.scripts]

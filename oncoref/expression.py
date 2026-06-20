@@ -340,6 +340,14 @@ def _load_per_sample_matrix(path: str, mtime: float, normalize: str) -> pd.DataF
     ``path``/``mtime`` identify the on-disk parquet (mtime keys cache invalidation);
     the matrix must already be present."""
     raw = pd.read_parquet(path)
+    # Make the matrix dense in the CANONICAL gene-id space before anything else: sum
+    # alt-haplotype/patch copies into their primary gene (in LINEAR raw TPM) and relabel
+    # retired ids to their successor (resolve_ensembl_id). Doing it pre-clean_tpm means
+    # the alt copy inherits the primary's compartment and column totals are unchanged, so
+    # clean_tpm's renormalization of every other gene is untouched; every downstream
+    # accessor (cohort_stats, coverage, pooled, percentile/within-sample recompute) then
+    # shares one canonical key space. (pirlygenes#465 / oncoref#135 item 6.)
+    raw = _canonicalize_gene_rows(raw, sample_cols=sample_columns(raw))
     base = id_columns(raw)
     samples = sample_columns(raw)
     if normalize == "tpm_raw":
@@ -484,7 +492,7 @@ def cohort_stats(
     return out
 
 
-def _canonicalize_gene_rows(df: pd.DataFrame) -> pd.DataFrame:
+def _canonicalize_gene_rows(df: pd.DataFrame, *, sample_cols=None) -> pd.DataFrame:
     """Re-key one cohort's rows onto the **canonical** gene id so a locus can't be
     fragmented across cohorts (the pirlygenes#465-class bug).
 
@@ -500,7 +508,13 @@ def _canonicalize_gene_rows(df: pd.DataFrame) -> pd.DataFrame:
     (a relabel). All-``NaN`` cells stay ``NaN`` (``min_count=1``) so an unmeasured gene is
     never turned into a measured zero — the canonical symbol is taken from the
     primary-contig row (sorted first) deterministically. The fast path (no collisions)
-    only rewrites the id column."""
+    only rewrites the id column.
+
+    ``sample_cols`` names the value columns to **sum** (the rest are kept via ``first``);
+    summing must be done in **linear** TPM, so the caller transforms (log1p/hk) only
+    afterwards. When ``None`` the value columns are inferred as the numeric dtypes — fine
+    for the gene×sample frames here, but pass them explicitly at the per-sample chokepoint
+    so a stray numeric id column can never be summed."""
     canon = df["Ensembl_Gene_ID"].astype(str).map(resolve_ensembl_id)
     if not canon.duplicated().any():
         return df.assign(Ensembl_Gene_ID=canon.to_numpy())
@@ -508,14 +522,17 @@ def _canonicalize_gene_rows(df: pd.DataFrame) -> pd.DataFrame:
     is_primary = orig.to_numpy() == canon.to_numpy()
     df = df.assign(Ensembl_Gene_ID=canon.to_numpy(), _primary=is_primary)
     df = df.sort_values("_primary", ascending=False, kind="stable").drop(columns="_primary")
-    num_cols = df.select_dtypes("number").columns.tolist()
-    obj_cols = [c for c in df.columns if c != "Ensembl_Gene_ID" and c not in num_cols]
+    if sample_cols is None:
+        sum_cols = df.select_dtypes("number").columns.tolist()
+    else:
+        sum_cols = [c for c in sample_cols if c in df.columns]
+    keep_cols = [c for c in df.columns if c != "Ensembl_Gene_ID" and c not in sum_cols]
     grouped = df.groupby("Ensembl_Gene_ID", sort=False)
     parts = []
-    if obj_cols:  # canonical symbol / id columns: keep the primary-contig row's value
-        parts.append(grouped[obj_cols].first())
-    if num_cols:  # per-sample TPM: SUM alt-haplotype reads into the canonical gene
-        parts.append(grouped[num_cols].sum(min_count=1))
+    if keep_cols:  # canonical symbol / id columns: keep the primary-contig row's value
+        parts.append(grouped[keep_cols].first())
+    if sum_cols:  # per-sample TPM: SUM alt-haplotype reads into the canonical gene
+        parts.append(grouped[sum_cols].sum(min_count=1))
     out = pd.concat(parts, axis=1).reset_index()
     return out[list(df.columns)]
 
@@ -629,7 +646,13 @@ def representative_cohort_samples(
         prov_path = root / "_provenance.csv"
         if prov_path.exists():
             prov = pd.read_csv(prov_path)
-            keep = ["representative_id", "source_cohort", "source_project", "n_cohort_samples"]
+            keep = [
+                "representative_id",
+                "source_cohort",
+                "source_version",
+                "source_project",
+                "n_cohort_samples",
+            ]
             long = long.merge(
                 prov[[c for c in keep if c in prov.columns]],
                 on="representative_id",
@@ -1022,6 +1045,13 @@ def pan_cancer_expression(
     **all** genes before any filtering, so a filtered slice still carries the
     cohort-wide TPM scaling."""
     df = get_data("pan-cancer-expression")
+    # Dense canonical space: sum alt-haplotype/patch copies into their primary gene and
+    # relabel retired ids (oncoref#135 item 6). The cohort/tissue columns are per-gene
+    # abundances (nTPM / FPKM) — linear-additive — so summing the rows of a fragmented
+    # gene is exact, and it precedes the FPKM->TPM rescale (whose per-cohort 1e6 total is
+    # conserved under row-summing, so every other gene's conversion is unchanged).
+    value_cols = [c for c in df.columns if c not in ("Ensembl_Gene_ID", "Symbol")]
+    df = _canonicalize_gene_rows(df, sample_cols=value_cols)
     if to_tpm:
         fpkm_cols = [c for c in df.columns if c.startswith("FPKM_")]
         if fpkm_cols:
@@ -1091,26 +1121,13 @@ def pooled_cohort_stats(
     sample_frames: list[pd.DataFrame] = []  # per cohort: key-indexed sample matrix
     cohort_means: list[pd.Series] = []  # per cohort: key -> per-gene mean
     id_rows: list[pd.DataFrame] = []  # per cohort: id columns, key-indexed
-    # The alt-haplotype sum (below) must happen in LINEAR TPM, so fetch the linear basis
-    # and apply the log1p transform AFTER collapsing — log1p(a)+log1p(b) != log1p(a+b)
-    # (the proteoform linear-then-log1p contract). tpm_clean / tpm_raw are already linear;
-    # tpm_clean_hk is a per-column rescale that commutes with the sum. Proteoform pooling
-    # is keyed on the release-stable proteoform key, so it isn't alias-canonicalized and
-    # per_sample_expression already handles its linear-then-transform.
-    fetch_norm = "tpm_clean" if (normalize == "tpm_clean_log1p" and not proteoform) else normalize
+    # per_sample_expression already returns the dense CANONICAL space (alt-haplotype copies
+    # summed in linear TPM, retired ids relabeled, transform applied after) so an alias id
+    # can't stand as a separate sparse row here — no extra canonicalization needed.
     for code in codes:
         df = per_sample_expression(
-            code, normalize=fetch_norm, auto_fetch=auto_fetch, proteoform=proteoform, scope=scope
+            code, normalize=normalize, auto_fetch=auto_fetch, proteoform=proteoform, scope=scope
         )
-        if not proteoform:
-            # Pool on the CANONICAL gene id so an alt-haplotype/archived id collapses onto
-            # its primary-contig sibling instead of standing as a separate sparse row (the
-            # #465 fix, consistent with representative_cohort_samples). The proteoform key
-            # space is already release-stable, so it's keyed as-is.
-            df = _canonicalize_gene_rows(df)
-            if normalize == "tpm_clean_log1p":  # transform AFTER the linear alt-copy sum
-                cols = sample_columns(df)
-                df[cols] = np.log1p(df[cols].to_numpy(dtype=float))
         id_cols = id_columns(df)
         samples = sample_columns(df)
         if not samples:

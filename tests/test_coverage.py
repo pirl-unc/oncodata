@@ -75,6 +75,27 @@ def test_mean_antigens_per_patient_empty_panel(patched):
     assert coverage.mean_antigens_per_patient("X", gene_ids=[]) == 0.0
 
 
+def test_resolve_gene_set_from_file(tmp_path):
+    panel = tmp_path / "panel.csv"
+    panel.write_text("Ensembl_Gene_ID\nENSG_A\nENSG_B.1\n")
+    label, ids = coverage.resolve_gene_set(str(panel))
+    assert label == "panel"
+    assert ids == {"ENSG_A", "ENSG_B"}
+
+
+def test_patient_coverage_counts_gene_set_file(patched, tmp_path):
+    panel = tmp_path / "panel.csv"
+    panel.write_text("Ensembl_Gene_ID\nENSG_A\nENSG_B\nENSG_C\n")
+    counts = coverage.patient_coverage(str(panel), cohorts=["X"], thresholds=(5,), proteoform=False)
+    got = {row.Ensembl_Gene_ID: (row.n_gt5, row.pct_gt5) for row in counts.itertuples()}
+    assert got == {
+        "ENSG_A": (2, 50.0),
+        "ENSG_B": (1, 25.0),
+        "ENSG_C": (1, 25.0),
+    }
+    assert set(counts["cancer_code"]) == {"X"}
+
+
 def test_greedy_respects_max_genes(patched):
     gc = coverage.greedy_coverage("X", threshold_tpm=5, gene_ids=patched, max_genes=1)
     assert len(gc) == 1

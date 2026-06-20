@@ -4,6 +4,9 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
+from pathlib import Path
+
+import pandas as pd
 import pytest
 
 pytest.importorskip("matplotlib")
@@ -55,6 +58,128 @@ def test_cli_plot_burden_category_bars(tmp_path):
     out = tmp_path / "cats.png"
     assert cli.main(["plot", "burden-category-bars", "--region", "world", "--out", str(out)]) == 0
     assert out.exists()
+
+
+def test_patient_coverage_renderer_writes_pirlygenes_style_artifacts(tmp_path, monkeypatch):
+    from oncoref import coverage
+
+    fixture = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["ENSG_A", "ENSG_B", "ENSG_C"],
+            "Symbol": ["GA", "GB", "GC"],
+            "p0": [10.0, 0.0, 0.0],
+            "p1": [10.0, 0.0, 10.0],
+            "p2": [0.0, 10.0, 0.0],
+            "p3": [0.0, 0.0, 0.0],
+        }
+    )
+    monkeypatch.setattr(coverage, "per_sample_expression", lambda *a, **k: fixture.copy())
+    panel = tmp_path / "panel.csv"
+    panel.write_text("Ensembl_Gene_ID\nENSG_A\nENSG_B\nENSG_C\n")
+
+    result = coverage.render_patient_coverage(
+        str(panel),
+        cohorts=["LUAD"],
+        threshold=5,
+        thresholds=(5,),
+        out_dir=tmp_path / "out",
+        proteoform=False,
+    )
+
+    assert result["n_cohorts"] == 1
+    for path in result["paths"].values():
+        assert Path(path).exists()
+    assert (tmp_path / "out" / "panel_patient_counts.csv").exists()
+    assert (tmp_path / "out" / "panel_stacked_coverage_t5.png").exists()
+    assert (tmp_path / "out" / "panel_coverage_curves_t5.png").exists()
+
+
+def test_cli_plot_patient_coverage_delegates(monkeypatch, tmp_path, capsys):
+    from oncoref import coverage
+
+    captured = {}
+
+    def fake(gene_set, **kwargs):
+        captured["gene_set"] = gene_set
+        captured.update(kwargs)
+        out = tmp_path / "out"
+        out.mkdir(exist_ok=True)
+        counts = out / "counts.csv"
+        counts.write_text("ok\n")
+        return {"paths": {"counts_csv": str(counts)}, "label": "CTA", "n_cohorts": 2}
+
+    monkeypatch.setattr(coverage, "render_patient_coverage", fake)
+    rc = cli.main(
+        [
+            "plot",
+            "patient-coverage",
+            "--gene-set",
+            "cta",
+            "--codes",
+            "LUAD,SKCM",
+            "--threshold",
+            "25",
+            "--out",
+            str(tmp_path / "out"),
+        ]
+    )
+    assert rc == 0
+    assert captured["gene_set"] == "cta"
+    assert captured["cohorts"] == ["LUAD", "SKCM"]
+    assert captured["threshold"] == 25
+    assert "counts_csv" in capsys.readouterr().out
+
+
+def test_cta_curation_source_counts_partition():
+    from oncoref import cta_curation_plots as ccp
+
+    rows = ccp._per_source_counts(ccp._evidence())
+    assert rows
+    for row in rows:
+        assert row["kept_confident"] + row["kept_weak"] + row["excluded"] == row["total"]
+        assert row["total"] > 0
+    totals = [row["total"] for row in rows]
+    assert totals == sorted(totals, reverse=True)
+
+
+def test_cta_curation_tag_sets_cover_primary_sources():
+    from oncoref import cta_curation_plots as ccp
+
+    sets = ccp._tag_sets(ccp._evidence())
+    assert set(sets) == set(ccp.PRIMARY_SOURCES)
+    assert sets["CTpedia"]
+    assert sets["CTexploreR"]
+    assert sets["daSilva2017_protein"]
+
+
+def test_cta_curation_renderer_writes_five_figures(tmp_path):
+    from oncoref import cta_curation_plots as ccp
+
+    result = ccp.render(out_dir=tmp_path)
+    assert set(result["paths"]) == set(ccp.FILENAMES)
+    assert result["n_genes"] > 0
+    for path in result["paths"].values():
+        assert path.exists() and path.stat().st_size > 0
+
+
+def test_cli_plot_cta_curation_delegates(monkeypatch, tmp_path, capsys):
+    from oncoref import cta_curation_plots
+
+    captured = {}
+
+    def fake(*, out_dir):
+        captured["out_dir"] = out_dir
+        out = tmp_path / "cur"
+        out.mkdir(exist_ok=True)
+        fig = out / "cta-source-venn.png"
+        fig.write_text("ok\n")
+        return {"n_genes": 3, "paths": {"source_venn": fig}}
+
+    monkeypatch.setattr(cta_curation_plots, "render", fake)
+    rc = cli.main(["plot", "cta-curation", "--out", str(tmp_path / "cur")])
+    assert rc == 0
+    assert captured["out_dir"] == str(tmp_path / "cur")
+    assert "source_venn" in capsys.readouterr().out
 
 
 def test_cli_plot_coverage_stacked_needs_codes(capsys):

@@ -37,7 +37,7 @@ KIRC,PD-1,25.0,nivolumab,CheckMate 025,CA209-025,NCT01668784,pretreated (post-VE
 KIRC,PD-1+CTLA-4,42.0,nivolumab+ipilimumab,CheckMate 214,CA209-214,NCT02231749,1L IMDC intermediate/poor-risk,PMID:29562145,high,Motzer 2018; intermediate/poor-risk co-primary (not ITT); CR 9%
 KIRC,PD-L1,25.0,atezolizumab,IMmotion150,WO29074,NCT01984242,1L metastatic mono arm,PMID:29867230,high,mono missed PFS vs sunitinib; combo arm 32%
 KIRP,PD-1,25.0,pembrolizumab,KEYNOTE-427 cohort B,MK-3475-427,NCT02853344,papillary RCC 1L,PMID:33529058,medium,papillary nccRCC ORR 25.4%
-LIHC,PD-1,20.0,nivolumab,CheckMate 040,CA209-040,NCT01658878,sorafenib-naive & -experienced,PMID:28434648,medium,Dose-expansion ORR 20% (42/214); dose-escalation ORR 15% (7/48)
+LIHC,PD-1,20.0,nivolumab,CheckMate 040,CA209-040,NCT01658878,sorafenib-naive & -experienced dose-expansion cohort,PMID:28434648,high,CheckMate 040 dose-expansion ORR 20% (42/214; 95% CI 15-26); dose-escalation cohort 15% is an alternate estimate
 LIHC,PD-1+CTLA-4,32.0,nivolumab+ipilimumab,CheckMate 040,CA209-040,NCT01658878,sorafenib-experienced,PMID:33001135,high,Yau 2020; arm A approved dose
 LIHC,PD-L1,17.0,durvalumab,HIMALAYA,D419CC00002,NCT03298451,1L unresectable mono arm,DOI:10.1056/EVIDoa2100070,medium,mono OS non-inferior to sorafenib; STRIDE combo 20.1%
 LUAD,PD-1,19.0,nivolumab,CheckMate 057,CA209-057,NCT01673867,pretreated non-squamous; PD-L1 unselected (all-comer),PMID:26412456,high,All-comer mono ORR 19.2% (Borghaei 2015); PD-L1>=1% ~31% / >=50% ~36%; KEYNOTE-024 PD-L1 TPS>=50% 1L was 45% (PMID:27718847) — population-matched to all-comer TMB/expression per audit
@@ -53,7 +53,6 @@ MESO,PD-1,10.0,pembrolizumab,KEYNOTE-158,MK-3475-158,NCT02628067,pretreated; all
 MESO,PD-1+CTLA-4,40.0,nivolumab+ipilimumab,CheckMate 743,CA209-743,NCT02899299,1L unresectable; all-comers,PMID:33485464,medium,Baas 2021; ORR from trial body; benefit is OS not ORR (<=chemo ~43%)
 MESO,PD-L1,9.0,avelumab,JAVELIN Solid Tumor,,NCT01772004,2L+ unresectable,PMID:30605211,high,low ORR but durable (mDOR 15.2 mo)
 MM,PD-1,0.0,pembrolizumab,KEYNOTE-013,MK-3475-013,NCT01953692,relapsed/refractory myeloma,PMID:30937889,high,0/27; monotherapy inactive; combos halted for excess mortality
-NBL,PD-1,0.0,pembrolizumab,KEYNOTE-051,MK-3475-051,NCT02332668,relapsed/refractory neuroblastoma,PMID:31812554,high,no responses; immune-cold; low MHC-I
 NEC_LUNG_LARGECELL,PD-1,29.4,nivolumab,nivolumab pulmonary LCNEC series,,,previously treated advanced pulmonary LCNEC; nivolumab monotherapy 2L+,PMID:34590004,low,"lung LCNEC nivolumab mono ORR 29.4% (5/17; 95% CI 10.3-56.0), Agar JTO CRR 2021; replaces prior extrapulmonary high-grade NEN value that EXCLUDED lung LCNEC"
 NEC_MERKEL,PD-1,56.0,pembrolizumab,KEYNOTE-017,CITN-09,NCT02267603,first-line advanced; all-comers,PMID:30726175,high,Very high responder; CR ~24%
 NEC_MERKEL,PD-L1,31.8,avelumab,JAVELIN Merkel 200,EMR 100070-003,NCT02155647,2L+ chemo-refractory,PMID:27592805,high,Kaufman 2016 n=88; 1L Part B ~62% interim (PMID:29566106)
@@ -63,7 +62,7 @@ NET_PANCREAS,PD-1+CTLA-4,11.0,nivolumab+ipilimumab,DART/SWOG S1609,,NCT02834013,
 NPC,PD-1,25.0,pembrolizumab,KEYNOTE-028,MK-3475-028,NCT02054806,pretreated; PD-L1+ selected,PMID:28837405,medium,KN-028 NPC cohort ~26%
 OV,PD-1,8.0,pembrolizumab,KEYNOTE-100,MK-3475-100,NCT02674061,recurrent ovarian (all-comers),PMID:31046082,medium,pembro monotherapy ORR 8.0%
 OV,PD-L1,9.6,avelumab,JAVELIN Solid Tumor,,NCT01772004,recurrent post-platinum,PMID:30676622,high,heavily pretreated; modest
-PAAD,PD-1,0.0,pembrolizumab,KEYNOTE-028,MK-3475-028,NCT02054806,PD-L1-positive advanced pancreatic cancer,PMID:30557521,medium,ORR 0% (0/24; 95% CI 0.0-14.2) in KEYNOTE-028 pancreatic cohort; rare MSI-H/dMMR PDAC is a biomarker-selected exception
+PAAD,PD-1,0.0,pembrolizumab,KEYNOTE-028,MK-3475-028,NCT02054806,PD-L1-positive advanced pancreatic cancer,PMID:30557521,low,KEYNOTE-028 pancreatic cohort ORR 0% (0/24; 95% CI 0.0-14.2); MSI-H/dMMR pancreatic subset tracked separately in estimates
 PCPG,PD-1,9.0,pembrolizumab,pembrolizumab metastatic pheochromocytoma/paraganglioma phase II,,NCT02721732,metastatic pheochromocytoma/paraganglioma,DOI:10.3390/cancers12082307,medium,ORR 9% (1/11); non-progression 27wk 40%; CBR 73%
 PMBCL,PD-1,41.5,pembrolizumab,KEYNOTE-170,MK-3475-170,NCT02576990,relapsed/refractory primary mediastinal B-cell lymphoma,PMID:37130017,high,ORR 41.5% (22/53); CR 20.8%; 9p24.1/PD-L1 amplification; FDA-approved; the checkpoint-sensitive exception within DLBCL
 PRAD,PD-1,4.0,pembrolizumab,KEYNOTE-199,MK-3475-199,NCT02787005,pretreated mCRPC,PMID:31774688,high,Near-zero anchor; ~5% PD-L1+ / ~3% PD-L1-
@@ -85,7 +84,7 @@ SARC_OS,PD-1,5.0,pembrolizumab,SARC028,,NCT02301039,advanced/metastatic bone coh
 SARC_SMARCA4,PD-1,25.0,pembrolizumab,AcSe Pembrolizumab,UC-0105/1612,NCT03012620,SMARCA4/SMARCB1-deficient sarcoma,PMID:37429302,medium,ORR 25% (3/12); rhabdoid/SMARCA4-deficient immunogenic despite low TMB
 SARC_SYN,PD-1,10.0,pembrolizumab,SARC028,,NCT02301039,advanced/metastatic 2L+,PMID:28988646,low,synovial sarcoma 1/10; translocation sarcoma; immune-cold
 SARC_UPS,PD-1,23,pembrolizumab,SARC028,,NCT02301039,advanced/metastatic 2L+,DOI:10.1200/JCO.2019.37.15_suppl.11015,medium,"UPS final expansion ORR 23% (9/40; 2 CR + 7 PR); PFS 3 mo (95% CI 2-5); met primary endpoint"
-SCLC,PD-1,10.0,nivolumab,CheckMate 032,CA209-032,NCT01928394,pretreated; all-comers,PMID:27269741,medium,Nivolumab monotherapy ORR 10% (10/98; 95% CI 5-18) in CheckMate 032; combo arms 23%/19%; KEYNOTE-028 PD-L1-selected higher but not representative
+SCLC,PD-1,10.0,nivolumab,CheckMate 032,CA209-032,NCT01928394,pretreated all-comers,PMID:27269741,high,Nivolumab monotherapy ORR 10% (10/98; 95% CI 5-18) in CheckMate 032; combination arms tracked separately
 SCLC,PD-1+CTLA-4,23.0,nivolumab+ipilimumab,CheckMate 032,CA209-032,NCT01928394,recurrent >=1 prior,PMID:27269741,high,Antonia 2016 Lancet Oncol; nivo1+ipi3
 SCLC,PD-L1,2.3,atezolizumab,IFCT-1603,,NCT03059667,2L post-platinum,PMID:30664989,high,single-agent anti-PD-L1 essentially inactive in SCLC
 SKCM,PD-1,42.0,nivolumab,CheckMate 067,CA209-067,NCT01844505,first-line advanced; nivo monotherapy arm,PMID:28889792,high,Nivo mono ~42-45% (CheckMate-067); pembro KEYNOTE-006 primary 33-37% / longer-FU ~42% (PMID:25891173); aPD1 monotherapy ~40-45% in melanoma

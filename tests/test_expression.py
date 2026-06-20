@@ -390,6 +390,65 @@ def test_per_sample_expression_normalize_modes(tmp_path, monkeypatch):
     assert list(hk.columns) == ["Ensembl_Gene_ID", "Symbol", "s1", "s2"]
 
 
+def test_per_sample_expression_canonicalizes_alias_genes(tmp_path, monkeypatch):
+    # per_sample_expression returns the DENSE canonical space (oncoref#135 item 6): an
+    # alt-haplotype copy is summed into its primary in LINEAR TPM, a versioned id is
+    # unversioned, a retired id is relabeled to its successor — every transform applied
+    # AFTER the linear sum.
+    from oncoref.gene_ids import ensembl_id_aliases
+
+    alt, primary = next((a, p) for a, p in ensembl_id_aliases().items() if a != p)
+    raw = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": [primary, alt, "ENSG00000005955", "ENSG00000141510.5"],
+            "Symbol": ["G", "G-alt", "GGNBP2-old", "TP53"],
+            "s1": [100000.0, 30000.0, 1000.0, 200000.0],
+            "s2": [50000.0, 10000.0, 2000.0, 400000.0],
+        }
+    )
+    path = tmp_path / "X.parquet"
+    raw.to_parquet(path, index=False)
+    monkeypatch.setattr(expression.source_matrices, "ensure", lambda code: path)
+
+    rawout = expression.per_sample_expression("X", normalize="tpm_raw").set_index("Ensembl_Gene_ID")
+    assert alt not in rawout.index  # alt-haplotype copy folded into its primary
+    assert rawout.loc[primary, "s1"] == pytest.approx(130000.0)  # 100000 + 30000, linear
+    assert "ENSG00000141510" in rawout.index  # versioned id -> unversioned canonical
+    assert "ENSG00000278311" in rawout.index  # GGNBP2 retired id -> successor
+    assert "ENSG00000005955" not in rawout.index
+
+    # log1p is applied AFTER the linear alt-copy sum, never log1p(a)+log1p(b)
+    clean = expression.per_sample_expression("X", normalize="tpm_clean").set_index(
+        "Ensembl_Gene_ID"
+    )
+    logged = expression.per_sample_expression("X", normalize="tpm_clean_log1p").set_index(
+        "Ensembl_Gene_ID"
+    )
+    assert np.allclose(
+        logged.loc[primary, ["s1", "s2"]].to_numpy(dtype=float),
+        np.log1p(clean.loc[primary, ["s1", "s2"]].to_numpy(dtype=float)),
+    )
+
+
+def test_pan_cancer_expression_canonicalizes_alias_genes(monkeypatch):
+    # pan_cancer_expression is dense canonical too: cohort/tissue columns are linear
+    # abundances (nTPM/FPKM), so summing an alt copy into its primary row is exact.
+    from oncoref.gene_ids import ensembl_id_aliases
+
+    alt, primary = next((a, p) for a, p in ensembl_id_aliases().items() if a != p)
+    fixture = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": [primary, alt],
+            "Symbol": ["G", "G-alt"],
+            "nTPM_liver": [3.0, 7.0],
+        }
+    )
+    monkeypatch.setattr(expression, "get_data", lambda name: fixture.copy())
+    out = expression.pan_cancer_expression(to_tpm=False).set_index("Ensembl_Gene_ID")
+    assert list(out.index) == [primary]  # alt folded into primary
+    assert out.loc[primary, "nTPM_liver"] == pytest.approx(10.0)  # 3 + 7 summed
+
+
 def test_housekeeping_normalize_divides_by_panel_geomean(monkeypatch):
     import oncoref.gene_families as gf
 
@@ -717,48 +776,36 @@ def test_pooled_cohort_stats_availability_and_heterogeneity(monkeypatch):
     assert out.loc["E1", "max"] == 30.0
 
 
-def test_pooled_cohort_stats_merges_alt_haplotype_aliases(monkeypatch):
-    # #465-class fix, consistent with representative_cohort_samples: when one cohort
-    # carries an alt-haplotype/archived id and another carries its primary-contig id,
-    # pooling must collapse them onto ONE canonical gene (resolved through the shipped
-    # ensembl-id-aliases migration map), not leave two mutually-disjoint sparse rows.
+def test_pooled_cohort_stats_merges_alt_haplotype_aliases(tmp_path, monkeypatch):
+    # End-to-end #465-class fix: per_sample_expression now returns the dense canonical
+    # space, so when cohort A carries an alt-haplotype id and cohort B its primary,
+    # pooling sees ONE canonical gene across both cohorts — not two disjoint sparse rows.
+    # Drive the REAL per_sample (normalize="tpm_raw" so values pass through clean_tpm-free
+    # for an exact pooled mean); the canonicalization itself lives one layer down now.
     from oncoref.gene_ids import ensembl_id_aliases
 
     alt, primary = next((a, p) for a, p in ensembl_id_aliases().items() if a != p)
-    a = pd.DataFrame({"Ensembl_Gene_ID": [alt], "Symbol": ["G"], "s1": [10.0]})
-    b = pd.DataFrame({"Ensembl_Gene_ID": [primary], "Symbol": ["G"], "x1": [20.0]})
-    frames = {"A": a, "B": b}
-    monkeypatch.setattr(expression, "per_sample_expression", lambda code, **k: frames[code].copy())
+    pa, pb = tmp_path / "A.parquet", tmp_path / "B.parquet"
+    pd.DataFrame({"Ensembl_Gene_ID": [alt], "Symbol": ["G"], "s1": [10.0]}).to_parquet(
+        pa, index=False
+    )
+    pd.DataFrame({"Ensembl_Gene_ID": [primary], "Symbol": ["G"], "x1": [20.0]}).to_parquet(
+        pb, index=False
+    )
+    paths = {"A": pa, "B": pb}
+    expression._load_per_sample_matrix.cache_clear()
+    monkeypatch.setattr(expression.source_matrices, "ensure", lambda code: paths[code])
     monkeypatch.setattr(expression, "_resolve_cancer_types", lambda ct, **k: list(ct))
 
-    out = expression.pooled_cohort_stats(["A", "B"]).set_index("Ensembl_Gene_ID")
+    out = expression.pooled_cohort_stats(["A", "B"], normalize="tpm_raw").set_index(
+        "Ensembl_Gene_ID"
+    )
     assert list(out.index) == [primary]  # one canonical row, the primary id
     assert alt not in set(out.index)
     # both cohorts pooled onto it (mean of the two single-sample cohorts)
     assert out.loc[primary, "n_cohorts"] == 2
     assert out.loc[primary, "n_samples"] == 2
     assert out.loc[primary, "mean"] == pytest.approx(15.0)
-
-
-def test_pooled_log1p_sums_alt_haplotype_in_linear_space(monkeypatch):
-    # Within one cohort an alt id + its primary co-occur; pooling in log1p space must
-    # SUM them in linear TPM then log1p, not sum log-space values.
-    from oncoref.gene_ids import ensembl_id_aliases
-
-    alt, primary = next((a, p) for a, p in ensembl_id_aliases().items() if a != p)
-    frame = pd.DataFrame(
-        {"Ensembl_Gene_ID": [primary, alt], "Symbol": ["G", "G"], "s1": [10.0, 3.0]}
-    )
-    # per_sample_expression is monkeypatched to a fixed LINEAR frame regardless of the
-    # normalize it's now called with (pooled fetches the linear basis for log1p).
-    monkeypatch.setattr(expression, "per_sample_expression", lambda code, **k: frame.copy())
-    monkeypatch.setattr(expression, "_resolve_cancer_types", lambda ct, **k: list(ct))
-
-    out = expression.pooled_cohort_stats(["A"], normalize="tpm_clean_log1p").set_index(
-        "Ensembl_Gene_ID"
-    )
-    assert list(out.index) == [primary]
-    assert out.loc[primary, "mean"] == pytest.approx(np.log1p(13.0))  # log1p(10+3)
 
 
 def test_pooled_cohort_stats_expands_aggregate_cohorts(monkeypatch):

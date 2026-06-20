@@ -98,7 +98,8 @@ od.within_sample_top_fraction("PRAD")     # per-gene frac of samples top-5% (wit
   mean per-patient CTA-specific 9-mer load): 9-mers found in a CTA protein but in no
   non-CTA protein, enumerated from the reference proteome and cached per release.
 - **Plots** (`pip install oncoref[plots]`) — `oncoref.plots.apd1_vs_tmb`,
-  `apd1_orr_bars`, `incidence_vs_mortality`, and the CTA/coverage figures.
+  `apd1_orr_bars`, `incidence_vs_mortality`, the CTA/coverage figures, and
+  `oncoref.cta_curation_plots.render`.
 
 ## CLI
 
@@ -109,6 +110,8 @@ oncoref ici SKCM                # 42  (--regimen to pin, --all-regimens to compa
 oncoref burden pancreas --metric us_mortality_pct
 oncoref cta --count             # number of expressed CTAs
 oncoref plot apd1-vs-tmb --out apd1_vs_tmb.png
+oncoref plot patient-coverage --gene-set cta --out coverage_out
+oncoref plot cta-curation --out cta_curation_out
 
 # expression-bundle cache (per-cohort expression):
 oncoref cache fetch             # download the ~340 MB bundle
