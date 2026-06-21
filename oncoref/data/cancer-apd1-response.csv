@@ -21,9 +21,8 @@ NPC,25.0,pembrolizumab,KEYNOTE-028,MK-3475-028,NCT02054806,pretreated; PD-L1+ se
 PRAD,4.0,pembrolizumab,KEYNOTE-199,MK-3475-199,NCT02787005,pretreated mCRPC,PMID:31774688,high,Near-zero anchor; ~5% PD-L1+ / ~3% PD-L1-,PD-1
 PAAD,0.0,pembrolizumab,KEYNOTE-028,MK-3475-028,NCT02054806,PD-L1-positive advanced pancreatic cancer,PMID:30557521,low,KEYNOTE-028 pancreatic cohort ORR 0% (0/24; 95% CI 0.0-14.2); MSI-H/dMMR pancreatic subset tracked separately in estimates,PD-1
 GBM,8.0,nivolumab,CheckMate 143,CA209-143,NCT02017717,recurrent; all-comers,PMID:32437507,high,Near-zero anchor; vs bevacizumab 23%,PD-1
-COAD_MSI,43.8,pembrolizumab,KEYNOTE-177,MK-3475-177,NCT02563002,first-line; MSI-H/dMMR,PMID:33264544,high,MSI-H/dMMR colon; immune-hot; the canonical aPD1-responsive subtype,PD-1
+CRC_MSI,43.8,pembrolizumab,KEYNOTE-177,MK-3475-177,NCT02563002,first-line MSI-H/dMMR mCRC,PMID:33264544,high,MSI-H/dMMR metastatic colorectal; source-level KEYNOTE-177 estimate for COAD_MSI/READ_MSI lookups,PD-1
 COAD_MSS,0.0,pembrolizumab,KEYNOTE-016,,NCT01876511,MSS,PMID:26028255,high,Microsatellite-stable colon; immune-cold; ~0% response,PD-1
-READ_MSI,43.8,pembrolizumab,KEYNOTE-177,MK-3475-177,NCT02563002,first-line; MSI-H/dMMR,PMID:33264544,medium,MSI-H/dMMR rectal; small subset; same biology as COAD_MSI,PD-1
 READ_MSS,0.0,pembrolizumab,KEYNOTE-016,NCT01876511,NCT01876511,MSS,PMID:26028255,high,Microsatellite-stable rectal; immune-cold,PD-1
 UCEC_MSI,48,pembrolizumab,KEYNOTE-158,MK-3475-158,NCT02628067,dMMR/MSI-H advanced EC,PMID:39847999,high,ORR 48% (95% CI 37-60); MSI-H/dMMR cohort n~94 (KEYNOTE-158 long-term FU),PD-1
 UCEC_CNL,7,pembrolizumab,KEYNOTE-158,MK-3475-158,NCT02628067,pMMR/MSS NSMP,PMID:39847999,medium,"non-MSI-H/pMMR ORR 7% (95% CI 3-14), KEYNOTE-158; MSS NSMP arm",PD-1

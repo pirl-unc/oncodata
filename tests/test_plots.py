@@ -21,6 +21,15 @@ def test_apd1_vs_tmb_renders(tmp_path):
     assert fig is not None
 
 
+def test_apd1_vs_tmb_strict_pd1_filters_proxy_targets(tmp_path):
+    fig = plots.apd1_vs_tmb(strict_pd1=True, save=str(tmp_path / "strict.png"))
+    labels = {t.get_text() for t in fig.axes[0].texts}
+    proxy_codes = set(
+        plots.cancer_apd1_response_df().query("drug_target != 'PD-1'")["cancer_code"].astype(str)
+    )
+    assert labels.isdisjoint(proxy_codes)
+
+
 def test_apd1_orr_bars_renders(tmp_path):
     out = tmp_path / "bars.png"
     plots.apd1_orr_bars(save=str(out))
@@ -315,6 +324,20 @@ def test_cta_addressable_burden_renders(tmp_path, monkeypatch):
     assert fig is not None
 
 
+def test_cta_addressable_burden_labels_mortality_metric(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        plots,
+        "_cta_prevalence_by_cohort",
+        lambda threshold: {"LUAD": 0.6, "SKCM": 0.4, "BRCA": 0.2},
+    )
+    out = tmp_path / "burden_mortality.png"
+    fig = plots.cta_addressable_burden(metric="world_mortality_pct", n=10, save=str(out))
+    assert out.exists() and fig is not None
+    ax = fig.axes[0]
+    assert "WORLD mortality share" in ax.get_xlabel()
+    assert "WORLD mortality share" in ax.get_title()
+
+
 def test_cta_addressable_burden_no_within_sample(monkeypatch):
     monkeypatch.setattr(plots, "_cta_prevalence_by_cohort", lambda threshold: {})
     with pytest.raises(ValueError, match="no CTA prevalence available"):
@@ -341,6 +364,31 @@ def test_cta_specific_9mer_load_renders(tmp_path, monkeypatch):
     out = tmp_path / "9mer.png"
     fig = plots.cta_specific_9mer_load(against="tmb", save=str(out))
     assert out.exists() and fig is not None
+
+
+def test_cta_specific_9mer_load_collapses_crc_msi_source_scope(tmp_path, monkeypatch):
+    from oncoref import peptides, source_matrices
+
+    monkeypatch.setattr(plots, "_cached_per_sample_cohorts", lambda: ["COAD_MSI", "READ_MSI"])
+    monkeypatch.setattr(plots, "cancer_tmb", lambda: {"CRC_MSI": 46.0})
+    monkeypatch.setattr(
+        peptides,
+        "cta_specific_9mer_load",
+        lambda code, **k: {"COAD_MSI": 10.0, "READ_MSI": 30.0}[code],
+    )
+    monkeypatch.setattr(
+        source_matrices,
+        "cohort_info",
+        lambda code: {"n_samples": {"COAD_MSI": 3, "READ_MSI": 1}[code]},
+    )
+
+    out = tmp_path / "crc_msi_9mer.png"
+    fig = plots.cta_specific_9mer_load(against="tmb", save=str(out))
+    offsets = [tuple(coll.get_offsets()[0]) for coll in fig.axes[0].collections]
+    assert len(offsets) == 1
+    assert offsets[0][0] == pytest.approx(15.0)
+    assert offsets[0][1] == pytest.approx(46.0)
+    assert [t.get_text() for t in fig.axes[0].texts] == ["CRC_MSI"]
 
 
 def test_cta_specific_9mer_load_bad_against():
@@ -544,6 +592,71 @@ def test_cta_burden_vs_response_renders(tmp_path, monkeypatch):
     assert out.exists() and fig is not None
 
 
+def test_cta_burden_vs_response_supports_burden_axis(tmp_path, monkeypatch):
+    from oncoref import coverage
+
+    monkeypatch.setattr(plots, "_cached_per_sample_cohorts", lambda: ["LUAD", "SKCM"])
+    monkeypatch.setattr(
+        coverage,
+        "mean_antigens_per_patient",
+        lambda code, **k: {"LUAD": 1.5, "SKCM": 4.0}[code],
+    )
+    out = tmp_path / "burden_axis.png"
+    fig = plots.cta_burden_vs_response(against="us_incidence", save=str(out))
+    assert out.exists() and fig is not None
+    assert fig.axes[0].get_ylabel() == "US incidence share (%)"
+
+
+def test_cta_burden_vs_ici_includes_ici_only_anchor(tmp_path, monkeypatch):
+    from oncoref import coverage
+
+    assert "THYM" not in plots.cancer_apd1_response()
+    monkeypatch.setattr(plots, "_cached_per_sample_cohorts", lambda: ["THYM"])
+    monkeypatch.setattr(
+        coverage,
+        "mean_antigens_per_patient",
+        lambda code, **k: {"THYM": 2.5}[code],
+    )
+    out = tmp_path / "ici_only.png"
+    fig = plots.cta_burden_vs_response(against="ici", save=str(out))
+    assert out.exists() and fig is not None
+    assert [t.get_text() for t in fig.axes[0].texts] == ["THYM"]
+
+
+def test_cta_burden_vs_burden_axis_keeps_direct_msi_cohorts(tmp_path, monkeypatch):
+    from oncoref import coverage
+
+    monkeypatch.setattr(plots, "_cached_per_sample_cohorts", lambda: ["COAD_MSI", "READ_MSI"])
+    monkeypatch.setattr(
+        coverage,
+        "mean_antigens_per_patient",
+        lambda code, **k: {"COAD_MSI": 10.0, "READ_MSI": 30.0}[code],
+    )
+    out = tmp_path / "burden_msi.png"
+    fig = plots.cta_burden_vs_response(against="us_incidence", save=str(out))
+    assert out.exists() and fig is not None
+    assert {t.get_text() for t in fig.axes[0].texts} == {"COAD_MSI", "READ_MSI"}
+    xs = sorted(float(coll.get_offsets()[0][0]) for coll in fig.axes[0].collections)
+    assert xs == [10.0, 30.0]
+
+
+def test_cta_specific_9mer_burden_axis_keeps_direct_msi_cohorts(tmp_path, monkeypatch):
+    from oncoref import peptides
+
+    monkeypatch.setattr(plots, "_cached_per_sample_cohorts", lambda: ["COAD_MSI", "READ_MSI"])
+    monkeypatch.setattr(
+        peptides,
+        "cta_specific_9mer_load",
+        lambda code, **k: {"COAD_MSI": 100.0, "READ_MSI": 300.0}[code],
+    )
+    out = tmp_path / "9mer_burden_msi.png"
+    fig = plots.cta_specific_9mer_load(against="us_incidence", save=str(out))
+    assert out.exists() and fig is not None
+    assert {t.get_text() for t in fig.axes[0].texts} == {"COAD_MSI", "READ_MSI"}
+    xs = sorted(float(coll.get_offsets()[0][0]) for coll in fig.axes[0].collections)
+    assert xs == [100.0, 300.0]
+
+
 def test_cta_burden_vs_response_bad_against():
     with pytest.raises(ValueError, match="against must be"):
         plots.cta_burden_vs_response(against="nonsense")
@@ -597,6 +710,23 @@ def test_regenerate_plots_runner_references_real_functions():
 
     jobs = mod._jobs()
     assert jobs, "runner produced no jobs"
+    names = {name for _, name, _, _ in jobs}
+    assert {"apd1_vs_tmb_ici", "apd1_vs_tmb_strict_pd1"} <= names
+    assert {
+        "cta_expression_heatmap_q1",
+        "cta_expression_heatmap_median",
+        "cta_expression_heatmap_q3",
+    } <= names
+    assert {
+        "cta_burden_vs_us_incidence_t25",
+        "cta_burden_vs_world_mortality_t50",
+        "cta_specific_9mer_load_vs_world_mortality_t50",
+    } <= names
+    assert {
+        "cta_addressable_burden_within_sample_p90_world_mortality",
+        "cta_addressable_burden_per_sample_t50_us_mortality",
+    } <= names
+    assert {"cta_patient_count_heatmap_p90", "cta_patient_count_heatmap_t50"} <= names
     for family, name, fn_attr, kwargs in jobs:
         assert family and name and isinstance(kwargs, dict)
         assert callable(getattr(plots, fn_attr, None)), f"{fn_attr} is not a plots function"

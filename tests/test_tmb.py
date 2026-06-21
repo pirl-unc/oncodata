@@ -48,6 +48,16 @@ def test_tmb_inherits_from_parent():
     assert found, "expected at least one subtype that inherits its parent's TMB"
 
 
+def test_crc_msi_tmb_is_single_source_scope_row():
+    mapping = tmb.cancer_tmb()
+    assert mapping["CRC_MSI"] == 46.0
+    assert "COAD_MSI" not in mapping
+    assert "READ_MSI" not in mapping
+    assert tmb.cancer_tmb("COAD_MSI") == mapping["CRC_MSI"]
+    assert tmb.cancer_tmb("READ_MSI") == mapping["CRC_MSI"]
+    assert tmb.cancer_tmb("COAD_MSI", inherit=False) is None
+
+
 def test_tmb_unknown_value_returns_none():
     # A real code with no curated value and no ancestor value returns None.
     assert tmb.cancer_tmb("PRAD", inherit=False) == tmb.cancer_tmb().get("PRAD")

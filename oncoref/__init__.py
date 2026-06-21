@@ -21,6 +21,7 @@ from .apd1 import cancer_apd1_response, cancer_apd1_response_df
 from .cancer_types import (
     CANCER_TYPE_ALIASES,
     CANCER_TYPE_NAMES,
+    cancer_evidence_source_code,
     cancer_lineage_group,
     cancer_lineage_group_overrides,
     cancer_lineage_groups,
@@ -262,6 +263,7 @@ __all__ = [
     "cancer_burden",
     "cancer_burden_df",
     "cancer_code_burden_map",
+    "cancer_evidence_source_code",
     "cancer_fusions",
     "cancer_fusions_df",
     "cancer_ici_regimen",

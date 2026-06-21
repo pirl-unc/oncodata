@@ -305,6 +305,28 @@ def canonical_cancer_code(code):
     return _RENAMED_CODE_ALIASES_UPPER.get(raw.upper(), raw)
 
 
+_EVIDENCE_SOURCE_CODE = {
+    # The source papers report biomarker-selected MSI-H/dMMR colorectal cohorts,
+    # not separate colon- and rectum-specific TMB/ICI estimates.
+    "COAD_MSI": "CRC_MSI",
+    "READ_MSI": "CRC_MSI",
+}
+
+
+def cancer_evidence_source_code(cancer_type, *, strict=True):
+    """Canonical code for source-scoped evidence rows.
+
+    Most curated TMB / ICI rows are keyed directly by cancer type. A few molecular
+    subtype rows are intentionally source-scoped instead: ``COAD_MSI`` and
+    ``READ_MSI`` inherit biomarker-selected colorectal MSI-H/dMMR estimates from
+    ``CRC_MSI`` because the published sources report mCRC-level cohorts.
+    """
+    code = resolve_cancer_type(cancer_type, strict=strict)
+    if code is None:
+        return None
+    return _EVIDENCE_SOURCE_CODE.get(code, code)
+
+
 def format_cancer_code_label(code):
     """Plot-friendly display label for a cancer-type code.
 

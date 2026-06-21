@@ -144,12 +144,16 @@ def test_msi_subtype_value_corrected_and_rolls_up():
         row = anchor[(anchor["cancer_code"] == code) & (anchor["regimen"] == "PD-1")]
         return float(row["orr_pct"].iloc[0])
 
-    # COAD_MSI / READ_MSI corrected to the published KEYNOTE-177 value (43.8, not 45)
-    assert abs(orr("COAD_MSI") - 43.8) < 0.01
-    assert abs(orr("READ_MSI") - 43.8) < 0.01
+    # KEYNOTE-177 reports MSI-H/dMMR metastatic colorectal cancer, not separate
+    # colon- and rectum-specific MSI rows.
+    assert abs(orr("CRC_MSI") - 43.8) < 0.01
+    assert "COAD_MSI" not in set(anchor["cancer_code"])
+    assert "READ_MSI" not in set(anchor["cancer_code"])
+    assert ici.cancer_ici_response("COAD_MSI") == orr("CRC_MSI")
+    assert ici.cancer_ici_response("READ_MSI") == orr("CRC_MSI")
     # MSS components present and ~0; all-comer is the (low) prevalence-weighted blend
     assert orr("COAD_MSS") == 0.0
-    assert orr("COAD") < orr("COAD_MSI")  # blend is far below the MSI subtype
+    assert orr("COAD") < orr("CRC_MSI")  # blend is far below the MSI subtype
     # COAD all-comer ~ 43.8 * dMMR-prevalence(~0.13)
     assert 4.0 <= orr("COAD") <= 7.0
     # UCEC corrected to KEYNOTE-158 components (dMMR 48, pMMR 7); all-comer is the
@@ -158,6 +162,40 @@ def test_msi_subtype_value_corrected_and_rolls_up():
     assert orr("UCEC_CNH") == 7.0 and orr("UCEC_CNL") == 7.0
     rolled = 0.20 * orr("UCEC_MSI") + 0.80 * orr("UCEC_CNH")
     assert abs(orr("UCEC") - rolled) <= 1.0
+
+
+def test_crc_msi_estimates_are_source_scoped_and_detailed():
+    est = ici.cancer_ici_response_estimates_df()
+    assert not est["cancer_code"].isin(["COAD_MSI", "READ_MSI"]).any()
+
+    primary = est[
+        (est["cancer_code"] == "CRC_MSI") & (est["regimen"] == "PD-1") & (est["role"] == "primary")
+    ]
+    by_metric = {str(r["metric"]).upper(): r for _, r in primary.iterrows()}
+    assert set(by_metric) >= {"ORR", "CRR", "PFS", "DOR"}
+    assert float(by_metric["ORR"]["value"]) == 43.8
+    assert float(by_metric["ORR"]["ci_low"]) == 35.8
+    assert float(by_metric["ORR"]["ci_high"]) == 52.0
+    assert int(by_metric["ORR"]["metric_n"]) == 153
+    assert int(by_metric["ORR"]["responders"]) == 67
+    assert float(by_metric["CRR"]["value"]) == 11.1
+    assert int(by_metric["CRR"]["responders"]) == 17
+    assert float(by_metric["PFS"]["value"]) == 16.5
+    assert float(by_metric["PFS"]["ci_low"]) == 5.4
+    assert float(by_metric["PFS"]["ci_high"]) == 32.4
+
+    pooled = ici.pooled_ici_response(
+        "COAD_MSI",
+        regimen="PD-1",
+        metric="ORR",
+        verified_only=False,
+        include_alternates=False,
+    )
+    assert pooled["cancer_code"] == "CRC_MSI"
+    assert pooled["requested_cancer_code"] == "COAD_MSI"
+    assert pooled["pooled_pct"] == 43.8
+    assert pooled["n_total"] == 153
+    assert pooled["responders_total"] == 67
 
 
 def test_trial_columns_split_and_clean():

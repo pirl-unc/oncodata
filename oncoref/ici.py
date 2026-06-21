@@ -82,7 +82,7 @@ from __future__ import annotations
 import math
 from functools import lru_cache
 
-from .cancer_types import cancer_type_registry, resolve_cancer_type
+from .cancer_types import cancer_evidence_source_code, cancer_type_registry, resolve_cancer_type
 from .load_dataset import _register_derived_cache, get_data
 
 #: Response-proportion endpoints that can be responder-weighted-pooled (each needs a
@@ -184,6 +184,13 @@ def cancer_ici_response(cancer_type=None, *, regimen=None, fallback=True, inheri
         per = {r: maps[r][code] for r in REGIMEN_FALLBACK if code in maps.get(r, {})}
         if per or not inherit:
             return per
+        source_code = cancer_evidence_source_code(code)
+        if source_code != code:
+            hit = {
+                r: maps[r][source_code] for r in REGIMEN_FALLBACK if source_code in maps.get(r, {})
+            }
+            if hit:
+                return hit
         # walk ancestors for a per-regimen mapping
         reg = cancer_type_registry().set_index("code")
         cur, seen = code, set()
@@ -200,6 +207,11 @@ def cancer_ici_response(cancer_type=None, *, regimen=None, fallback=True, inheri
     val, _ = _resolve_with_fallback(code, maps, order)
     if val is not None or not inherit:
         return val
+    source_code = cancer_evidence_source_code(code)
+    if source_code != code:
+        val, _ = _resolve_with_fallback(source_code, maps, order)
+        if val is not None:
+            return val
     reg = cancer_type_registry().set_index("code")
     cur, seen = code, set()
     while cur and cur not in seen:
@@ -216,9 +228,15 @@ def cancer_ici_response(cancer_type=None, *, regimen=None, fallback=True, inheri
 def cancer_ici_regimen(cancer_type):
     """The regimen tag (``"PD-1"`` / ``"PD-L1"`` / ``"PD-1+CTLA-4"``) the fallback
     resolution selects for a cancer type — i.e. *which source* its
-    :func:`cancer_ici_response` value comes from. ``None`` if no row (no inheritance)."""
+    :func:`cancer_ici_response` value comes from. Evidence-source fallback is applied
+    for source-scoped rows such as ``COAD_MSI`` -> ``CRC_MSI``; parent-tree inheritance
+    is not."""
     code = resolve_cancer_type(cancer_type)
     _, regimen = _resolve_with_fallback(code, _regimen_maps(), REGIMEN_FALLBACK)
+    if regimen is None:
+        source_code = cancer_evidence_source_code(code)
+        if source_code != code:
+            _, regimen = _resolve_with_fallback(source_code, _regimen_maps(), REGIMEN_FALLBACK)
     return regimen
 
 
@@ -304,7 +322,8 @@ def pooled_ici_response(
     any overlapping subgroups) stays visible. ``verified_only`` (default) keeps only
     audit-confirmed citations.
     """
-    code = resolve_cancer_type(cancer_type)
+    requested_code = resolve_cancer_type(cancer_type)
+    code = cancer_evidence_source_code(requested_code)
     metric = str(metric).upper()
     df = cancer_ici_response_estimates_df()
     sub = df[(df["cancer_code"] == code) & (df["metric"].astype(str).str.upper() == metric)]
@@ -365,6 +384,7 @@ def pooled_ici_response(
     ref_sources = contrib if contrib else sources
     result = {
         "cancer_code": code,
+        "requested_cancer_code": requested_code,
         "regimen": regimen,
         "metric": metric,
         "poolable": metric in PROPORTION_METRICS,

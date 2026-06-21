@@ -55,6 +55,20 @@ def test_whole_table_per_regimen_mapping():
     )
 
 
+def test_crc_msi_ici_is_single_source_scope_row():
+    full = ici.cancer_ici_response()
+    per = ici.cancer_ici_response(fallback=False)
+    assert full["CRC_MSI"] == 43.8
+    assert per["CRC_MSI"] == {"PD-1": 43.8, "PD-1+CTLA-4": 55.0}
+    assert "COAD_MSI" not in full
+    assert "READ_MSI" not in full
+    assert ici.cancer_ici_response("COAD_MSI") == full["CRC_MSI"]
+    assert ici.cancer_ici_response("READ_MSI", regimen="PD-1") == full["CRC_MSI"]
+    assert ici.cancer_ici_response("COAD_MSI", fallback=False) == per["CRC_MSI"]
+    assert ici.cancer_ici_response("READ_MSI", inherit=False) is None
+    assert ici.cancer_ici_regimen("READ_MSI") == "PD-1"
+
+
 def test_regimen_maps_cached():
     # _regimen_maps is memoized (same object back from the cache).
     assert ici._regimen_maps() is ici._regimen_maps()

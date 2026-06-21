@@ -32,3 +32,13 @@ def test_apd1_inherits_from_parent():
             found = True
             break
     assert found, "expected at least one subtype that inherits its parent's ORR"
+
+
+def test_crc_msi_apd1_is_single_source_scope_row():
+    mapping = apd1.cancer_apd1_response()
+    assert mapping["CRC_MSI"] == 43.8
+    assert "COAD_MSI" not in mapping
+    assert "READ_MSI" not in mapping
+    assert apd1.cancer_apd1_response("COAD_MSI") == mapping["CRC_MSI"]
+    assert apd1.cancer_apd1_response("READ_MSI") == mapping["CRC_MSI"]
+    assert apd1.cancer_apd1_response("READ_MSI", inherit=False) is None

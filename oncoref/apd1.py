@@ -14,7 +14,7 @@
 
 from __future__ import annotations
 
-from .cancer_types import cancer_type_registry, resolve_cancer_type
+from .cancer_types import cancer_evidence_source_code, cancer_type_registry, resolve_cancer_type
 from .load_dataset import get_data
 
 
@@ -47,6 +47,9 @@ def cancer_apd1_response(cancer_type=None, *, inherit=True):
     code = resolve_cancer_type(cancer_type)
     if code in mapping or not inherit:
         return mapping.get(code)
+    source_code = cancer_evidence_source_code(code)
+    if source_code != code and source_code in mapping:
+        return mapping[source_code]
     reg = cancer_type_registry().set_index("code")
     cur, seen = code, set()
     while cur and cur not in seen:

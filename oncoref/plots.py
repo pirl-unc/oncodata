@@ -26,8 +26,9 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from .apd1 import cancer_apd1_response
+from .apd1 import cancer_apd1_response, cancer_apd1_response_df
 from .cancer_types import (
+    cancer_evidence_source_code,
     cancer_lineage_group,
     cancer_type_registry,
     format_cancer_code_label,
@@ -39,6 +40,7 @@ from .expression import (
     cohort_gene_percentiles,
     within_sample_top_fraction,
 )
+from .ici import cancer_ici_response
 from .incidence import burden_category, cancer_burden
 from .tmb import cancer_tmb
 
@@ -113,6 +115,128 @@ def _family_colors(codes):
     present = sorted({fam_by_code.get(c, "other") for c in codes})
     fam_color = {f: full.get(f, full["other"]) for f in present}
     return {c: full.get(fam_by_code.get(c, "other"), full["other"]) for c in codes}, fam_color
+
+
+def _plot_evidence_code(code):
+    return cancer_evidence_source_code(code, strict=False) or str(code)
+
+
+def _cohort_sample_weight(code) -> float:
+    try:
+        from . import source_matrices
+
+        weight = float(source_matrices.cohort_info(code).get("n_samples") or 0)
+    except Exception:
+        return 1.0
+    return weight if weight > 0 else 1.0
+
+
+def _metric_code_for_cohort(cohort, metric_map):
+    code = str(cohort)
+    if code in metric_map:
+        return code
+    source_code = _plot_evidence_code(code)
+    if source_code in metric_map:
+        return source_code
+    return None
+
+
+def _collapse_metric_points(cohorts, metric_map, value_fn):
+    grouped: dict[str, list[tuple[float, float]]] = {}
+    for cohort in cohorts:
+        code = _metric_code_for_cohort(cohort, metric_map)
+        if code is None:
+            continue
+        value = float(value_fn(cohort))
+        if value != value:  # NaN
+            continue
+        grouped.setdefault(code, []).append((value, _cohort_sample_weight(cohort)))
+
+    points = []
+    for code, values in grouped.items():
+        total_weight = sum(w for _, w in values)
+        if total_weight:
+            x = sum(v * w for v, w in values) / total_weight
+        else:
+            x = sum(v for v, _ in values) / len(values)
+        points.append((code, x, float(metric_map[code])))
+    return points
+
+
+def _apd1_axis(*, strict_pd1=False):
+    if not strict_pd1:
+        return (
+            cancer_ici_response(),
+            "Immune-checkpoint (ICI) ORR (%)",
+            "immune-checkpoint (ICI)",
+        )
+
+    mapping = cancer_apd1_response()
+    df = cancer_apd1_response_df()
+    strict_codes = set(df.loc[df["drug_target"] == "PD-1", "cancer_code"].astype(str))
+    return (
+        {code: value for code, value in mapping.items() if code in strict_codes},
+        "Anti-PD-1 monotherapy ORR (%)",
+        "anti-PD-1 monotherapy",
+    )
+
+
+def _burden_metric_axis(against):
+    pieces = str(against).split("_", 1)
+    if (
+        len(pieces) != 2
+        or pieces[0] not in {"us", "world"}
+        or pieces[1]
+        not in {
+            "incidence",
+            "mortality",
+        }
+    ):
+        raise ValueError("against must be 'apd1', 'tmb', or a burden metric")
+    region, metric = pieces
+    burden = cancer_burden(metric=f"{region}_{metric}_pct")
+    mapping = {}
+    for code in cancer_type_registry()["code"].astype(str):
+        category = burden_category(code)
+        if category in burden:
+            mapping[code] = float(burden[category])
+    return mapping, f"{region.upper()} {metric} share (%)"
+
+
+def _reference_metric_axis(against):
+    if against == "apd1":
+        ymap, ylabel, _ = _apd1_axis(strict_pd1=True)
+        return ymap, ylabel
+    if against == "ici":
+        ymap, ylabel, _ = _apd1_axis(strict_pd1=False)
+        return ymap, ylabel
+    if against == "tmb":
+        return cancer_tmb(), "Median tumor mutational burden (mut/Mb)"
+    if against in {"us_incidence", "us_mortality", "world_incidence", "world_mortality"}:
+        return _burden_metric_axis(against)
+    raise ValueError(
+        "against must be 'apd1', 'ici', 'tmb', 'us_incidence', 'us_mortality', "
+        "'world_incidence', or 'world_mortality'"
+    )
+
+
+def _burden_metric_label(metric):
+    base = str(metric)
+    if base.endswith("_pct"):
+        base = base[: -len("_pct")]
+    pieces = base.split("_", 1)
+    if (
+        len(pieces) == 2
+        and pieces[0] in {"us", "world"}
+        and pieces[1]
+        in {
+            "incidence",
+            "mortality",
+        }
+    ):
+        region, measure = pieces
+        return f"{region.upper()} {measure} share"
+    return "burden share"
 
 
 def _save(fig, save):
@@ -373,20 +497,20 @@ def _grouped_barh(categories, series, *, xlabel, title, save=None):
     return _save(fig, save)
 
 
-def apd1_vs_tmb(*, save=None, annotate=True):
+def apd1_vs_tmb(*, save=None, annotate=True, strict_pd1=False):
     """Scatter of anti-PD-1 ORR (%) vs median TMB (log x), one point per cancer
     type with a curated value for both, colored by lineage family. The classic
     "more mutations -> more neoantigens -> better checkpoint response" view."""
     tmb = cancer_tmb()
-    orr = cancer_apd1_response()
+    orr, ylabel, scope = _apd1_axis(strict_pd1=strict_pd1)
     codes = sorted(set(tmb) & set(orr))
     if not codes:
-        raise ValueError("no cancer types with both a TMB and an anti-PD-1 value")
+        raise ValueError("no cancer types with both a TMB and a checkpoint-response value")
     return _family_scatter(
         [(c, tmb[c], orr[c]) for c in codes],
         xlabel="Median tumor mutational burden (mut/Mb, log scale)",
-        ylabel="Anti-PD-1 monotherapy ORR (%)",
-        title=f"Anti-PD-1 response vs TMB ({len(codes)} cancer types)",
+        ylabel=ylabel,
+        title=f"{scope} response vs TMB ({len(codes)} cancer types)",
         logx=True,
         annotate=annotate,
         figsize=(11, 7),
@@ -395,15 +519,15 @@ def apd1_vs_tmb(*, save=None, annotate=True):
     )
 
 
-def apd1_orr_bars(*, save=None):
+def apd1_orr_bars(*, save=None, strict_pd1=False):
     """Horizontal bar chart of anti-PD-1 ORR by cancer type, highest at the top,
     colored by lineage family."""
-    orr = cancer_apd1_response()
+    orr, xlabel, scope = _apd1_axis(strict_pd1=strict_pd1)
     codes = sorted(orr, key=lambda c: orr[c], reverse=True)  # highest at top
     return _ranked_family_barh(
         [(c, orr[c]) for c in codes],
-        xlabel="Anti-PD-1 monotherapy ORR (%)",
-        title=f"Anti-PD-1 response by cancer type ({len(codes)} types)",
+        xlabel=xlabel,
+        title=f"{scope} response by cancer type ({len(codes)} types)",
         save=save,
     )
 
@@ -778,19 +902,17 @@ def _cta_prevalence_by_cohort(threshold):
 
 
 def _addressable_prevalence(source, *, threshold, threshold_tpm):
-    """``({code: addressable share}, xlabel)`` for the two prevalence sources."""
+    """``({code: prevalence}, prevalence label)`` for the two prevalence sources."""
     if source == "per_sample":
         # Faithful: fraction of a cohort's patients expressing >=1 CTA above
         # threshold_tpm (the union), from the per-sample matrices.
         from .coverage import addressable_fraction_by_cohort
 
         prev = addressable_fraction_by_cohort(threshold_tpm=threshold_tpm).to_dict()
-        return prev, (
-            f"Addressable burden  (incidence share × P(≥1 CTA > {threshold_tpm:g} TPM), per-patient)"
-        )
+        return prev, f"P(≥1 CTA > {threshold_tpm:g} TPM), per-patient"
     if source == "within_sample":
         prev = _cta_prevalence_by_cohort(threshold)
-        return prev, f"Addressable burden  (incidence share × top-CTA prevalence, thr={threshold})"
+        return prev, f"top-CTA prevalence, thr={threshold}"
     raise ValueError("source must be 'within_sample' or 'per_sample'")
 
 
@@ -816,10 +938,11 @@ def cta_addressable_burden(
         (:func:`oncoref.coverage.addressable_fraction_by_cohort`); needs the
         cohorts' per-sample matrices cached.
 
-    ``metric`` selects the incidence basis; ``n`` caps the bars; bars are coloured by
-    registry family. Incidence is at burden-category granularity (several subtypes
-    share a category), so read the bar as a relative prioritization."""
-    prevalence, xlabel = _addressable_prevalence(
+    ``metric`` selects the burden basis (for example ``"us_incidence_pct"`` or
+    ``"world_mortality_pct"``); ``n`` caps the bars; bars are coloured by registry
+    family. Burden is at burden-category granularity (several subtypes share a
+    category), so read the bar as a relative prioritization."""
+    prevalence, prevalence_label = _addressable_prevalence(
         source, threshold=threshold, threshold_tpm=threshold_tpm
     )
     if not prevalence:
@@ -828,6 +951,8 @@ def cta_addressable_burden(
             "present? (within-sample bundle, or cached per-sample matrices)"
         )
     burden = cancer_burden(metric=metric)  # {burden category: share}
+    burden_label = _burden_metric_label(metric)
+    xlabel = f"Addressable burden ({burden_label} × {prevalence_label})"
 
     rows = []
     for code, prev in prevalence.items():
@@ -844,7 +969,7 @@ def cta_addressable_burden(
     return _ranked_family_barh(
         [(r[0], r[1]) for r in rows],
         xlabel=xlabel,
-        title=f"CTA-addressable cancer burden — top {len(rows)} cancers",
+        title=f"CTA-addressable {burden_label} — top {len(rows)} cancers",
         legend=True,
         save=save,
     )
@@ -1101,7 +1226,9 @@ def cta_burden_vs_response(*, against="apd1", threshold_tpm=50.0, cohorts=None, 
     """Scatter of a cohort's **mean CTA antigen load** (mean number of CTAs a patient
     expresses above ``threshold_tpm``, from
     :func:`oncoref.coverage.mean_antigens_per_patient`) vs its anti-PD-1 ORR
-    (``against="apd1"``) or median TMB (``against="tmb"``), one point per cancer type,
+    (``against="apd1"``), broader ICI response (``"ici"``), median TMB
+    (``"tmb"``), or a burden axis (``"us_incidence"``, ``"us_mortality"``,
+    ``"world_incidence"``, ``"world_mortality"``), one point per cancer type,
     coloured by lineage family.
 
     The per-patient counterpart to :func:`apd1_response_signature_scatter`: does a
@@ -1110,20 +1237,14 @@ def cta_burden_vs_response(*, against="apd1", threshold_tpm=50.0, cohorts=None, 
     the per-sample matrices cached."""
     from .coverage import mean_antigens_per_patient
 
-    if against == "apd1":
-        ymap, ylabel = cancer_apd1_response(), "Anti-PD-1 monotherapy ORR (%)"
-    elif against == "tmb":
-        ymap, ylabel = cancer_tmb(), "Median tumor mutational burden (mut/Mb)"
-    else:
-        raise ValueError("against must be 'apd1' or 'tmb'")
+    ymap, ylabel = _reference_metric_axis(against)
 
     cohorts = list(cohorts) if cohorts is not None else _cached_per_sample_cohorts()
-    points = []
-    for code in cohorts:
-        if code not in ymap:
-            continue
-        load = mean_antigens_per_patient(code, threshold_tpm=threshold_tpm)
-        points.append((code, load, float(ymap[code])))
+    points = _collapse_metric_points(
+        cohorts,
+        ymap,
+        lambda code: mean_antigens_per_patient(code, threshold_tpm=threshold_tpm),
+    )
     if not points:
         raise ValueError(
             f"no cohort with both a cached per-sample matrix and a {against} value — "
@@ -1152,15 +1273,9 @@ def apd1_response_signature_scatter(signature="t_cell_inflamed", *, cohorts=None
     from .response_signatures import response_signature_direction, signature_score
 
     direction = response_signature_direction(signature)  # validates the name
-    orr = cancer_apd1_response()
+    orr, ylabel, _ = _apd1_axis(strict_pd1=True)
     cohorts = list(cohorts) if cohorts is not None else _cached_per_sample_cohorts()
-    points = []
-    for code in cohorts:
-        if code not in orr:
-            continue
-        score = signature_score(code, signature)
-        if score == score:  # not NaN
-            points.append((code, score, float(orr[code])))
+    points = _collapse_metric_points(cohorts, orr, lambda code: signature_score(code, signature))
     if not points:
         raise ValueError(
             "no cohort with both a cached per-sample matrix and an aPD1 ORR — fetch "
@@ -1169,7 +1284,7 @@ def apd1_response_signature_scatter(signature="t_cell_inflamed", *, cohorts=None
     return _family_scatter(
         points,
         xlabel=f"{signature} signature score (cohort-mean log clean TPM)",
-        ylabel="Anti-PD-1 monotherapy ORR (%)",
+        ylabel=ylabel,
         title=f"aPD1 response vs {signature} ({direction}-associated) — {len(points)} cancers",
         save=save,
     )
@@ -1178,8 +1293,10 @@ def apd1_response_signature_scatter(signature="t_cell_inflamed", *, cohorts=None
 def cta_specific_9mer_load(*, against="tmb", threshold_tpm=50.0, cohorts=None, save=None):
     """Scatter of a cohort's **mean per-patient CTA-specific 9-mer load**
     (:func:`oncoref.peptides.cta_specific_9mer_load`) vs its median TMB
-    (``against="tmb"``) or anti-PD-1 ORR (``against="apd1"``), one point per cancer
-    type, coloured by lineage family.
+    (``against="tmb"``), anti-PD-1 ORR (``against="apd1"``), broader ICI response
+    (``"ici"``), or a burden axis (``"us_incidence"``, ``"us_mortality"``,
+    ``"world_incidence"``, ``"world_mortality"``), one point per cancer type,
+    coloured by lineage family.
 
     The 9-mer load is, for the average patient, the total CTA-specific 9-mers across
     the CTAs they express above ``threshold_tpm`` — a per-patient measure of
@@ -1192,20 +1309,14 @@ def cta_specific_9mer_load(*, against="tmb", threshold_tpm=50.0, cohorts=None, s
     sequences (the first call builds + caches the per-CTA 9-mer table)."""
     from .peptides import cta_specific_9mer_load as _load
 
-    if against == "tmb":
-        xmap, ylabel2 = cancer_tmb(), "Median tumor mutational burden (mut/Mb)"
-    elif against == "apd1":
-        xmap, ylabel2 = cancer_apd1_response(), "Anti-PD-1 monotherapy ORR (%)"
-    else:
-        raise ValueError("against must be 'tmb' or 'apd1'")
+    xmap, ylabel2 = _reference_metric_axis(against)
 
     cohorts = list(cohorts) if cohorts is not None else _cached_per_sample_cohorts()
-    points = []
-    for code in cohorts:
-        if code not in xmap:
-            continue
-        load = _load(code, threshold_tpm=threshold_tpm)
-        points.append((code, load, float(xmap[code])))
+    points = _collapse_metric_points(
+        cohorts,
+        xmap,
+        lambda code: _load(code, threshold_tpm=threshold_tpm),
+    )
     if not points:
         raise ValueError(
             f"no cohort with both a cached per-sample matrix and a {against} value — "
