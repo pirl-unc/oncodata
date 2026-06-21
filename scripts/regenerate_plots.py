@@ -50,6 +50,11 @@ sys.path.insert(0, str(_REPO_ROOT))
 from oncoref import cta_curation_plots, plots  # noqa: E402
 from oncoref.plots import _cached_per_sample_cohorts  # noqa: E402
 
+CTA_TPM_THRESHOLDS = (25.0, 50.0)
+WITHIN_SAMPLE_THRESHOLDS = (0.90, 0.95)
+BURDEN_AXES = ("us_incidence", "us_mortality", "world_incidence", "world_mortality")
+REFERENCE_AXES = ("tmb", "apd1", "ici", *BURDEN_AXES)
+
 
 def _jobs() -> list[tuple[str, str, str, dict]]:
     """``(family, name, fn_attr, kwargs)`` for every figure, with sensible
@@ -57,28 +62,93 @@ def _jobs() -> list[tuple[str, str, str, dict]]:
     actually have a cached per-sample matrix."""
     cached = sorted(_cached_per_sample_cohorts())
     jobs: list[tuple[str, str, str, dict]] = [
-        # aPD-1 response
-        ("apd1", "apd1_vs_tmb", "apd1_vs_tmb", {}),
-        ("apd1", "apd1_orr_bars", "apd1_orr_bars", {}),
+        # aPD-1 / ICI response. Match pirlygenes' two response scopes:
+        # broad ICI anchors (PD-1 + proxies/fallbacks) and strict PD-1 monotherapy.
+        ("apd1", "apd1_vs_tmb_ici", "apd1_vs_tmb", {"strict_pd1": False}),
+        ("apd1", "apd1_vs_tmb_strict_pd1", "apd1_vs_tmb", {"strict_pd1": True}),
+        ("apd1", "apd1_orr_bars_ici", "apd1_orr_bars", {"strict_pd1": False}),
+        ("apd1", "apd1_orr_bars_strict_pd1", "apd1_orr_bars", {"strict_pd1": True}),
+        (
+            "apd1",
+            "apd1_response_signature_antigen_presentation",
+            "apd1_response_signature_scatter",
+            {"signature": "antigen_presentation"},
+        ),
+        (
+            "apd1",
+            "apd1_response_signature_cytotoxic",
+            "apd1_response_signature_scatter",
+            {"signature": "cytotoxic"},
+        ),
         (
             "apd1",
             "apd1_response_signature_t_cell_inflamed",
             "apd1_response_signature_scatter",
             {"signature": "t_cell_inflamed"},
         ),
-        # ICI regimens as distinct response sources
-        ("ici", "ici_response_by_regimen", "ici_response_by_regimen", {}),
-        ("ici", "ici_regimen_comparison", "ici_regimen_comparison", {}),
-        ("ici", "ici_orr_pooled_forest", "ici_orr_pooled_forest", {}),
+        (
+            "apd1",
+            "apd1_response_signature_tgfb_exclusion",
+            "apd1_response_signature_scatter",
+            {"signature": "tgfb_exclusion"},
+        ),
+        # ICI regimens as distinct response sources and pooled estimate forest plots.
+        ("ici", "ici_response_by_regimen_multi", "ici_response_by_regimen", {}),
+        (
+            "ici",
+            "ici_response_by_regimen_all",
+            "ici_response_by_regimen",
+            {"only_multi": False},
+        ),
+        ("ici", "ici_regimen_comparison_all", "ici_regimen_comparison", {}),
+        (
+            "ici",
+            "ici_regimen_comparison_multi",
+            "ici_regimen_comparison",
+            {"min_regimens": 2},
+        ),
+        ("ici", "ici_orr_pooled_forest_fallback", "ici_orr_pooled_forest", {}),
+        ("ici", "ici_orr_pooled_forest_pd1", "ici_orr_pooled_forest", {"regimen": "PD-1"}),
+        ("ici", "ici_orr_pooled_forest_pdl1", "ici_orr_pooled_forest", {"regimen": "PD-L1"}),
+        (
+            "ici",
+            "ici_orr_pooled_forest_pd1_ctla4",
+            "ici_orr_pooled_forest",
+            {"regimen": "PD-1+CTLA-4"},
+        ),
         # incidence / burden
         ("burden", "incidence_vs_mortality_us", "incidence_vs_mortality", {"region": "us"}),
+        (
+            "burden",
+            "incidence_vs_mortality_world",
+            "incidence_vs_mortality",
+            {"region": "world"},
+        ),
         ("burden", "burden_category_bars_us", "burden_category_bars", {"region": "us"}),
+        (
+            "burden",
+            "burden_category_bars_world",
+            "burden_category_bars",
+            {"region": "world"},
+        ),
         # CTA expression
+        (
+            "cta_expression",
+            "cta_expression_heatmap_q1",
+            "cta_expression_heatmap",
+            {"stat": "q1"},
+        ),
         (
             "cta_expression",
             "cta_expression_heatmap_median",
             "cta_expression_heatmap",
             {"stat": "median"},
+        ),
+        (
+            "cta_expression",
+            "cta_expression_heatmap_median_gene",
+            "cta_expression_heatmap",
+            {"stat": "median", "proteoform": False},
         ),
         (
             "cta_expression",
@@ -89,44 +159,81 @@ def _jobs() -> list[tuple[str, str, str, dict]]:
         # CTA addressable burden + per-patient prevalence. Uses the faithful
         # per-sample source (cached cohorts); the portable within_sample source
         # needs the within-sample bundle, which isn't always cached locally.
-        (
-            "cta_addressable",
-            "cta_addressable_burden_per_sample",
-            "cta_addressable_burden",
-            {"source": "per_sample"},
-        ),
-        ("cta_patient", "cta_patient_count_heatmap", "cta_patient_count_heatmap", {}),
-        # CTA burden / neoantigen load vs response
-        (
-            "cta_response",
-            "cta_burden_vs_apd1",
-            "cta_burden_vs_response",
-            {"against": "apd1"},
-        ),
-        ("cta_response", "cta_burden_vs_tmb", "cta_burden_vs_response", {"against": "tmb"}),
-        (
-            "cta_response",
-            "cta_specific_9mer_load_vs_tmb",
-            "cta_specific_9mer_load",
-            {"against": "tmb"},
-        ),
     ]
+    for axis in BURDEN_AXES:
+        metric = f"{axis}_pct"
+        jobs.extend(
+            (
+                "cta_addressable",
+                f"cta_addressable_burden_within_sample_p{int(threshold * 100)}_{axis}",
+                "cta_addressable_burden",
+                {"source": "within_sample", "threshold": threshold, "metric": metric},
+            )
+            for threshold in WITHIN_SAMPLE_THRESHOLDS
+        )
+        jobs.extend(
+            (
+                "cta_addressable",
+                f"cta_addressable_burden_per_sample_t{threshold:g}_{axis}",
+                "cta_addressable_burden",
+                {"source": "per_sample", "threshold_tpm": threshold, "metric": metric},
+            )
+            for threshold in CTA_TPM_THRESHOLDS
+        )
+    jobs.extend(
+        (
+            "cta_patient",
+            f"cta_patient_count_heatmap_p{int(threshold * 100)}",
+            "cta_patient_count_heatmap",
+            {"threshold": threshold},
+        )
+        for threshold in WITHIN_SAMPLE_THRESHOLDS
+    )
+    jobs.extend(
+        (
+            "cta_patient",
+            f"cta_patient_count_heatmap_t{threshold:g}",
+            "cta_patient_count_heatmap",
+            {"threshold_tpm": threshold},
+        )
+        for threshold in CTA_TPM_THRESHOLDS
+    )
+    for threshold in CTA_TPM_THRESHOLDS:
+        for axis in REFERENCE_AXES:
+            jobs.append(
+                (
+                    "cta_response",
+                    f"cta_burden_vs_{axis}_t{threshold:g}",
+                    "cta_burden_vs_response",
+                    {"against": axis, "threshold_tpm": threshold},
+                )
+            )
+        for axis in REFERENCE_AXES:
+            jobs.append(
+                (
+                    "cta_response",
+                    f"cta_specific_9mer_load_vs_{axis}_t{threshold:g}",
+                    "cta_specific_9mer_load",
+                    {"against": axis, "threshold_tpm": threshold},
+                )
+            )
     # Coverage panels need explicit cohort codes with cached per-sample matrices.
     if cached:
-        jobs += [
-            (
-                "cta_coverage",
-                "cta_coverage_curves",
-                "cta_coverage_curves",
-                {"cancer_types": cached},
-            ),
-            (
-                "cta_coverage",
-                "cta_coverage_stacked_bars",
-                "cta_coverage_stacked_bars",
-                {"cancer_types": cached},
-            ),
-        ]
+        for threshold in CTA_TPM_THRESHOLDS:
+            jobs += [
+                (
+                    "cta_coverage",
+                    f"cta_coverage_curves_t{threshold:g}",
+                    "cta_coverage_curves",
+                    {"cancer_types": cached, "threshold_tpm": threshold},
+                ),
+                (
+                    "cta_coverage",
+                    f"cta_coverage_stacked_bars_t{threshold:g}",
+                    "cta_coverage_stacked_bars",
+                    {"cancer_types": cached, "threshold_tpm": threshold},
+                ),
+            ]
     return jobs
 
 
