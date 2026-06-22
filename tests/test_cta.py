@@ -4,6 +4,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
+import oncoref
 from oncoref import cta
 
 
@@ -26,6 +27,31 @@ def test_set_relationships():
     assert cta.cta_never_expressed_gene_names() == filtered - expressed
     # excluded = unfiltered minus filtered (fail reproductive restriction)
     assert cta.cta_excluded_gene_names() == unfiltered - filtered
+
+
+def test_uppercase_exports_are_compatibility_aliases():
+    aliases = {
+        "CTA_gene_names": "cta_gene_names",
+        "CTA_gene_ids": "cta_gene_ids",
+        "CTA_filtered_gene_names": "cta_filtered_gene_names",
+        "CTA_filtered_gene_ids": "cta_filtered_gene_ids",
+        "CTA_never_expressed_gene_names": "cta_never_expressed_gene_names",
+        "CTA_never_expressed_gene_ids": "cta_never_expressed_gene_ids",
+        "CTA_unfiltered_gene_names": "cta_unfiltered_gene_names",
+        "CTA_unfiltered_gene_ids": "cta_unfiltered_gene_ids",
+        "CTA_excluded_gene_names": "cta_excluded_gene_names",
+        "CTA_excluded_gene_ids": "cta_excluded_gene_ids",
+        "CTA_testis_restricted_gene_names": "cta_testis_restricted_gene_names",
+        "CTA_testis_restricted_gene_ids": "cta_testis_restricted_gene_ids",
+        "CTA_placental_restricted_gene_names": "cta_placental_restricted_gene_names",
+        "CTA_placental_restricted_gene_ids": "cta_placental_restricted_gene_ids",
+        "CTA_relaxed_reproductive_gene_names": "cta_relaxed_reproductive_gene_names",
+        "CTA_relaxed_reproductive_gene_ids": "cta_relaxed_reproductive_gene_ids",
+        "CTA_by_axes": "cta_by_axes",
+    }
+    for alias, canonical in aliases.items():
+        assert getattr(cta, alias) is getattr(cta, canonical)
+        assert getattr(oncoref, alias) is getattr(cta, canonical)
 
 
 def test_canonical_ctas_present():
@@ -120,6 +146,49 @@ def test_gene_id_to_name():
     m = cta.cta_gene_id_to_name()
     assert len(m) == len(cta.cta_gene_ids())
     assert all(not k.count(".") for k in m)  # unversioned keys
+
+
+def test_id_set_helpers_match_name_set_relationships():
+    assert cta.cta_never_expressed_gene_ids() == cta.cta_filtered_gene_ids() - cta.cta_gene_ids()
+    assert (
+        cta.cta_excluded_gene_ids() == cta.cta_unfiltered_gene_ids() - cta.cta_filtered_gene_ids()
+    )
+
+
+def test_axis_helpers_and_filters():
+    testis = cta.cta_testis_restricted_gene_names()
+    assert "CTAG1B" in testis
+    assert testis == cta.cta_by_axes(restriction="TESTIS")
+    assert testis <= cta.cta_filtered_gene_names()
+    assert len(cta.cta_testis_restricted_gene_ids()) == len(testis)
+    assert cta.cta_placental_restricted_gene_names()
+    assert cta.cta_by_axes(ms_restriction="RECURRENT_HEALTHY") == set()
+    all_restrictions = {"TESTIS", "PLACENTAL", "REPRODUCTIVE", "SOMATIC", "NO_DATA"}
+    assert cta.cta_by_axes(restriction=all_restrictions) == cta.cta_filtered_gene_names()
+    assert (
+        cta.cta_by_axes(restriction=all_restrictions, filtered_only=False)
+        == cta.cta_unfiltered_gene_names()
+    )
+
+
+def test_relaxed_reproductive_tier_is_opt_in():
+    relaxed = cta.cta_relaxed_reproductive_gene_names()
+    assert {"ERVW-1", "ERVFRD-1"} <= relaxed
+    assert relaxed <= cta.cta_excluded_gene_names()
+    assert not (relaxed & cta.cta_filtered_gene_names())
+    assert cta.cta_relaxed_reproductive_gene_names(0.95) <= relaxed
+    assert len(cta.cta_relaxed_reproductive_gene_ids()) == len(relaxed)
+
+
+def test_cta_symbol_for_alias_resolves_common_names():
+    assert cta.cta_symbol_for_alias("NY-ESO-1") == "CTAG1B"
+    assert cta.cta_symbol_for_alias("ESO1") == "CTAG1B"
+    assert cta.cta_symbol_for_alias("ny eso 1") == "CTAG1B"
+    assert cta.cta_symbol_for_alias("CT12.2") == "XAGE2"
+    assert cta.cta_symbol_for_alias("XAGE1C") == "XAGE1B"
+    assert cta.cta_symbol_for_alias("MAGE4") == "MAGEA4"
+    assert cta.cta_symbol_for_alias("MAGEA4") == "MAGEA4"
+    assert cta.cta_symbol_for_alias("not-a-gene") is None
 
 
 def test_cta_candidate_references_registry():

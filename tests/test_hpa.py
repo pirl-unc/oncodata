@@ -20,7 +20,12 @@ def _seed(cache_root, name, version, filename, text):
 def hpa_cache(monkeypatch, tmp_path):
     monkeypatch.setenv("CANCERDATA_DATA_DIR", str(tmp_path))
     # clear lru_caches so each test sees its own fixture
-    for fn in (hpa.hpa_rna_consensus, hpa.hpa_normal_tissue, hpa.hpa_single_cell):
+    for fn in (
+        hpa.hpa_rna_consensus,
+        hpa.hpa_normal_tissue,
+        hpa.hpa_single_cell,
+        hpa.hpa_cell_type_expression,
+    ):
         fn.cache_clear()
     _seed(
         tmp_path,
@@ -51,7 +56,12 @@ def hpa_cache(monkeypatch, tmp_path):
         "ENSG00000001\tG1\thepatocytes\t0.0\n",
     )
     yield tmp_path
-    for fn in (hpa.hpa_rna_consensus, hpa.hpa_normal_tissue, hpa.hpa_single_cell):
+    for fn in (
+        hpa.hpa_rna_consensus,
+        hpa.hpa_normal_tissue,
+        hpa.hpa_single_cell,
+        hpa.hpa_cell_type_expression,
+    ):
         fn.cache_clear()
 
 
@@ -69,6 +79,20 @@ def test_gene_tissue_ntpm(hpa_cache):
 def test_gene_cell_type_ntpm(hpa_cache):
     sc = hpa.gene_cell_type_ntpm("ENSG00000001")
     assert sc["spermatocytes"] == 300.0
+
+
+def test_hpa_cell_type_expression_wide(hpa_cache):
+    wide = hpa.hpa_cell_type_expression()
+    assert list(wide.columns) == [
+        "Ensembl_Gene_ID",
+        "Symbol",
+        "hepatocytes",
+        "spermatocytes",
+    ]
+    row = wide.iloc[0]
+    assert row["Ensembl_Gene_ID"] == "ENSG00000001"
+    assert row["Symbol"] == "G1"
+    assert row["spermatocytes"] == 300.0
 
 
 def test_gene_protein_tissues_detected_only(hpa_cache):

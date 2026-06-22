@@ -444,9 +444,9 @@ def test_pan_cancer_expression_canonicalizes_alias_genes(monkeypatch):
         }
     )
     monkeypatch.setattr(expression, "get_data", lambda name: fixture.copy())
-    out = expression.pan_cancer_expression(to_tpm=False).set_index("Ensembl_Gene_ID")
+    out = expression.pan_cancer_expression(normalize=None).set_index("Ensembl_Gene_ID")
     assert list(out.index) == [primary]  # alt folded into primary
-    assert out.loc[primary, "nTPM_liver"] == pytest.approx(10.0)  # 3 + 7 summed
+    assert out.loc[primary, "liver_nTPM_raw"] == pytest.approx(10.0)  # 3 + 7 summed
 
 
 def test_housekeeping_normalize_divides_by_panel_geomean(monkeypatch):
@@ -568,6 +568,44 @@ def test_cohort_mean_expression_threads_proteoform_and_scope(monkeypatch):
     out = expression.cohort_mean_expression("X", proteoform=True, scope="genome")
     assert seen == {"proteoform": True, "scope": "genome"}
     assert expression_level(out) == "proteoform"  # proteoform_key carried through
+
+
+def test_cancer_reference_expression_long_and_wide(monkeypatch):
+    pct = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["E1", "E2"],
+            "Symbol": ["A", "B"],
+            "p25": [1.0, 2.0],
+            "p50": [3.0, 4.0],
+            "p75": [5.0, 6.0],
+        }
+    )
+    monkeypatch.setattr(expression, "available_percentile_cohorts", lambda: ["X", "Y"])
+    monkeypatch.setattr(expression, "resolve_cancer_type", lambda code: str(code).upper())
+    monkeypatch.setattr(expression, "cohort_gene_percentiles", lambda *a, **k: pct.copy())
+
+    long = expression.cancer_reference_expression("x", genes=["E1"])
+    assert list(long.columns) == [
+        "Ensembl_Gene_ID",
+        "Symbol",
+        "cancer_code",
+        "source_cohort",
+        "normalization",
+        "expression",
+        "q1",
+        "q3",
+    ]
+    assert long["cancer_code"].tolist() == ["X"]
+    assert long["normalization"].tolist() == ["tpm_clean"]
+    assert long["expression"].tolist() == [3.0]
+    assert long["q1"].tolist() == [1.0] and long["q3"].tolist() == [5.0]
+    assert expression.cancer_reference_expression("x", genes=["E1"], normalize="clean_tpm").equals(
+        long
+    )
+
+    wide = expression.cancer_reference_expression(["x", "y"], format="wide")
+    assert {"X_TPM_clean", "Y_TPM_clean"} <= set(wide.columns)
+    assert wide.loc[wide["Symbol"] == "A", "X_TPM_clean"].iloc[0] == 3.0
 
 
 def test_proteoform_named_accessors_delegate_with_proteoform_true(monkeypatch):
@@ -699,19 +737,54 @@ def _pan_cancer_fixture():
 def test_pan_cancer_expression_converts_fpkm_to_tpm(monkeypatch):
     monkeypatch.setattr(expression, "get_data", lambda name: _pan_cancer_fixture())
     out = expression.pan_cancer_expression()
-    # FPKM_<CODE> tumor columns become TPM_<CODE>; HPA nTPM passes through.
-    assert "TPM_LUAD" in out.columns and "FPKM_LUAD" not in out.columns
-    assert "nTPM_liver" in out.columns
+    # FPKM_<CODE> tumor columns become entity-first <CODE>_TPM_raw;
+    # HPA nTPM columns become <tissue>_nTPM_raw. Clean companions are default.
+    assert "LUAD_TPM_raw" in out.columns and "FPKM_LUAD" not in out.columns
+    assert "liver_nTPM_raw" in out.columns
+    assert "LUAD_TPM_clean" in out.columns and "liver_nTPM_clean" in out.columns
+    assert "TPM_LUAD" not in out.columns and "nTPM_liver" not in out.columns
     # Each TCGA column is rescaled to sum 1e6: FPKM_LUAD [2,8] -> [200000, 800000].
-    assert out["TPM_LUAD"].tolist() == pytest.approx([200000.0, 800000.0])
-    assert out["TPM_BLCA"].sum() == pytest.approx(1e6)
+    assert out["LUAD_TPM_raw"].tolist() == pytest.approx([200000.0, 800000.0])
+    assert out["BLCA_TPM_raw"].sum() == pytest.approx(1e6)
 
 
-def test_pan_cancer_expression_raw_fpkm(monkeypatch):
+def test_pan_cancer_expression_raw_only(monkeypatch):
     monkeypatch.setattr(expression, "get_data", lambda name: _pan_cancer_fixture())
-    out = expression.pan_cancer_expression(to_tpm=False)
-    assert "FPKM_LUAD" in out.columns and "TPM_LUAD" not in out.columns
-    assert out["FPKM_LUAD"].tolist() == [2.0, 8.0]
+    out = expression.pan_cancer_expression(normalize=None)
+    assert "LUAD_TPM_raw" in out.columns
+    assert "LUAD_TPM_clean" not in out.columns
+    assert out["LUAD_TPM_raw"].tolist() == pytest.approx([200000.0, 800000.0])
+
+
+def test_pan_cancer_expression_accepts_clean_tpm_alias(monkeypatch):
+    monkeypatch.setattr(expression, "get_data", lambda name: _pan_cancer_fixture())
+    canonical = expression.pan_cancer_expression(normalize="tpm_clean")
+    alias = expression.pan_cancer_expression(normalize="clean_tpm")
+    assert "LUAD_TPM_clean" in alias.columns
+    assert alias["LUAD_TPM_clean"].tolist() == pytest.approx(canonical["LUAD_TPM_clean"].tolist())
+
+
+def test_pan_cancer_expression_housekeeping_mode(monkeypatch):
+    import oncoref.gene_families as gf
+
+    monkeypatch.setattr(expression, "get_data", lambda name: _pan_cancer_fixture())
+    monkeypatch.setattr(gf, "housekeeping_gene_ids", lambda: frozenset({"ENSG00000001"}))
+    out = expression.pan_cancer_expression(normalize=["tpm_clean", "hk", "percentile"])
+    assert "LUAD_TPM_hk" in out.columns
+    assert "liver_nTPM_hk" in out.columns
+    assert "LUAD_TPM_percentile" in out.columns
+
+
+def test_pan_cancer_expression_log_modes(monkeypatch):
+    monkeypatch.setattr(expression, "get_data", lambda name: _pan_cancer_fixture())
+    raw_logged = expression.pan_cancer_expression(normalize="tpm_log1p")
+    clean_logged = expression.pan_cancer_expression(normalize="tpm_clean_log1p")
+    assert "LUAD_TPM_raw_log1p" in raw_logged.columns
+    assert "LUAD_TPM_clean_log1p" not in raw_logged.columns
+    assert raw_logged["LUAD_TPM_raw_log1p"].iloc[0] == pytest.approx(
+        np.log1p(raw_logged["LUAD_TPM_raw"].iloc[0])
+    )
+    assert "LUAD_TPM_clean_log1p" in clean_logged.columns
 
 
 def test_pan_cancer_expression_gene_filter(monkeypatch):
@@ -722,7 +795,7 @@ def test_pan_cancer_expression_gene_filter(monkeypatch):
     by_id = expression.pan_cancer_expression(genes=["ENSG00000001"])
     assert by_id["Symbol"].tolist() == ["GENE1"]
     # Conversion still reflects the cohort-wide scaling computed before filtering.
-    assert by_id["TPM_LUAD"].iloc[0] == pytest.approx(200000.0)
+    assert by_id["LUAD_TPM_raw"].iloc[0] == pytest.approx(200000.0)
 
 
 def test_pooled_cohort_stats_availability_and_heterogeneity(monkeypatch):

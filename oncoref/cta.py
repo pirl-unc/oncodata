@@ -29,6 +29,7 @@ here. ``restriction`` and ``restriction_confidence`` in the bundled table are th
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from functools import lru_cache
 
 import pandas as pd
@@ -95,6 +96,16 @@ NON_CTA_EXCLUDED_GENE_IDS: frozenset[str] = _non_cta_excluded_gene_ids()
 
 _PASSES_FILTERS_COLUMN = "passes_filters"
 _LEGACY_FILTERED_COLUMN = "filtered"
+_NO_PROTEIN_RELIABILITY = {"no data", "nan", ""}
+_CANONICAL_ALIAS_OVERRIDES: dict[str, str] = {
+    "NYESO1": "CTAG1B",
+    "ESO1": "CTAG1B",
+}
+
+
+def _normalize_alias(name: object) -> str:
+    """Case- and punctuation-insensitive key for CTA symbols and aliases."""
+    return "".join(ch for ch in str(name).upper() if ch.isalnum())
 
 
 def synthesize_restriction(row) -> tuple[str, str]:
@@ -180,6 +191,48 @@ def cta_df() -> pd.DataFrame:
 def cta_evidence() -> pd.DataFrame:
     """The CTA evidence DataFrame (alias of :func:`cta_df`)."""
     return cta_df()
+
+
+@lru_cache(maxsize=1)
+def _alias_to_symbol() -> dict[str, str]:
+    """Normalized alias/synonym -> official CTA symbol.
+
+    Precedence follows the target-selection API this surface is replacing:
+    curated colloquial-name overrides, then official symbols, then first table
+    alias in row order.
+    """
+    df = _cta_frame()
+    symbols = set(df["Symbol"].astype(str)) if "Symbol" in df.columns else set()
+    mapping: dict[str, str] = {}
+    if "Aliases" in df.columns:
+        for symbol, aliases in zip(df["Symbol"], df["Aliases"]):
+            if not isinstance(aliases, str):
+                continue
+            for alias in aliases.split(";"):
+                key = _normalize_alias(alias)
+                if key and key not in mapping:
+                    mapping[key] = str(symbol)
+    if "Symbol" in df.columns:
+        for symbol in df["Symbol"]:
+            key = _normalize_alias(symbol)
+            if key:
+                mapping[key] = str(symbol)
+    for key, symbol in _CANONICAL_ALIAS_OVERRIDES.items():
+        if symbol in symbols:
+            mapping[key] = symbol
+    return mapping
+
+
+_register_derived_cache(_alias_to_symbol.cache_clear)
+
+
+def cta_symbol_for_alias(name: str) -> str | None:
+    """Resolve a CTA symbol/synonym to the official table symbol.
+
+    Punctuation and case are ignored, so ``"NY-ESO-1"``, ``"ESO1"``, and
+    ``"ny eso 1"`` all resolve to ``"CTAG1B"``. Unknown names return ``None``.
+    """
+    return _alias_to_symbol().get(_normalize_alias(name))
 
 
 def cta_candidate_references() -> pd.DataFrame:
@@ -270,6 +323,11 @@ def cta_never_expressed_gene_names() -> set[str]:
     return cta_filtered_gene_names() - cta_gene_names()
 
 
+def cta_never_expressed_gene_ids() -> set[str]:
+    """Filter-passing CTA Ensembl IDs with no meaningful HPA expression."""
+    return cta_filtered_gene_ids() - cta_gene_ids()
+
+
 def cta_unfiltered_gene_names() -> set[str]:
     """Every candidate CTA symbol across all source databases (the full universe)."""
     return _all_by_column("Symbol")
@@ -285,6 +343,114 @@ def cta_excluded_gene_names() -> set[str]:
     return cta_unfiltered_gene_names() - cta_filtered_gene_names()
 
 
+def cta_excluded_gene_ids() -> set[str]:
+    """Candidate CTA Ensembl IDs that fail the reproductive-restriction filter."""
+    return cta_unfiltered_gene_ids() - cta_filtered_gene_ids()
+
+
+def _relaxed_reproductive_mask(df: pd.DataFrame, min_deflated_frac: float) -> pd.Series:
+    failed = ~passes_filters_mask(df)
+    rna_only = (
+        df["protein_reliability"].astype(str).str.strip().str.lower().isin(_NO_PROTEIN_RELIABILITY)
+    )
+    frac = pd.to_numeric(df["rna_deflated_reproductive_frac"], errors="coerce")
+    return failed & rna_only & (frac >= float(min_deflated_frac))
+
+
+def cta_relaxed_reproductive_gene_names(min_deflated_frac: float = 0.80) -> set[str]:
+    """Opt-in relaxed tier of RNA-only reproductive-dominant candidate CTAs.
+
+    These candidates fail the default reproductive-restriction gate but have no
+    HPA protein evidence and retain a high deflated reproductive RNA fraction.
+    The tier is intentionally disjoint from :func:`cta_filtered_gene_names`.
+    """
+    df = _cta_frame()
+    return set(df.loc[_relaxed_reproductive_mask(df, min_deflated_frac), "Symbol"])
+
+
+def cta_relaxed_reproductive_gene_ids(min_deflated_frac: float = 0.80) -> set[str]:
+    """Ensembl IDs for :func:`cta_relaxed_reproductive_gene_names`."""
+    df = _cta_frame()
+    return set(df.loc[_relaxed_reproductive_mask(df, min_deflated_frac), "Ensembl_Gene_ID"])
+
+
+def _filter_values(values: str | Iterable[str] | None) -> set[str] | None:
+    if values is None:
+        return None
+    if isinstance(values, str):
+        values = {values}
+    return {str(v).upper() for v in values}
+
+
+def cta_by_axes(
+    *,
+    restriction: str | Iterable[str] | None = None,
+    protein_restriction: str | Iterable[str] | None = None,
+    rna_restriction: str | Iterable[str] | None = None,
+    rna_restriction_level: str | Iterable[str] | None = None,
+    ms_restriction: str | Iterable[str] | None = None,
+    restriction_confidence: str | Iterable[str] | None = None,
+    column: str = "Symbol",
+    filtered_only: bool = True,
+) -> set[str]:
+    """Return CTA identifiers matching restriction-axis filters.
+
+    ``ms_restriction`` is accepted for target-selection API compatibility, but
+    oncoref's base CTA table is HPA-only. If an MS filter is requested against a
+    table with no MS column, the result is deliberately empty rather than an
+    accidentally unfiltered set.
+    """
+    df = _cta_frame()
+    if column not in df.columns:
+        return set()
+    mask = passes_filters_mask(df) if filtered_only else pd.Series(True, index=df.index)
+    for axis_col, values in (
+        ("restriction", restriction),
+        ("protein_restriction", protein_restriction),
+        ("rna_restriction", rna_restriction),
+        ("rna_restriction_level", rna_restriction_level),
+        ("ms_restriction", ms_restriction),
+        ("restriction_confidence", restriction_confidence),
+    ):
+        wanted = _filter_values(values)
+        if wanted is None:
+            continue
+        if axis_col not in df.columns:
+            return set()
+        actual = df[axis_col].astype(str).str.upper()
+        mask = mask & actual.isin(wanted)
+    return _extract_values(df[mask], column)
+
+
+def _extract_values(df: pd.DataFrame, column: str) -> set[str]:
+    result: set[str] = set()
+    if column in df.columns:
+        for x in df[column]:
+            if isinstance(x, str):
+                result.update(xi.strip() for xi in x.split(";") if xi.strip())
+    return result
+
+
+def cta_testis_restricted_gene_names() -> set[str]:
+    """Filter-passing CTAs with synthesized HPA restriction ``TESTIS``."""
+    return cta_by_axes(restriction="TESTIS")
+
+
+def cta_testis_restricted_gene_ids() -> set[str]:
+    """Ensembl IDs for testis-restricted CTAs."""
+    return cta_by_axes(restriction="TESTIS", column="Ensembl_Gene_ID")
+
+
+def cta_placental_restricted_gene_names() -> set[str]:
+    """Filter-passing CTAs with synthesized HPA restriction ``PLACENTAL``."""
+    return cta_by_axes(restriction="PLACENTAL")
+
+
+def cta_placental_restricted_gene_ids() -> set[str]:
+    """Ensembl IDs for placental-restricted CTAs."""
+    return cta_by_axes(restriction="PLACENTAL", column="Ensembl_Gene_ID")
+
+
 def cta_gene_id_to_name() -> dict[str, str]:
     """``{Ensembl_Gene_ID (unversioned): Symbol}`` over the expressed CTA set."""
     df = _cta_frame()
@@ -295,3 +461,22 @@ def cta_gene_id_to_name() -> dict[str, str]:
         if gid in ids:
             out[gid] = str(row.get("Symbol", gid))
     return out
+
+
+CTA_gene_names = cta_gene_names
+CTA_gene_ids = cta_gene_ids
+CTA_filtered_gene_names = cta_filtered_gene_names
+CTA_filtered_gene_ids = cta_filtered_gene_ids
+CTA_never_expressed_gene_names = cta_never_expressed_gene_names
+CTA_never_expressed_gene_ids = cta_never_expressed_gene_ids
+CTA_unfiltered_gene_names = cta_unfiltered_gene_names
+CTA_unfiltered_gene_ids = cta_unfiltered_gene_ids
+CTA_excluded_gene_names = cta_excluded_gene_names
+CTA_excluded_gene_ids = cta_excluded_gene_ids
+CTA_testis_restricted_gene_names = cta_testis_restricted_gene_names
+CTA_testis_restricted_gene_ids = cta_testis_restricted_gene_ids
+CTA_placental_restricted_gene_names = cta_placental_restricted_gene_names
+CTA_placental_restricted_gene_ids = cta_placental_restricted_gene_ids
+CTA_relaxed_reproductive_gene_names = cta_relaxed_reproductive_gene_names
+CTA_relaxed_reproductive_gene_ids = cta_relaxed_reproductive_gene_ids
+CTA_by_axes = cta_by_axes

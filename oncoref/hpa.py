@@ -70,6 +70,29 @@ def hpa_single_cell() -> pd.DataFrame:
     return _read_hpa("hpa_single_cell")
 
 
+@lru_cache(maxsize=1)
+def hpa_cell_type_expression() -> pd.DataFrame:
+    """Wide per-gene HPA single-cell-type nTPM matrix.
+
+    Returns ``Ensembl_Gene_ID``, ``Symbol``, then one numeric column per HPA
+    single-cell type. This is the analysis-facing companion to the raw long-form
+    :func:`hpa_single_cell` table.
+    """
+    df = hpa_single_cell()
+    if df.empty:
+        return pd.DataFrame(columns=["Ensembl_Gene_ID", "Symbol"])
+    wide = df.pivot_table(
+        index=["Gene", "Gene name"],
+        columns="Cell type",
+        values="nTPM",
+        aggfunc="sum",
+        fill_value=0.0,
+    )
+    wide = wide.reset_index().rename(columns={"Gene": "Ensembl_Gene_ID", "Gene name": "Symbol"})
+    wide.columns.name = None
+    return wide
+
+
 def _strip_version(gene_id: str) -> str:
     return str(gene_id).split(".")[0]
 

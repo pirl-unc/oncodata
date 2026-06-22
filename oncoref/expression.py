@@ -50,9 +50,8 @@ core, so shipped and on-the-fly values agree. Which artifact ships which variant
 whether a missing shard may be fetched, is recorded once in the :class:`ShardDataset`
 registry (:data:`SHARD_DATASETS`) rather than restated per accessor.
 
-The richer analysis accessors (``cancer_reference_expression`` etc.) live in
-pirlygenes; this module owns only the data-layer read surface that downstream
-target-selection consumes.
+Higher-level consumer accessors such as ``cancer_reference_expression`` are thin
+views over these same shipped artifacts rather than separate data products.
 """
 
 from __future__ import annotations
@@ -74,7 +73,7 @@ from .expression_builders import WITHIN_SAMPLE_THRESHOLDS as _WITHIN_SAMPLE_THRE
 from .expression_engine import id_columns, sample_columns
 from .gene_ids import ensembl_id_alias_symbols, resolve_ensembl_id, unversioned
 from .load_dataset import _BUNDLED_DATA_DIR, _register_derived_cache, get_data
-from .normalization import clean_tpm
+from .normalization import clean_tpm, percentile_rank, tpm_to_housekeeping_normalized
 
 
 @dataclass(frozen=True)
@@ -247,6 +246,20 @@ def _resolve_cancer_types(
     return list(dict.fromkeys(out))
 
 
+def _gene_filter_mask(df: pd.DataFrame, genes: str | Iterable[str] | None) -> pd.Series:
+    if genes is None:
+        return pd.Series(True, index=df.index)
+    wanted = {genes} if isinstance(genes, str) else set(genes)
+    wanted = {str(g) for g in wanted}
+    wanted_unversioned = {unversioned(g) for g in wanted}
+    ids = df["Ensembl_Gene_ID"].astype(str)
+    return (
+        ids.isin(wanted)
+        | ids.map(unversioned).isin(wanted_unversioned)
+        | df["Symbol"].astype(str).isin(wanted)
+    )
+
+
 def available_representative_cohorts() -> list[str]:
     """Registry codes that ship a representative-samples shard (sorted)."""
     return _available_cohorts(_REPRESENTATIVES)
@@ -416,6 +429,85 @@ def cohort_mean_expression(
     out = df[id_cols].copy()
     out["expression"] = reducer.to_numpy()
     return out
+
+
+def cancer_reference_expression(
+    cancer_types: str | Iterable[str] | None = None,
+    genes: str | Iterable[str] | None = None,
+    normalize: str | Iterable[str] = "tpm_clean",
+    *,
+    format: str = "long",
+    include_provenance: bool = True,
+    auto_fetch: bool = False,
+) -> pd.DataFrame:
+    """Observed tumor expression references as cohort-level clean TPM summaries.
+
+    The default long form mirrors the downstream reference contract:
+    ``Ensembl_Gene_ID``, ``Symbol``, ``cancer_code``, ``source_cohort``,
+    ``normalization``, ``expression`` (median clean TPM), ``q1`` and ``q3``.
+    Wide form returns one row per gene with ``<CODE>_TPM_clean`` columns.
+    """
+    modes = _reference_normalize_modes(normalize)
+    if format not in ("long", "wide"):
+        raise ValueError("format must be 'long' or 'wide'")
+    if modes != {"tpm_clean"}:
+        raise ValueError(
+            "cancer_reference_expression currently supports normalize='tpm_clean' "
+            "(alias 'clean_tpm')"
+        )
+    available = set(available_percentile_cohorts())
+    if cancer_types is None:
+        codes = sorted(available)
+    else:
+        requested = _resolve_cancer_types(cancer_types, expand_aggregates=True) or []
+        codes = [code for code in dict.fromkeys(requested) if code in available]
+
+    long_parts: list[pd.DataFrame] = []
+    wide_parts: list[pd.DataFrame] = []
+    for code in codes:
+        pct = cohort_gene_percentiles(code, as_tpm=True, auto_fetch=auto_fetch)
+        pct = pct[_gene_filter_mask(pct, genes)].reset_index(drop=True)
+        if format == "long":
+            part = pct[["Ensembl_Gene_ID", "Symbol", "p25", "p50", "p75"]].copy()
+            part.insert(2, "cancer_code", code)
+            if include_provenance:
+                part.insert(3, "source_cohort", code)
+            part["normalization"] = "tpm_clean"
+            part = part.rename(columns={"p50": "expression", "p25": "q1", "p75": "q3"})
+            cols = ["Ensembl_Gene_ID", "Symbol", "cancer_code"]
+            if include_provenance:
+                cols.append("source_cohort")
+            cols += ["normalization", "expression", "q1", "q3"]
+            long_parts.append(part[cols])
+        else:
+            part = pct[["Ensembl_Gene_ID", "Symbol", "p50"]].rename(
+                columns={"p50": f"{code}_TPM_clean"}
+            )
+            wide_parts.append(part)
+
+    if format == "long":
+        cols = ["Ensembl_Gene_ID", "Symbol", "cancer_code"]
+        if include_provenance:
+            cols.append("source_cohort")
+        cols += ["normalization", "expression", "q1", "q3"]
+        if not long_parts:
+            return pd.DataFrame(columns=cols)
+        return pd.concat(long_parts, ignore_index=True)
+
+    if not wide_parts:
+        return pd.DataFrame(columns=["Ensembl_Gene_ID", "Symbol"])
+    out = wide_parts[0]
+    for part in wide_parts[1:]:
+        out = out.merge(part, on=["Ensembl_Gene_ID", "Symbol"], how="outer")
+    return out.sort_values("Ensembl_Gene_ID").reset_index(drop=True)
+
+
+def _reference_normalize_modes(normalize: str | Iterable[str]) -> set[str]:
+    if isinstance(normalize, str):
+        modes = {normalize.lower()}
+    else:
+        modes = {str(mode).lower() for mode in normalize}
+    return {"tpm_clean" if mode == "clean_tpm" else mode for mode in modes}
 
 
 #: Per-gene cohort summary statistic -> output column. The percentiles are taken across
@@ -1026,19 +1118,22 @@ def gene_representative_samples(
 def pan_cancer_expression(
     genes: str | Iterable[str] | None = None,
     *,
-    to_tpm: bool = True,
+    normalize: str | Iterable[str] | None = "tpm_clean",
 ) -> pd.DataFrame:
     """Wide pan-cancer reference: each gene's expression across **50 HPA normal
     tissues** and **33 TCGA tumor cohorts**, tumor and normal side by side in one
     frame — the combined companion to the per-cohort accessors above.
 
-    Columns: ``Ensembl_Gene_ID``, ``Symbol``, the HPA normal-tissue columns
-    ``nTPM_<tissue>`` (already TPM-scale), and the TCGA cohort columns (shipped as
-    ``FPKM_<CODE>``). With ``to_tpm`` (the default) the TCGA columns are converted
-    FPKM→TPM — rescaled per cohort to sum 1e6 over all genes — and renamed
-    ``TPM_<CODE>`` so every value column is on a comparable TPM scale; the HPA
-    ``nTPM_`` columns are passed through unchanged. Pass ``to_tpm=False`` to keep
-    the raw ``FPKM_`` columns.
+    Columns are entity-first: ``<tissue>_nTPM_raw`` for HPA normal tissues and
+    ``<CODE>_TPM_raw`` for TCGA tumor cohorts. Source ``FPKM_<CODE>`` columns are
+    deterministically converted FPKM→TPM before being exposed as ``*_TPM_raw``.
+    The default ``normalize="tpm_clean"`` (alias ``"clean_tpm"``) appends
+    clean TPM companions named ``<entity>_<measure>_clean``.
+    ``normalize="housekeeping"`` / ``"hk"`` appends ``*_hk`` columns, and
+    ``"percentile"`` appends ``*_percentile`` columns. ``"tpm_log1p"`` and
+    ``"tpm_clean_log1p"`` append natural-log companions over the raw and clean
+    TPM/nTPM values, respectively. Pass ``normalize=None`` or ``"tpm"`` for the
+    raw TPM/nTPM companions only.
 
     ``genes`` filters to the given Ensembl gene ids (version-insensitive) or
     symbols; ``None`` returns the full matrix. The FPKM→TPM conversion runs over
@@ -1050,27 +1145,112 @@ def pan_cancer_expression(
     # abundances (nTPM / FPKM) — linear-additive — so summing the rows of a fragmented
     # gene is exact, and it precedes the FPKM->TPM rescale (whose per-cohort 1e6 total is
     # conserved under row-summing, so every other gene's conversion is unchanged).
-    value_cols = [c for c in df.columns if c not in ("Ensembl_Gene_ID", "Symbol")]
+    id_cols = ["Ensembl_Gene_ID", "Symbol"]
+    value_cols = [c for c in df.columns if c not in id_cols]
     df = _canonicalize_gene_rows(df, sample_cols=value_cols)
-    if to_tpm:
-        fpkm_cols = [c for c in df.columns if c.startswith("FPKM_")]
-        if fpkm_cols:
-            from .normalization import fpkm_to_tpm
+    out = df[id_cols].copy()
 
-            df, _ = fpkm_to_tpm(df, value_cols=fpkm_cols)
-            df = df.rename(columns={c: "TPM_" + c[len("FPKM_") :] for c in fpkm_cols})
+    raw_cols: list[str] = []
+    ntpm_cols = [c for c in df.columns if c.startswith("nTPM_")]
+    for col in ntpm_cols:
+        entity = col[len("nTPM_") :]
+        target = f"{entity}_nTPM_raw"
+        out[target] = pd.to_numeric(df[col], errors="coerce")
+        raw_cols.append(target)
+
+    fpkm_cols = [c for c in df.columns if c.startswith("FPKM_")]
+    if fpkm_cols:
+        from .normalization import fpkm_to_tpm
+
+        converted, _ = fpkm_to_tpm(df[id_cols + fpkm_cols], value_cols=fpkm_cols)
+        for col in fpkm_cols:
+            entity = col[len("FPKM_") :]
+            target = f"{entity}_TPM_raw"
+            out[target] = converted[col]
+            raw_cols.append(target)
+
+    tpm_cols = [c for c in df.columns if c.startswith("TPM_")]
+    for col in tpm_cols:
+        entity = col[len("TPM_") :]
+        target = f"{entity}_TPM_raw"
+        out[target] = pd.to_numeric(df[col], errors="coerce")
+        raw_cols.append(target)
+
+    modes = _pan_cancer_normalize_modes(normalize)
+    clean_cols: list[str] = []
+    if modes & {"tpm_clean", "housekeeping", "hk", "percentile", "tpm_clean_log1p"}:
+        clean = clean_tpm(out[raw_cols], gene_table=out[id_cols])
+        for col in raw_cols:
+            target = col[: -len("_raw")] + "_clean"
+            out[target] = clean[col]
+            clean_cols.append(target)
+
+    if modes & {"housekeeping", "hk"}:
+        hk_input_cols = clean_cols or raw_cols
+        hk_input = out[id_cols + hk_input_cols].copy()
+        hk, _ = tpm_to_housekeeping_normalized(hk_input, value_cols=hk_input_cols)
+        for col in hk_input_cols:
+            target = col.rsplit("_", 1)[0] + "_hk"
+            out[target] = hk[col]
+
+    if "percentile" in modes:
+        pct_input_cols = clean_cols or raw_cols
+        pct = percentile_rank(out[id_cols + pct_input_cols], value_cols=pct_input_cols)
+        for col in pct_input_cols:
+            target = col.rsplit("_", 1)[0] + "_percentile"
+            out[target] = pct[col]
+
+    if "tpm_log1p" in modes:
+        for col in raw_cols:
+            target = col + "_log1p"
+            out[target] = np.log1p(out[col].to_numpy(dtype=float))
+
+    if "tpm_clean_log1p" in modes:
+        for col in clean_cols:
+            target = col + "_log1p"
+            out[target] = np.log1p(out[col].to_numpy(dtype=float))
+
     if genes is not None:
         wanted = {genes} if isinstance(genes, str) else set(genes)
         wanted = {str(g) for g in wanted}
         wanted_unversioned = {unversioned(g) for g in wanted}
-        ids = df["Ensembl_Gene_ID"].astype(str)
+        ids = out["Ensembl_Gene_ID"].astype(str)
         mask = (
             ids.isin(wanted)
             | ids.map(unversioned).isin(wanted_unversioned)
-            | df["Symbol"].astype(str).isin(wanted)
+            | out["Symbol"].astype(str).isin(wanted)
         )
-        df = df[mask].reset_index(drop=True)
-    return df
+        out = out[mask].reset_index(drop=True)
+    return out
+
+
+def _pan_cancer_normalize_modes(normalize: str | Iterable[str] | None) -> set[str]:
+    if normalize is None:
+        return set()
+    if isinstance(normalize, str):
+        modes = {normalize.lower()}
+    else:
+        modes = {str(mode).lower() for mode in normalize}
+    aliases = {"clean_tpm": "tpm_clean", "housekeeping": "housekeeping", "hk": "hk"}
+    modes = {aliases.get(mode, mode) for mode in modes}
+    allowed = {
+        "tpm",
+        "raw",
+        "tpm_log1p",
+        "tpm_clean",
+        "housekeeping",
+        "hk",
+        "percentile",
+        "tpm_clean_log1p",
+    }
+    unknown = modes - allowed
+    if unknown:
+        raise ValueError(
+            "normalize must be None, 'tpm', 'tpm_clean'/'clean_tpm', "
+            "'housekeeping', 'hk', 'percentile', 'tpm_log1p', "
+            "or 'tpm_clean_log1p'"
+        )
+    return modes - {"tpm", "raw"}
 
 
 def pooled_cohort_stats(
