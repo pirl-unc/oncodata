@@ -243,13 +243,14 @@ def ensure_local(*, auto_fetch: bool = True, verbose: bool = True) -> Path:
         return cache_dir()
     if not auto_fetch:
         raise FileNotFoundError(
-            f"oncoref data bundle not found at {cache_dir()}. Run `oncoref cache fetch` to download it."
+            f"oncoref data bundle not found at {cache_dir()}. "
+            "Run `oncoref data fetch bundle` to download it."
         )
     return fetch(verbose=verbose)
 
 
 def status() -> dict:
-    """Snapshot of cache state — used by ``oncoref cache status``."""
+    """Snapshot of cache state — used by ``oncoref data status bundle``."""
     root = cache_dir()
     items: dict[str, dict] = {}
     for p in DOWNLOADABLE_PATHS:
@@ -309,7 +310,7 @@ def list_cache_versions() -> list[dict]:
     """Enumerate every version-pinned cache dir under :func:`cache_root`.
 
     Returns ``{"version", "path", "size_bytes", "is_current"}`` dicts sorted by
-    version label. Used by ``oncoref cache prune`` to find upgrade leftovers.
+    version label. Used by ``oncoref data prune`` to find upgrade leftovers.
     """
     root = cache_root()
     if not root.exists():

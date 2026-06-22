@@ -5,8 +5,8 @@
 # artifacts (data_bundle.DOWNLOADABLE_PATHS) are distributed as a version-pinned
 # tarball attached to the pirl-unc/oncoref release. This script packages those
 # paths from a source directory that already contains them — e.g. a populated
-# cache dir (`oncoref cache fetch` then `oncoref cache status` for the path) or a
-# pirlygenes data checkout during the migration.
+# cache dir (`oncoref data fetch bundle` then `oncoref data dir bundle` for the
+# path) or a pirlygenes data checkout during the migration.
 #
 # Usage:
 #   scripts/build_data_tarball.sh <source-dir> [output-dir]

@@ -111,6 +111,28 @@ def path(name: str) -> Path | None:
     return data_bundle.find(name)
 
 
+def _per_sample_status_row(name: str) -> dict:
+    code = name[len(_PER_SAMPLE) :]
+    try:
+        info = source_matrices.cohort_info(code)
+        p = path(name)
+    except source_matrices.SourceMatrixError as e:
+        raise KeyError(str(e)) from None
+    resolved = str(info["cancer_code"])
+    return {
+        "name": f"{_PER_SAMPLE}{resolved}",
+        "kind": "source",
+        "present": p is not None,
+        "path": str(p) if p is not None else None,
+        "size_bytes": _size_bytes(p),
+        "cohorts": 1,
+        "description": (
+            f"raw per-sample TPM matrix for {resolved} "
+            f"({info['source_cohort']}; n={int(info['n_samples'])})"
+        ),
+    }
+
+
 def ensure(name: str) -> Path:
     """Local path to ``name``, downloading if absent. Returns the path.
 
@@ -242,7 +264,19 @@ def status(name: str | None = None) -> list[dict]:
     """Uniform status rows over the catalog: ``name``, ``kind``, ``present``,
     ``path``, ``size_bytes``, ``cohorts`` (per-cohort file count for directory
     datasets, else ``None``), ``description``. One dataset if ``name`` given."""
-    names = [dataset(name).name] if name is not None else [d.name for d in datasets()]
+    if name == "all":
+        name = None
+    if name is not None and name.startswith(_PER_SAMPLE):
+        return [_per_sample_status_row(name)]
+    if name == "source":
+        return [
+            _per_sample_status_row(f"{_PER_SAMPLE}{code}")
+            for code in source_matrices.available_cohorts()
+        ]
+    if name in (_BUNDLE, _HPA):
+        names = [d.name for d in datasets() if d.kind == name]
+    else:
+        names = [dataset(name).name] if name is not None else [d.name for d in datasets()]
     rows = []
     for n in names:
         d = dataset(n)

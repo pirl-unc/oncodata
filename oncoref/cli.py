@@ -13,8 +13,7 @@
 """``oncoref`` command-line interface.
 
 Reference lookups over the bundled tables (cancer-type / TMB / burden / ICI) plus
-the ``cache`` group (fetch / status / dir / prune) for the heavy per-cohort
-expression bundle, and the ``hpa`` / ``expression-sources`` source managers.
+the ``data`` manager for downloadable expression-bundle, HPA, and per-sample sources.
 """
 
 from __future__ import annotations
@@ -53,39 +52,7 @@ def _cmd_version(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_cache_dir(args: argparse.Namespace) -> int:
-    print(data_bundle.cache_dir())
-    return 0
-
-
-def _cmd_fetch(args: argparse.Namespace) -> int:
-    try:
-        if args.force or not data_bundle.is_local():
-            data_bundle.fetch()
-        else:
-            print(f"Already present at {data_bundle.cache_dir()}")
-    except Exception as e:  # network / extract failure
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-    return 0
-
-
-def _cmd_status(args: argparse.Namespace) -> int:
-    snap = data_bundle.status()
-    print(f"Data version: {snap['data_version']}")
-    print(f"Cache dir:    {snap['cache_dir']}")
-    print(f"Release URL:  {snap['release_url']}")
-    for fallback in snap.get("release_urls", [])[1:]:
-        print(f"  fallback:   {fallback}")
-    print(f"All local:    {'yes' if snap['all_local'] else 'no'}")
-    print("-" * 60)
-    for name, item in snap["items"].items():
-        mark = "present" if item["present"] else "missing"
-        print(f"  {name:<48} {mark:>8}  {_fmt_bytes(item['size_bytes']):>9}")
-    return 0
-
-
-def _cmd_prune(args: argparse.Namespace) -> int:
+def _print_bundle_prune(args: argparse.Namespace) -> int:
     deleted = data_bundle.prune_cache(keep_current=not args.include_current, dry_run=not args.yes)
     if not deleted:
         print("Nothing to prune.")
@@ -100,7 +67,7 @@ def _cmd_prune(args: argparse.Namespace) -> int:
 
 def _cmd_data(args: argparse.Namespace) -> int:
     """Unified data management over the catalog (expression bundle + HPA sources)."""
-    from . import catalog
+    from . import catalog, source_matrices
 
     if args.action == "list":
         # The full inventory: every oncoref-domain dataset and how it's held.
@@ -109,7 +76,17 @@ def _cmd_data(args: argparse.Namespace) -> int:
             f"{'Dataset':<46} {'Held':<8} {'Avail':<6} {'Cohorts':>8} {'Category':<14} Description"
         )
         print("-" * 120)
-        for r in catalog.inventory():
+        rows = catalog.inventory()
+        if args.name and args.name != "all":
+            rows = [
+                r
+                for r in rows
+                if r["held"] == args.name or r["category"] == args.name or r["name"] == args.name
+            ]
+            if not rows:
+                print(f"Error: unknown data list filter {args.name!r}", file=sys.stderr)
+                return 1
+        for r in rows:
             avail = "yes" if r["available"] else "-"
             cohorts = str(r["cohorts"]) if r["cohorts"] is not None else "-"
             print(
@@ -138,6 +115,23 @@ def _cmd_data(args: argparse.Namespace) -> int:
             )
         return 0
 
+    if args.action == "dir":
+        target = args.name or "all"
+        dirs = {
+            "bundle": data_bundle.cache_dir(),
+            "hpa": reference_data.cache_dir(),
+            "source": source_matrices.cache_dir(),
+        }
+        if target == "all":
+            for name, path in dirs.items():
+                print(f"{name}\t{path}")
+            return 0
+        if target not in dirs:
+            print("Error: data dir target must be all, bundle, hpa, or source", file=sys.stderr)
+            return 1
+        print(dirs[target])
+        return 0
+
     if args.action == "fetch":
         try:
             downloaded = catalog.fetch(args.name or "all", force=args.force)
@@ -163,6 +157,13 @@ def _cmd_data(args: argparse.Namespace) -> int:
             print(f"Error: {e}", file=sys.stderr)
             return 1
         return 0
+
+    if args.action == "prune":
+        target = args.name or "bundle"
+        if target != "bundle":
+            print("Error: data prune currently supports only the bundle cache", file=sys.stderr)
+            return 1
+        return _print_bundle_prune(args)
 
     return 1
 
@@ -358,44 +359,6 @@ def _cmd_plot(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_sources(args: argparse.Namespace) -> int:
-    if args.action == "list" or args.action == "status":
-        rows = reference_data.status()
-        print(f"{'Source':<20} {'Cached':<8} {'Version':<10} {'Size':>9}  Description")
-        print("-" * 92)
-        for r in rows:
-            cached = "yes" if r["cached"] else "no"
-            ver = r["cached_version"] or f"({r['default_version']})"
-            print(
-                f"{r['name']:<20} {cached:<8} {ver:<10} {_fmt_bytes(r['bytes']):>9}  {r['description']}"
-            )
-        print(f"\nCache directory: {reference_data.cache_dir()}")
-        return 0
-    if args.action == "fetch":
-        names = [args.name] if args.name else list(reference_data.REFERENCE_SOURCES)
-        failures = []
-        for name in names:
-            try:
-                path = reference_data.download(name, force=args.force)
-            except reference_data.ReferenceDataError as e:
-                print(f"Error: {name}: {e}", file=sys.stderr)
-                failures.append(name)
-                continue
-            print(f"Ready: {name} -> {path}")
-        return 1 if failures else 0
-    if args.action == "path":
-        if not args.name:
-            print("Error: 'hpa path' requires a source name", file=sys.stderr)
-            return 1
-        try:
-            print(reference_data.ensure(args.name))
-        except reference_data.ReferenceDataError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 1
-        return 0
-    return 1
-
-
 def _cmd_expression_sources(args: argparse.Namespace) -> int:
     srcs = expression_registry.expression_sources()
     if args.code:
@@ -463,25 +426,6 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("version", help="Print the installed oncoref version").set_defaults(
         func=_cmd_version
     )
-
-    # --- cache: the downloadable per-cohort expression bundle ---
-    p_cache = sub.add_parser("cache", help="Manage the downloadable expression-bundle cache")
-    cache_sub = p_cache.add_subparsers(dest="cache_action", required=True)
-    cache_sub.add_parser(
-        "dir", help="Print the on-disk cache dir for the data bundle"
-    ).set_defaults(func=_cmd_cache_dir)
-    p_cfetch = cache_sub.add_parser("fetch", help="Download the per-cohort expression data bundle")
-    p_cfetch.add_argument("--force", action="store_true", help="Re-download even if present")
-    p_cfetch.set_defaults(func=_cmd_fetch)
-    cache_sub.add_parser(
-        "status", help="Report which bundle paths are cached locally (no download)"
-    ).set_defaults(func=_cmd_status)
-    p_cprune = cache_sub.add_parser("prune", help="Delete stale version-pinned cache dirs")
-    p_cprune.add_argument("--yes", action="store_true", help="Actually delete (default: dry run)")
-    p_cprune.add_argument(
-        "--include-current", action="store_true", help="Also delete the current version's cache"
-    )
-    p_cprune.set_defaults(func=_cmd_prune)
 
     # --- reference lookups ---
     p_ct = sub.add_parser(
@@ -636,8 +580,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_data.add_argument(
         "action",
-        choices=["list", "status", "fetch", "path"],
-        help="list (catalog), status (cache state), fetch (download), path (ensure + print)",
+        choices=["list", "status", "dir", "fetch", "path", "prune"],
+        help=(
+            "list (catalog), status (cache state), dir (cache roots), "
+            "fetch (download), path (ensure + print), prune (bundle cache cleanup)"
+        ),
     )
     p_data.add_argument(
         "name",
@@ -647,19 +594,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "per-sample:<CODE> (omit = all)",
     )
     p_data.add_argument("--force", action="store_true", help="Re-download even if cached")
+    p_data.add_argument(
+        "--yes",
+        action="store_true",
+        help="Actually delete stale bundle caches for 'data prune' (default: dry run)",
+    )
+    p_data.add_argument(
+        "--include-current",
+        action="store_true",
+        help="For 'data prune', also delete the current bundle cache",
+    )
     p_data.set_defaults(func=_cmd_data)
-
-    p_hpa = sub.add_parser(
-        "hpa", help="Manage HPA normal-tissue reference data (RNA / IHC / single-cell)"
-    )
-    p_hpa.add_argument(
-        "action",
-        choices=["list", "status", "fetch", "path"],
-        help="list/status (show cache state), fetch (download), path (print local path)",
-    )
-    p_hpa.add_argument("name", nargs="?", default=None, help="HPA source name (omit to fetch all)")
-    p_hpa.add_argument("--force", action="store_true", help="Re-download even if cached")
-    p_hpa.set_defaults(func=_cmd_sources)
 
     p_exprsrc = sub.add_parser(
         "expression-sources",

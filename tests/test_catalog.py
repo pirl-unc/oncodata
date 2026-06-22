@@ -39,6 +39,13 @@ def test_status_uniform_and_absent(monkeypatch, tmp_path):
     assert all(r["present"] is False and r["size_bytes"] == 0 for r in rows)
 
 
+def test_status_accepts_backend_groups(monkeypatch, tmp_path):
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path / "bundle" / "vX"))
+    monkeypatch.setenv("CANCERDATA_DATA_DIR", str(tmp_path / "ref"))
+    assert {r["kind"] for r in catalog.status("bundle")} == {"bundle"}
+    assert {r["kind"] for r in catalog.status("hpa")} == {"hpa"}
+
+
 def test_path_none_when_absent_then_present(monkeypatch, tmp_path):
     monkeypatch.setenv("CANCERDATA_DATA_DIR", str(tmp_path / "ref"))
     assert catalog.path("hpa_normal_tissue") is None
@@ -126,6 +133,11 @@ def test_cli_data_list(capsys):
     for r in catalog.inventory():
         assert r["name"] in out
 
+    assert cli.main(["data", "list", "hpa"]) == 0
+    out = capsys.readouterr().out
+    assert "hpa_rna_consensus" in out
+    assert "pan-cancer-expression" not in out
+
 
 def test_cli_data_status_absent(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path / "b" / "vX"))
@@ -133,6 +145,14 @@ def test_cli_data_status_absent(monkeypatch, tmp_path, capsys):
     assert cli.main(["data", "status"]) == 0
     out = capsys.readouterr().out
     assert "Present" in out and "no" in out
+
+    assert cli.main(["data", "status", "all"]) == 0
+    out = capsys.readouterr().out
+    assert "Present" in out and "no" in out
+
+    assert cli.main(["data", "status", "hpa"]) == 0
+    out = capsys.readouterr().out
+    assert "hpa_rna_consensus" in out
 
 
 def test_cli_data_status_unknown_errors(capsys):
@@ -155,6 +175,19 @@ def test_cli_data_fetch_nothing(monkeypatch, capsys):
     monkeypatch.setattr(catalog, "fetch", lambda name="all", *, force=False: [])
     assert cli.main(["data", "fetch"]) == 0
     assert "Already present." in capsys.readouterr().out
+
+
+def test_cli_data_dir_and_prune(capsys, monkeypatch, tmp_path):
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path / "bundle" / "vX"))
+    monkeypatch.setenv("CANCERDATA_DATA_DIR", str(tmp_path / "ref"))
+    monkeypatch.setenv("CANCERDATA_SOURCE_MATRICES", str(tmp_path / "source"))
+    assert cli.main(["data", "dir", "bundle"]) == 0
+    assert str(tmp_path / "bundle" / "vX") in capsys.readouterr().out
+    assert cli.main(["data", "dir"]) == 0
+    out = capsys.readouterr().out
+    assert "bundle\t" in out and "hpa\t" in out and "source\t" in out
+    assert cli.main(["data", "prune"]) == 0
+    assert "Nothing to prune." in capsys.readouterr().out
 
 
 def test_cli_help_never_crashes():

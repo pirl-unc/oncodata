@@ -104,7 +104,7 @@ od.within_sample_top_fraction("PRAD")     # per-gene frac of samples top-5% (wit
 - **HPA normal tissue** — `hpa_rna_consensus`, `hpa_normal_tissue` (IHC),
   `hpa_single_cell`, and per-gene lookups (`gene_tissue_ntpm`,
   `gene_protein_tissues`, `gene_cell_type_ntpm`) over HPA v23, fetched on demand
-  (`oncoref hpa fetch`).
+  (`oncoref data fetch hpa`).
 - **Genome reference** — `canonical_gene_id_and_name`, `find_gene_id_by_name`,
   `find_gene_name_from_ensembl_{gene,transcript}_id`, `aggregate_gene_expression`
   (pyensembl-backed symbol ↔ Ensembl-ID resolution). pyensembl ships with the
@@ -127,12 +127,13 @@ oncoref plot apd1-vs-tmb --out apd1_vs_tmb.png
 oncoref plot patient-coverage --gene-set cta --out coverage_out
 oncoref plot cta-curation --out cta_curation_out
 
-# expression-bundle cache (per-cohort expression):
-oncoref cache fetch             # download the ~340 MB bundle
-oncoref cache status            # which bundle paths are cached (no download)
-oncoref cache dir               # where the data bundle is cached
-oncoref cache prune --yes       # delete stale version caches
-oncoref hpa fetch               # download HPA reference data (RNA / IHC / single-cell)
+# managed data downloads/cache:
+oncoref data list               # every wheel/bundle/HPA/source dataset
+oncoref data status bundle      # expression-bundle cache state (no download)
+oncoref data fetch bundle       # download the ~340 MB bundle
+oncoref data fetch hpa          # download HPA reference data (RNA / IHC / single-cell)
+oncoref data dir bundle         # where the data bundle is cached
+oncoref data prune --yes        # delete stale bundle version caches
 oncoref version
 ```
 
