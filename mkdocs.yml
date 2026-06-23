@@ -1,0 +1,9 @@
+site_name: oncoref
+site_url: https://pirl-unc.github.io/oncoref/
+repo_url: https://github.com/pirl-unc/oncoref
+repo_name: pirl-unc/oncoref
+theme:
+  name: mkdocs
+nav:
+  - Home: index.md
+  - API Guide: api.md

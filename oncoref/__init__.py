@@ -152,7 +152,13 @@ from .fusions import (
     fusion_partners,
     protein_family,
 )
-from .gene_families import TECHNICAL_RNA_FAMILIES
+from .gene_families import (
+    TECHNICAL_RNA_FAMILIES,
+    clean_tpm_biological_housekeeping_gene_ids,
+    clean_tpm_biological_housekeeping_genes,
+    clean_tpm_other_technical_gene_ids,
+    clean_tpm_ribosomal_gene_ids,
+)
 from .gene_ids import (
     canonical_gene_id,
     canonical_gene_ids,
@@ -351,6 +357,10 @@ __all__ = [
     "canonical_proteoform_ids",
     "classify_gene_qc",
     "clean_tpm",
+    "clean_tpm_biological_housekeeping_gene_ids",
+    "clean_tpm_biological_housekeeping_genes",
+    "clean_tpm_other_technical_gene_ids",
+    "clean_tpm_ribosomal_gene_ids",
     "cohort_aggregate_members",
     # cohort vocabulary
     "cohort_aggregates",

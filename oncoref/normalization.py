@@ -16,7 +16,7 @@ The headline transform is **clean TPM** (:func:`clean_tpm`): a **multi-compartme
 renormalization. Each non-biological compartment is pinned, per sample, to a fixed
 fraction of the 1e6 budget — **ribosomal proteins → 16%** (:data:`RIBOSOMAL_PROTEIN_FRACTION`),
 **other-technical → 9%** (:data:`OTHER_TECHNICAL_FRACTION`; mtDNA, NUMT, rRNA + pseudogenes,
-ribosomal-protein pseudogenes, polyA-bias lncRNA), **biology → 75%**
+polyA-bias lncRNA), **biology → 75%**
 (:data:`BIOLOGICAL_FRACTION`). The variable, pipeline-driven other-technical/ribosomal
 fractions no longer inflate real genes, so biological clean TPM is directly comparable
 across samples and sources.
@@ -33,11 +33,13 @@ budget empirically interpretable. (Verified: LUAD clean TPM lands at exactly 16/
 sample.)
 
 **Curated membership.** Which genes are technical/ribosomal is a *curated, biology-defined*
-list (the technical-RNA families + ribosomal proteins; see :mod:`oncoref.gene_families`),
-NOT data-derived. Never define censoring from expression variance or abundance: cancer-testis
-antigens are high-variance *by definition* (that's what makes them targets), so a
-variance-based rule would censor the very antigens this library exists to find. Use data
-only to *calibrate* the fractions and *validate completeness* of the curated list.
+list, with compartment assignment taken from ``clean-tpm-censored-genes.csv``:
+``category == "ribosomal_protein"`` gets the 16% budget and ``category == "technical"``
+gets the 9% budget (see :mod:`oncoref.gene_families`). Never define censoring from
+expression variance or abundance: cancer-testis antigens are high-variance *by definition*
+(that's what makes them targets), so a variance-based rule would censor the very antigens
+this library exists to find. Use data only to *calibrate* the fractions and *validate
+completeness* of the curated list.
 
 **Single definition.** :func:`clean_tpm` is the one and only clean-TPM implementation; every
 consumer routes through it (the per-sample matrix loader, :func:`normalize_expression`'s
@@ -80,14 +82,15 @@ def _censored_mask(gene_table: pd.DataFrame, *, exclude_ribosomal_proteins: bool
 
 # clean-TPM compartment budgets — the fraction of the 1e6 per-sample budget each
 # non-biological compartment is pinned to. CALIBRATED to the fresh-frozen-polyA median
-# (measured on TCGA LUAD/SKCM: canonical ribosomal proteins ~16%, all other technical
+# (measured on TCGA LUAD/SKCM: ribosomal-protein category ~16%, other technical
 # genes ~9%); biology gets the remainder. Public so a consumer reads the applied value
 # instead of re-hardcoding the magic number, and the value survives future re-calibration.
-#: Clean-TPM budget for the canonical ribosomal-protein compartment (RPL/RPS).
+#: Clean-TPM budget for the ribosomal-protein compartment
+#: (``clean-tpm-censored-genes.csv:category == "ribosomal_protein"``).
 RIBOSOMAL_PROTEIN_FRACTION = 0.16
 #: Clean-TPM budget for the **other-technical** compartment (mtDNA, NUMT, rRNA +
-#: pseudogenes, ribosomal-protein pseudogenes, polyA-bias lncRNA) — everything censored
-#: except the canonical ribosomal proteins.
+#: pseudogenes, polyA-bias lncRNA;
+#: ``clean-tpm-censored-genes.csv:category == "technical"``).
 OTHER_TECHNICAL_FRACTION = 0.09
 #: Combined censored budget (ribosomal + other-technical = 25%). The two compartments are
 #: pinned separately, but this is the total non-biological fraction — matches pirlygenes'
@@ -104,23 +107,19 @@ def _compartment_masks(
     """``(ribosomal_mask, technical_mask)`` row-aligned to ``gene_table`` — the two
     non-biological clean-TPM compartments (biology is everything in neither).
 
-    ``ribosomal`` is the **canonical ribosomal-protein** genes (RPL/RPS) **that are also
-    censored**; ``technical`` is **every other censored gene** (mtDNA, NUMT pseudogenes,
-    rRNA + its pseudogenes, ribosomal-protein *pseudogenes*, polyA-bias lncRNA). The
-    intersection with the censored set matters: a canonical ribosomal paralog the curated
-    list deliberately keeps in biology (e.g. testis-restricted RPL10L, a potential antigen)
-    must stay biology, not get pulled into the censored 16% budget. With
+    ``ribosomal`` is every row in ``clean-tpm-censored-genes.csv`` with
+    ``category == "ribosomal_protein"``; ``technical`` is every row with
+    ``category == "technical"``. The category-specific censored table is the contract,
+    not the broad ribosomal-family table: a ribosomal-family CTA deliberately absent from
+    the censored table (RPL10L / ENSG00000165496) stays biology. With
     ``exclude_ribosomal_proteins=False`` the ribosomal proteins join biology (empty
     ribosomal mask) and only the technical-RNA set is censored (the legacy view)."""
     if "Ensembl_Gene_ID" not in gene_table.columns:
         raise ValueError("clean TPM needs an 'Ensembl_Gene_ID' column (censoring is ENSG-keyed)")
     ids = _unversioned(gene_table["Ensembl_Gene_ID"])
     if exclude_ribosomal_proteins:
-        censored_ids = gene_families.clean_tpm_censored_gene_ids(include_ribosomal_proteins=True)
-        # Ribosomal compartment = canonical ribosomal proteins ∩ censored set, so the mask
-        # can never exceed the censored set (a non-censored ribosomal paralog stays biology).
-        ribosomal = ids.isin(gene_families.gene_family_ids("ribosomal_protein") & censored_ids)
-        technical = ids.isin(censored_ids) & ~ribosomal
+        ribosomal = ids.isin(gene_families.clean_tpm_ribosomal_gene_ids())
+        technical = ids.isin(gene_families.clean_tpm_other_technical_gene_ids())
     else:
         ribosomal = pd.Series(False, index=gene_table.index)
         technical = ids.isin(
@@ -143,9 +142,10 @@ def clean_tpm(
     row-aligned to ``values``) assigns each gene to a compartment. Each non-biological
     compartment is rescaled, **per sample**, to a fixed fraction of the 1e6 budget:
 
-      - **ribosomal proteins** (canonical RPL/RPS) → ``ribosomal_protein_fraction`` (16%);
-      - **other-technical** (mtDNA, NUMT, rRNA + pseudogenes, ribosomal-protein pseudogenes,
-        polyA-bias lncRNA) → ``other_technical_fraction`` (9%);
+      - **ribosomal proteins** (``category == "ribosomal_protein"`` in the censored list)
+        → ``ribosomal_protein_fraction`` (16%);
+      - **other-technical** (``category == "technical"`` in the censored list)
+        → ``other_technical_fraction`` (9%);
       - **biology** (everything else) → the remainder (75%).
 
     **Why two censored compartments, not one.** The fractions are calibrated to the
@@ -554,6 +554,7 @@ def tpm_to_housekeeping_normalized(
     id_col: str | None = "Ensembl_Gene_ID",
     value_cols=None,
     panel_ids=None,
+    panel_name: str | None = None,
     pseudocount: float = 0.1,
 ) -> tuple[pd.DataFrame, dict]:
     """Divide each expression column by the **geometric mean** of a housekeeping
@@ -567,8 +568,12 @@ def tpm_to_housekeeping_normalized(
     log-normal expression and is dominated by no single deviating reference gene; a
     small ``pseudocount`` keeps it finite through zeros.
 
-    The panel defaults to oncoref's housekeeping gene set
+    The panel defaults to oncoref's legacy qPCR/reference housekeeping gene set
     (:func:`oncoref.gene_families.housekeeping_gene_ids`), matched by Ensembl id.
+    Clean-TPM callers should pass
+    :func:`oncoref.gene_families.clean_tpm_biological_housekeeping_gene_ids`
+    explicitly, because ribosomal legacy references live in clean TPM's non-biological
+    ribosomal compartment.
     ``value_cols`` defaults to the **named-TPM** columns (:func:`is_expression_value_col`)
     — for a plain ``genes × samples`` frame whose columns aren't ``*_TPM``, pass them
     explicitly or use :func:`normalize_to_housekeeping` (which defaults to all sample
@@ -584,11 +589,17 @@ def tpm_to_housekeeping_normalized(
     if not value_cols:
         return out, {"applied": False, "reason": "no expression value columns", "columns": {}}
 
-    panel = set(panel_ids) if panel_ids is not None else set(gene_families.housekeeping_gene_ids())
+    if panel_ids is None:
+        panel = set(gene_families.housekeeping_gene_ids())
+        panel_name = panel_name or "legacy_qpcr_housekeeping"
+    else:
+        panel = set(panel_ids)
+        panel_name = panel_name or "custom"
     if not (id_col and id_col in out.columns):
         return out, {
             "applied": False,
             "reason": "no id column for housekeeping panel",
+            "panel": panel_name,
             "columns": {},
         }
     panel_rows = _unversioned(out[id_col]).isin({str(g).split(".")[0] for g in panel})
@@ -597,6 +608,7 @@ def tpm_to_housekeeping_normalized(
         return out, {
             "applied": False,
             "reason": "no housekeeping panel genes present",
+            "panel": panel_name,
             "columns": {},
         }
 
@@ -618,6 +630,7 @@ def tpm_to_housekeeping_normalized(
     return out, {
         "applied": applied,
         "reason": "divided by housekeeping geometric mean" if applied else "panel denominator <= 0",
+        "panel": panel_name,
         "columns": columns,
         "value_cols": value_cols,
         "panel_genes_present": n_panel,

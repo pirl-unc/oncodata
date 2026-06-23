@@ -136,6 +136,10 @@ CANCERDATA_ORIGINATED: dict[str, tuple[str, str]] = {
     "tissue-burden-map": ("ontology", "primary_tissue -> anatomic burden category"),
     "family-burden-map": ("ontology", "registry family -> burden category (fallback)"),
     "cta-ihc-unreliable": ("cta", "CTAs whose HPA IHC is cross-reactive (RNA-only fallback)"),
+    "clean-tpm-biological-housekeeping-genes": (
+        "normalization",
+        "HPA-stable biological housekeeping denominator candidates for clean TPM",
+    ),
     "cancer-response-signatures": (
         "response",
         "curated aPD1 response/resistance expression signatures (T-cell-inflamed, TGF-β, …)",

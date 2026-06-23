@@ -452,7 +452,9 @@ def test_pan_cancer_expression_canonicalizes_alias_genes(monkeypatch):
 def test_housekeeping_normalize_divides_by_panel_geomean(monkeypatch):
     import oncoref.gene_families as gf
 
-    monkeypatch.setattr(gf, "housekeeping_gene_ids", lambda: frozenset({"ENSG_HK"}))
+    monkeypatch.setattr(
+        gf, "clean_tpm_biological_housekeeping_gene_ids", lambda: frozenset({"ENSG_HK"})
+    )
     df = pd.DataFrame(
         {"Ensembl_Gene_ID": ["ENSG_HK", "ENSG_X"], "Symbol": ["HK", "X"], "s1": [100.0, 50.0]}
     )
@@ -803,7 +805,9 @@ def test_pan_cancer_expression_housekeeping_mode(monkeypatch):
     import oncoref.gene_families as gf
 
     monkeypatch.setattr(expression, "get_data", lambda name: _pan_cancer_fixture())
-    monkeypatch.setattr(gf, "housekeeping_gene_ids", lambda: frozenset({"ENSG00000001"}))
+    monkeypatch.setattr(
+        gf, "clean_tpm_biological_housekeeping_gene_ids", lambda: frozenset({"ENSG00000001"})
+    )
     out = expression.pan_cancer_expression(normalize=["tpm_clean", "hk", "percentile"])
     assert "LUAD_TPM_hk" in out.columns
     assert "liver_nTPM_hk" in out.columns

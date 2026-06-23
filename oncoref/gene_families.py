@@ -98,6 +98,51 @@ def housekeeping_gene_ids() -> frozenset[str]:
     return _unversioned_ids(get_data("housekeeping-genes", copy=False))
 
 
+def legacy_qpcr_housekeeping_genes() -> pd.DataFrame:
+    """Classic qPCR/reference-gene housekeeping panel.
+
+    This is the historical :func:`housekeeping_genes` table. It intentionally remains
+    available, but clean-TPM biological denominators should use
+    :func:`clean_tpm_biological_housekeeping_genes` instead because this legacy panel
+    includes ribosomal-protein genes that live in clean TPM's 16% ribosomal compartment.
+    """
+    return housekeeping_genes()
+
+
+def legacy_qpcr_housekeeping_gene_ids() -> frozenset[str]:
+    """Unversioned Ensembl IDs of the classic qPCR/reference-gene panel."""
+    return housekeeping_gene_ids()
+
+
+def _primary_panel_mask(df: pd.DataFrame) -> pd.Series:
+    return df["primary_panel"].astype(str).str.lower().isin({"true", "1", "yes"})
+
+
+def clean_tpm_biological_housekeeping_genes(*, primary_only: bool = True) -> pd.DataFrame:
+    """HPA-stable biological housekeeping genes for clean-TPM denominators.
+
+    The bundled table contains all 47 strict HPA whole-tissue candidates that are
+    protein-coding, clean-TPM biological genes with ``min_tpm >= 100`` across 50 HPA
+    tissues and low tissue coefficient of variation. By default this returns the
+    curated 30-gene primary denominator panel. Pass ``primary_only=False`` for the
+    full candidate/audit table including HPA provenance and exclusion notes.
+    """
+    df = get_data("clean-tpm-biological-housekeeping-genes")
+    if primary_only:
+        df = df[_primary_panel_mask(df)]
+    return df.reset_index(drop=True)
+
+
+@lru_cache(maxsize=2)
+def clean_tpm_biological_housekeeping_gene_ids(*, primary_only: bool = True) -> frozenset[str]:
+    """Unversioned Ensembl IDs for the clean-TPM biological housekeeping panel.
+
+    Defaults to the 30-gene primary denominator panel. Pass ``primary_only=False``
+    to include every strict HPA-stable candidate in the shipped audit table.
+    """
+    return _unversioned_ids(clean_tpm_biological_housekeeping_genes(primary_only=primary_only))
+
+
 @lru_cache(maxsize=2)
 def clean_tpm_censored_gene_ids(*, include_ribosomal_proteins: bool = True) -> frozenset[str]:
     """Unversioned Ensembl IDs censored by the clean-TPM transform — technical RNA
@@ -115,6 +160,32 @@ def clean_tpm_censored_gene_ids(*, include_ribosomal_proteins: bool = True) -> f
     df = get_data("clean-tpm-censored-genes", copy=False)
     if not include_ribosomal_proteins:
         df = df[df["category"].astype(str) == "technical"]
+    return _unversioned_ids(df)
+
+
+@lru_cache(maxsize=1)
+def clean_tpm_ribosomal_gene_ids() -> frozenset[str]:
+    """Unversioned Ensembl IDs assigned to clean TPM's 16% ribosomal compartment.
+
+    This is defined by ``clean-tpm-censored-genes.csv`` where
+    ``category == "ribosomal_protein"``, not by the broader ribosomal-protein family
+    table. That distinction is CTA-safe: broad ribosomal-family members that are absent
+    from the censored table, such as ``RPL10L`` / ``ENSG00000165496``, remain biological.
+    """
+    df = get_data("clean-tpm-censored-genes", copy=False)
+    df = df[df["category"].astype(str) == "ribosomal_protein"]
+    return _unversioned_ids(df)
+
+
+@lru_cache(maxsize=1)
+def clean_tpm_other_technical_gene_ids() -> frozenset[str]:
+    """Unversioned Ensembl IDs assigned to clean TPM's 9% other-technical compartment.
+
+    This is defined by ``clean-tpm-censored-genes.csv`` where
+    ``category == "technical"``.
+    """
+    df = get_data("clean-tpm-censored-genes", copy=False)
+    df = df[df["category"].astype(str) == "technical"]
     return _unversioned_ids(df)
 
 

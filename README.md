@@ -89,6 +89,9 @@ od.within_sample_top_fraction("PRAD")     # per-gene frac of samples top-5% (wit
   anti-PD-1 shortcuts, endpoint estimates, and pooled response summaries.
 - **Expression** — `cohort_gene_percentiles`, `within_sample_top_fraction`,
   `representative_cohort_samples` over the lazy-downloaded per-cohort bundle.
+- **Clean TPM / normalization** — `oncoref.normalization` for the 16/9/75
+  compartment transform and `oncoref.gene_families` for clean-TPM censored
+  compartment IDs plus the biological housekeeping denominator panel.
 - **Cancer-testis antigens** — `oncoref.cta`: `cta_gene_names`/`cta_gene_ids`,
   `cta_evidence`, `synthesize_restriction` (HPA-only tissue-restriction; MS
   evidence stays in the target-selection layer).

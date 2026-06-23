@@ -299,8 +299,9 @@ def per_sample_expression(
       - ``"tpm_clean"`` (default) — two-compartment clean TPM (the comparable
         biological view the summaries are built on);
       - ``"tpm_clean_log1p"`` — clean TPM, ``log1p``-transformed;
-      - ``"tpm_clean_hk"`` — clean TPM divided per sample by the housekeeping-panel
-        geometric mean (unit-free ratio-to-baseline, robust to library-depth drift);
+      - ``"tpm_clean_hk"`` — clean TPM divided per sample by the biological
+        clean-TPM housekeeping-panel geometric mean (unit-free ratio-to-baseline,
+        robust to library-depth drift);
       - ``"tpm_raw"`` — the matrix as shipped (raw TPM), no normalization.
 
     With ``proteoform=True``, identical-protein paralogs are **summed per sample** to
@@ -375,12 +376,18 @@ def _load_per_sample_matrix(path: str, mtime: float, normalize: str) -> pd.DataF
 
 
 def _housekeeping_normalize(df: pd.DataFrame, sample_cols) -> pd.DataFrame:
-    """Divide each sample column by its housekeeping-panel geometric mean (a per-sample
-    rescale to a unit-free ratio-to-baseline scale). Commutes with the proteoform sum
-    (the denominator is per-column), so it can be applied before or after collapse."""
+    """Divide each clean-TPM sample column by the biological housekeeping-panel geometric
+    mean. Commutes with the proteoform sum (the denominator is per-column), so it can
+    be applied before or after collapse."""
+    from .gene_families import clean_tpm_biological_housekeeping_gene_ids
     from .normalization import tpm_to_housekeeping_normalized
 
-    out, _ = tpm_to_housekeeping_normalized(df, value_cols=list(sample_cols))
+    out, _ = tpm_to_housekeeping_normalized(
+        df,
+        value_cols=list(sample_cols),
+        panel_ids=clean_tpm_biological_housekeeping_gene_ids(),
+        panel_name="clean_tpm_biological_housekeeping",
+    )
     return out
 
 
@@ -1223,7 +1230,14 @@ def pan_cancer_expression(
     if modes & {"housekeeping", "hk"}:
         hk_input_cols = clean_cols or raw_cols
         hk_input = out[id_cols + hk_input_cols].copy()
-        hk, _ = tpm_to_housekeeping_normalized(hk_input, value_cols=hk_input_cols)
+        from .gene_families import clean_tpm_biological_housekeeping_gene_ids
+
+        hk, _ = tpm_to_housekeeping_normalized(
+            hk_input,
+            value_cols=hk_input_cols,
+            panel_ids=clean_tpm_biological_housekeeping_gene_ids(),
+            panel_name="clean_tpm_biological_housekeeping",
+        )
         for col in hk_input_cols:
             target = col.rsplit("_", 1)[0] + "_hk"
             out[target] = hk[col]

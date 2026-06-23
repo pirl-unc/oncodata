@@ -60,13 +60,10 @@ def test_clean_tpm_technical_compartment_budget():
 
 def test_clean_tpm_three_compartments():
     # A canonical ribosomal protein gets its OWN 16% budget, distinct from the 9% technical.
-    # Intersect with the censored set and sort so the pick is deterministic across hash
-    # seeds AND guaranteed to be a *censored* ribosomal gene — RPL10L (ENSG00000165496) is
-    # the one ribosomal-protein gene deliberately left out of the censored set (it would
-    # land in biology, not the ribosomal compartment).
-    censored = gf.clean_tpm_censored_gene_ids()
-    rpl = sorted(gf.gene_family_ids("ribosomal_protein") & censored)[0]
-    mito = sorted(gf.gene_family_ids("mitochondrial") & censored)[0]
+    # Pick directly from the category-specific clean-TPM compartment helpers so this
+    # tests the public censored-table contract, not broad family membership.
+    rpl = sorted(gf.clean_tpm_ribosomal_gene_ids())[0]
+    mito = sorted(gf.clean_tpm_other_technical_gene_ids())[0]
     gt = pd.DataFrame(
         {
             "Ensembl_Gene_ID": [rpl, mito, "ENSG00000111111", "ENSG00000222222"],
@@ -78,6 +75,28 @@ def test_clean_tpm_three_compartments():
     assert clean.loc[0, "s1"] == pytest.approx(norm.RIBOSOMAL_PROTEIN_FRACTION * 1e6)  # 160k
     assert clean.loc[1, "s1"] == pytest.approx(norm.OTHER_TECHNICAL_FRACTION * 1e6)  # 90k
     assert clean.loc[[2, 3], "s1"].sum() == pytest.approx(norm.BIOLOGICAL_FRACTION * 1e6)  # 750k
+
+
+def test_clean_tpm_uses_censored_table_categories_for_ribosomal_budget():
+    rpl10ap1 = "ENSG00000244691"
+    rpl10l = "ENSG00000165496"
+    gt = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": [rpl10ap1, rpl10l, "ENSG00000111111"],
+            "Symbol": ["RPL10AP1", "RPL10L", "BIO"],
+        }
+    )
+    vals = pd.DataFrame({"s1": [100.0, 200.0, 300.0]}, index=gt.index)
+
+    ribo, tech = norm._compartment_masks(gt, exclude_ribosomal_proteins=True)
+    assert ribo.tolist() == [True, False, False]
+    assert tech.tolist() == [False, False, False]
+
+    clean = norm.clean_tpm(vals, gt)
+    assert clean.loc[0, "s1"] == pytest.approx(norm.RIBOSOMAL_PROTEIN_FRACTION * 1e6)
+    assert clean.loc[[1, 2], "s1"].sum() == pytest.approx(norm.BIOLOGICAL_FRACTION * 1e6)
+    # RPL10L stays biological despite broad ribosomal-family membership.
+    assert clean.loc[1, "s1"] == pytest.approx(300000.0)
 
 
 def test_clean_tpm_rejects_alternate_compartment_contracts():

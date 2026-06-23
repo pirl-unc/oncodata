@@ -75,7 +75,7 @@ antigen_coverage.addressable_antigen_fraction("LUAD", gene_ids={"ENSG00000141510
 antigen_coverage.greedy_antigen_coverage("LUAD", gene_ids={"ENSG00000141510"})
 ```
 
-## Expression
+## Expression And Normalization
 
 - `oncoref.expression` — read-time accessors for per-sample expression,
   percentile vectors, representative samples, within-sample top fractions, and
@@ -84,6 +84,36 @@ antigen_coverage.greedy_antigen_coverage("LUAD", gene_ids={"ENSG00000141510"})
   generation scripts.
 - `oncoref.normalization` — TPM conversion, clean TPM, technical-RNA filtering,
   log transforms, percentile ranks, and housekeeping normalization.
+
+Clean TPM has one public compartment contract:
+
+- `clean-tpm-censored-genes.csv:category == "ribosomal_protein"` — 16%
+  ribosomal compartment.
+- `clean-tpm-censored-genes.csv:category == "technical"` — 9% other-technical
+  compartment.
+- genes absent from the censored table — 75% biological compartment.
+
+The category-specific helper sets are available from `oncoref.gene_families`:
+
+```python
+from oncoref import gene_families
+
+gene_families.clean_tpm_ribosomal_gene_ids()
+gene_families.clean_tpm_other_technical_gene_ids()
+gene_families.clean_tpm_censored_gene_ids()
+```
+
+For clean-TPM housekeeping denominators, use the biological HPA-stable panel:
+
+```python
+gene_families.clean_tpm_biological_housekeeping_gene_ids()
+gene_families.clean_tpm_biological_housekeeping_genes()
+gene_families.clean_tpm_biological_housekeeping_genes(primary_only=False)
+```
+
+The legacy qPCR/reference-gene panel remains available as
+`legacy_qpcr_housekeeping_*` and through the historical `housekeeping_*` helpers,
+but it is not the clean-TPM biological denominator.
 
 ## Genes and Proteoforms
 
