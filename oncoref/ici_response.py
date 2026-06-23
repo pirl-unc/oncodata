@@ -1,0 +1,112 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Discoverable immune-checkpoint-inhibitor response API.
+
+This module is the organized public entry point for ICI response data:
+
+- ``apd1_*`` helpers are the anti-PD-1 monotherapy compatibility slice.
+- ``ici_*`` helpers cover the multi-regimen ICI tables.
+- ``DEFAULT_ICI_REGIMEN_PRIORITY`` names the regimen preference order explicitly.
+
+The older :mod:`oncoref.apd1` and :mod:`oncoref.ici` modules remain compatibility
+facades for existing callers.
+"""
+
+from __future__ import annotations
+
+from .apd1 import (
+    cancer_apd1_response,
+    cancer_apd1_response_df,
+)
+from .ici import (
+    PROPORTION_METRICS,
+    REGIMEN_FALLBACK,
+    REGIMEN_LABELS,
+    cancer_ici_regimen,
+    cancer_ici_response,
+    cancer_ici_response_df,
+    cancer_ici_response_estimates_df,
+    ici_regimens,
+    pooled_ici_response,
+)
+
+DEFAULT_ICI_REGIMEN_PRIORITY = REGIMEN_FALLBACK
+"""Regimen priority for unpinned ICI response lookup: PD-1, then PD-L1, then combo."""
+
+ICI_REGIMEN_LABELS = REGIMEN_LABELS
+"""Human-readable labels for the ICI regimen tags."""
+
+RESPONSE_PROPORTION_METRICS = PROPORTION_METRICS
+"""Response metrics that can be responder-weighted pooled."""
+
+
+def apd1_response(cancer_type=None, *, inherit: bool = True):
+    """Anti-PD-1 monotherapy ORR (%) for one cancer type, or the full code map."""
+    return cancer_apd1_response(cancer_type, inherit=inherit)
+
+
+def apd1_response_df():
+    """Curated anti-PD-1 monotherapy ORR anchor table."""
+    return cancer_apd1_response_df()
+
+
+def ici_response_anchor_df():
+    """Curated representative ICI ORR anchor table, one row per cancer/regimen."""
+    return cancer_ici_response_df()
+
+
+def ici_response_estimates_df():
+    """Audited ICI endpoint evidence table with metrics, CIs, denominators, and refs."""
+    return cancer_ici_response_estimates_df()
+
+
+def best_available_ici_response(cancer_type=None, *, inherit: bool = True):
+    """Best-available ICI ORR (%) using ``DEFAULT_ICI_REGIMEN_PRIORITY``.
+
+    This is a clearer name for ``cancer_ici_response(..., regimen=None,
+    fallback=True)``. It chooses anti-PD-1 monotherapy when present, then anti-PD-L1,
+    then anti-PD-1 + anti-CTLA-4.
+    """
+    return cancer_ici_response(cancer_type, inherit=inherit)
+
+
+def ici_response_by_regimen(cancer_type=None, *, inherit: bool = True):
+    """ICI ORR values grouped by regimen instead of using regimen priority."""
+    return cancer_ici_response(cancer_type, fallback=False, inherit=inherit)
+
+
+def selected_ici_regimen(cancer_type):
+    """Regimen selected by ``best_available_ici_response`` for one cancer type."""
+    return cancer_ici_regimen(cancer_type)
+
+
+__all__ = [
+    "DEFAULT_ICI_REGIMEN_PRIORITY",
+    "ICI_REGIMEN_LABELS",
+    "RESPONSE_PROPORTION_METRICS",
+    "apd1_response",
+    "apd1_response_df",
+    "best_available_ici_response",
+    "cancer_apd1_response",
+    "cancer_apd1_response_df",
+    "cancer_ici_regimen",
+    "cancer_ici_response",
+    "cancer_ici_response_df",
+    "cancer_ici_response_estimates_df",
+    "ici_regimens",
+    "ici_response_anchor_df",
+    "ici_response_by_regimen",
+    "ici_response_estimates_df",
+    "pooled_ici_response",
+    "selected_ici_regimen",
+]

@@ -17,6 +17,7 @@ Bottom-of-stack: depends only on pandas/numpy/pyarrow, never on the analysis
 or target-selection libraries that consume it.
 """
 
+from . import antigen_coverage, cancer_ontology, cohorts, cta_coverage, cta_peptides, ici_response
 from .apd1 import cancer_apd1_response, cancer_apd1_response_df
 from .cancer_types import (
     CANCER_TYPE_ALIASES,
@@ -298,6 +299,8 @@ __all__ = [
     "addressable_fraction_by_cohort",
     "aggregate_gene_expression",
     "aggregate_transcripts_to_genes",
+    # organized API modules
+    "antigen_coverage",
     "available_percentile_cohorts",
     "available_representative_cohorts",
     "available_within_sample_cohorts",
@@ -319,6 +322,7 @@ __all__ = [
     "cancer_lineage_group",
     "cancer_lineage_group_overrides",
     "cancer_lineage_groups",
+    "cancer_ontology",
     "cancer_reference_expression",
     "cancer_subtype_group",
     "cancer_subtype_groupings",
@@ -358,9 +362,11 @@ __all__ = [
     "cohort_registry_df",
     "cohort_source_version",
     "cohort_stats",
+    "cohorts",
     "collapse_to_proteoforms",
     "cta_by_axes",
     "cta_candidate_references",
+    "cta_coverage",
     "cta_df",
     # cancer-testis antigens
     "cta_evidence",
@@ -374,6 +380,7 @@ __all__ = [
     "cta_never_expressed_gene_ids",
     "cta_never_expressed_gene_names",
     "cta_patient_fractions",
+    "cta_peptides",
     "cta_placental_restricted_gene_ids",
     "cta_placental_restricted_gene_names",
     "cta_relaxed_reproductive_gene_ids",
@@ -422,6 +429,7 @@ __all__ = [
     "hpa_rna_consensus",
     "hpa_single_cell",
     "ici_regimens",
+    "ici_response",
     "id_columns",
     "is_canonical_gene",
     "is_expression_value_col",

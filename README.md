@@ -50,6 +50,12 @@ pip install oncoref
 
 ## Python API
 
+The flat `oncoref` namespace remains available for compatibility and quick
+interactive use. For new code, prefer the semantic submodules in
+[docs/api.md](docs/api.md); they make it clearer whether you are working with
+the cancer ontology, cohorts, ICI response, CTA coverage, generic antigen-panel
+coverage, or CTA-specific peptides.
+
 ```python
 import oncoref as od
 
@@ -72,18 +78,24 @@ od.within_sample_top_fraction("PRAD")     # per-gene frac of samples top-5% (wit
 
 ### Domains
 
-- **Ontology** — `cancer_type_registry`, `resolve_cancer_type`,
-  `cancer_type_info`, `cancer_types_in_family`, `viral_status`, `fusion_status`,
-  the cohort vocabulary (`cohort_registry`, `cohort_aggregates`).
+- **Cancer ontology** — `oncoref.cancer_ontology`: `cancer_type_registry`,
+  `resolve_cancer_type`, `cancer_type_info`, tree/family/lineage helpers,
+  `viral_status`, `fusion_status`.
+- **Cohorts** — `oncoref.cohorts`: `cohort_registry`, `cohort_aggregates`,
+  `cohort_source_version`, and mixture-cohort helpers.
 - **TMB** — `cancer_tmb`, `cancer_tmb_df` (parent-chain inheritance).
 - **Incidence / mortality** — `cancer_burden`, `burden_category` (ACS / GLOBOCAN).
-- **Checkpoint response** — `cancer_ici_response` (ORR per type/regimen: anti-PD-1,
-  anti-PD-L1, anti-PD-1+anti-CTLA-4), with `cancer_apd1_response` the PD-1 shortcut.
+- **Checkpoint response** — `oncoref.ici_response`: regimen-aware ORR anchors,
+  anti-PD-1 shortcuts, endpoint estimates, and pooled response summaries.
 - **Expression** — `cohort_gene_percentiles`, `within_sample_top_fraction`,
   `representative_cohort_samples` over the lazy-downloaded per-cohort bundle.
-- **Cancer-testis antigens** — `cta_gene_names`/`cta_gene_ids`, `cta_evidence`,
-  `synthesize_restriction` (HPA-only tissue-restriction; MS evidence stays in the
-  target-selection layer).
+- **Cancer-testis antigens** — `oncoref.cta`: `cta_gene_names`/`cta_gene_ids`,
+  `cta_evidence`, `synthesize_restriction` (HPA-only tissue-restriction; MS
+  evidence stays in the target-selection layer).
+- **CTA coverage / peptides** — `oncoref.cta_coverage` for patient coverage and
+  `oncoref.cta_peptides` for CTA-specific 9-mer count maps and load.
+- **Generic antigen-panel coverage** — `oncoref.antigen_coverage` for explicit
+  non-CTA panels.
 - **HPA normal tissue** — `hpa_rna_consensus`, `hpa_normal_tissue` (IHC),
   `hpa_single_cell`, and per-gene lookups (`gene_tissue_ntpm`,
   `gene_protein_tissues`, `gene_cell_type_ntpm`) over HPA v23, fetched on demand
@@ -94,9 +106,6 @@ od.within_sample_top_fraction("PRAD")     # per-gene frac of samples top-5% (wit
   package, but resolution needs a downloaded human release once:
   `pyensembl install --release 111 --species homo_sapiens` (the accessors return
   `None` until then).
-- **Peptides** — `cta_specific_9mer_counts`, `cta_specific_9mer_load` (per-cohort
-  mean per-patient CTA-specific 9-mer load): 9-mers found in a CTA protein but in no
-  non-CTA protein, enumerated from the reference proteome and cached per release.
 - **Plots** (`pip install oncoref[plots]`) — `oncoref.plots.apd1_vs_tmb`,
   `apd1_orr_bars`, `incidence_vs_mortality`, the CTA/coverage figures, and
   `oncoref.cta_curation_plots.render`.
