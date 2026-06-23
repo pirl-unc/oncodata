@@ -496,10 +496,7 @@ def cancer_reference_expression(
 
     if not wide_parts:
         return pd.DataFrame(columns=["Ensembl_Gene_ID", "Symbol"])
-    out = wide_parts[0]
-    for part in wide_parts[1:]:
-        out = out.merge(part, on=["Ensembl_Gene_ID", "Symbol"], how="outer")
-    return out.sort_values("Ensembl_Gene_ID").reset_index(drop=True)
+    return _merge_cancer_reference_wide_parts(wide_parts)
 
 
 def _reference_normalize_modes(normalize: str | Iterable[str]) -> set[str]:
@@ -508,6 +505,44 @@ def _reference_normalize_modes(normalize: str | Iterable[str]) -> set[str]:
     else:
         modes = {str(mode).lower() for mode in normalize}
     return {"tpm_clean" if mode == "clean_tpm" else mode for mode in modes}
+
+
+def _merge_cancer_reference_wide_parts(parts: list[pd.DataFrame]) -> pd.DataFrame:
+    """Merge cohort reference vectors by canonical ENSG only.
+
+    Cohorts can carry different release-era symbols for the same canonical gene.
+    Joining on ``(Ensembl_Gene_ID, Symbol)`` fragments those loci into sparse rows.
+    """
+    if not parts:
+        return pd.DataFrame(columns=["Ensembl_Gene_ID", "Symbol"])
+
+    value_cols: list[str] = []
+    symbols: dict[str, Counter] = defaultdict(Counter)
+    keyed_parts: list[pd.DataFrame] = []
+    for part in parts:
+        value_cols.extend(c for c in part.columns if c not in {"Ensembl_Gene_ID", "Symbol"})
+        for gid, symbol in zip(part["Ensembl_Gene_ID"].astype(str), part["Symbol"].astype(str)):
+            symbols[gid][symbol] += 1
+        keyed = part.drop(columns=["Symbol"], errors="ignore")
+        if keyed["Ensembl_Gene_ID"].duplicated().any():
+            keyed = keyed.groupby("Ensembl_Gene_ID", sort=False).first().reset_index()
+        keyed_parts.append(keyed)
+
+    alias_symbols = ensembl_id_alias_symbols()
+
+    def _symbol(gid: str) -> str:
+        auth = alias_symbols.get(gid)
+        if auth:
+            return auth
+        named = Counter({s: c for s, c in symbols.get(gid, {}).items() if s and s != gid})
+        return named.most_common(1)[0][0] if named else gid
+
+    out = keyed_parts[0]
+    for part in keyed_parts[1:]:
+        out = out.merge(part, on="Ensembl_Gene_ID", how="outer")
+    out = out.sort_values("Ensembl_Gene_ID").reset_index(drop=True)
+    out.insert(1, "Symbol", out["Ensembl_Gene_ID"].astype(str).map(_symbol))
+    return out[["Ensembl_Gene_ID", "Symbol", *value_cols]]
 
 
 #: Per-gene cohort summary statistic -> output column. The percentiles are taken across

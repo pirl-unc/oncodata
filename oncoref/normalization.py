@@ -160,8 +160,10 @@ def clean_tpm(
     compartments themselves comparable and the budget empirically interpretable.)
 
     An empty/zero compartment simply contributes 0 (the others still fill their share).
-    With ``exclude_ribosomal_proteins=False`` ribosomal proteins are treated as biology
-    and only the technical-RNA set is censored (the legacy single-technical view)."""
+    With ``exclude_ribosomal_proteins=False``, ribosomal proteins are treated as
+    biology, only the strict technical-RNA set is pinned, and the omitted ribosomal
+    budget is intentionally reallocated into biology so no budget compartment is
+    silently dropped."""
     for name, frac in (
         ("ribosomal_protein_fraction", ribosomal_protein_fraction),
         ("other_technical_fraction", other_technical_fraction),
@@ -183,6 +185,8 @@ def clean_tpm(
     rm, tm = ribosomal.to_numpy(), technical.to_numpy()
     bm = ~(rm | tm)
     bio_fraction = 1.0 - ribosomal_protein_fraction - other_technical_fraction
+    if not exclude_ribosomal_proteins:
+        bio_fraction += ribosomal_protein_fraction
 
     clean = values.astype(float).copy()
     for mask, fraction in (

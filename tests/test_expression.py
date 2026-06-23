@@ -608,6 +608,41 @@ def test_cancer_reference_expression_long_and_wide(monkeypatch):
     assert wide.loc[wide["Symbol"] == "A", "X_TPM_clean"].iloc[0] == 3.0
 
 
+def test_cancer_reference_expression_wide_merges_by_gene_id_not_symbol(monkeypatch):
+    by_code = {
+        "X": pd.DataFrame(
+            {
+                "Ensembl_Gene_ID": ["E1", "E2"],
+                "Symbol": ["A", "B"],
+                "p25": [1.0, 2.0],
+                "p50": [3.0, 4.0],
+                "p75": [5.0, 6.0],
+            }
+        ),
+        "Y": pd.DataFrame(
+            {
+                "Ensembl_Gene_ID": ["E1", "E3"],
+                "Symbol": ["A_OLD", "C"],
+                "p25": [5.0, 8.0],
+                "p50": [7.0, 9.0],
+                "p75": [9.0, 10.0],
+            }
+        ),
+    }
+    monkeypatch.setattr(expression, "available_percentile_cohorts", lambda: ["X", "Y"])
+    monkeypatch.setattr(expression, "resolve_cancer_type", lambda code: str(code).upper())
+    monkeypatch.setattr(
+        expression, "cohort_gene_percentiles", lambda code, *a, **k: by_code[code].copy()
+    )
+
+    wide = expression.cancer_reference_expression(["x", "y"], format="wide")
+    e1 = wide[wide["Ensembl_Gene_ID"] == "E1"]
+    assert len(e1) == 1
+    assert e1["Symbol"].iloc[0] == "A"
+    assert e1["X_TPM_clean"].iloc[0] == pytest.approx(3.0)
+    assert e1["Y_TPM_clean"].iloc[0] == pytest.approx(7.0)
+
+
 def test_proteoform_named_accessors_delegate_with_proteoform_true(monkeypatch):
     # The proteoform_* named accessors are thin wrappers that set proteoform=True on
     # their gene-level base, threading scope/statistic/etc. through.

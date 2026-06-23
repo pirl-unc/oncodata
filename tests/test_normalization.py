@@ -80,6 +80,29 @@ def test_clean_tpm_three_compartments():
     assert clean.loc[[2, 3], "s1"].sum() == pytest.approx(norm.BIOLOGICAL_FRACTION * 1e6)  # 750k
 
 
+def test_clean_tpm_keep_ribosomal_reallocates_omitted_budget():
+    # If ribosomal proteins are kept in biology, the 16% ribosomal budget must not
+    # remain reserved for an empty censored compartment. Strict technical RNA keeps
+    # the 9% budget and biology expands to 91%.
+    censored = gf.clean_tpm_censored_gene_ids()
+    rpl = sorted(gf.gene_family_ids("ribosomal_protein") & censored)[0]
+    mito = sorted(gf.gene_family_ids("mitochondrial") & censored)[0]
+    gt = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": [rpl, mito, "ENSG00000111111"],
+            "Symbol": ["RP", "MT", "BIO"],
+        }
+    )
+    vals = pd.DataFrame({"s1": [5000.0, 5000.0, 1000.0]}, index=gt.index)
+    clean = norm.clean_tpm(vals, gt, exclude_ribosomal_proteins=False)
+    assert clean["s1"].sum() == pytest.approx(1e6)
+    assert clean.loc[1, "s1"] == pytest.approx(norm.OTHER_TECHNICAL_FRACTION * 1e6)
+    assert clean.loc[[0, 2], "s1"].sum() == pytest.approx(
+        (1.0 - norm.OTHER_TECHNICAL_FRACTION) * 1e6
+    )
+    assert clean.loc[0, "s1"] / clean.loc[2, "s1"] == pytest.approx(5.0)
+
+
 def test_clean_tpm_compartment_fractions_public_and_sum_to_one():
     import oncoref as cd
 
