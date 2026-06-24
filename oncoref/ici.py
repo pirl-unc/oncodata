@@ -82,6 +82,8 @@ from __future__ import annotations
 import math
 from functools import lru_cache
 
+import pandas as pd
+
 from .cancer_types import cancer_evidence_source_code, cancer_type_registry, resolve_cancer_type
 from .load_dataset import _register_derived_cache, get_data
 
@@ -266,7 +268,141 @@ def _resolve_with_fallback(code: str, maps: dict[str, dict[str, float]], order):
     return None, None
 
 
-def cancer_ici_response(cancer_type=None, *, regimen=None, fallback=True, inherit=True):
+def _parent_code(code: str, registry) -> str | None:
+    if code not in registry.index:
+        return None
+    parent = registry.loc[code].get("parent_code", "")
+    if pd.isna(parent):
+        return None
+    parent = str(parent).strip()
+    return parent or None
+
+
+def _bulk_lookup_codes() -> list[str]:
+    df = cancer_ici_response_df().dropna(subset=["orr_pct"])
+    return sorted({str(code) for code in df["cancer_code"]})
+
+
+def _matching_rows(df, code: str, order) -> dict[str, object]:
+    rows: dict[str, object] = {}
+    sub = df[df["cancer_code"] == code]
+    for regimen in order:
+        hit = sub[sub["regimen"] == regimen]
+        if not hit.empty:
+            rows[str(regimen)] = hit.iloc[0]
+    return rows
+
+
+def _public_value(value):
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if hasattr(value, "item"):
+        return value.item()
+    return value
+
+
+def _record_from_row(row, *, requested_code: str, resolved_code: str, inheritance_kind: str):
+    record = {key: _public_value(row[key]) for key in row.index}
+    record["requested_cancer_code"] = requested_code
+    record["resolved_cancer_code"] = resolved_code
+    record["selected_regimen"] = record.get("regimen")
+    record["inheritance_kind"] = inheritance_kind
+    record["is_inherited_evidence"] = requested_code != resolved_code
+    return record
+
+
+def _resolve_ici_response_source(requested_code: str, order, *, inherit: bool):
+    df = cancer_ici_response_df().dropna(subset=["orr_pct"])
+    direct = _matching_rows(df, requested_code, order)
+    if direct or not inherit:
+        return requested_code, "direct", direct
+
+    source_code = cancer_evidence_source_code(requested_code)
+    if source_code != requested_code:
+        source = _matching_rows(df, source_code, order)
+        if source:
+            return source_code, "source_scope", source
+
+    registry = cancer_type_registry().set_index("code")
+    cur = _parent_code(requested_code, registry)
+    seen = {requested_code}
+    while cur and cur not in seen:
+        seen.add(cur)
+        inherited = _matching_rows(df, cur, order)
+        if inherited:
+            return cur, "ancestor", inherited
+        cur = _parent_code(cur, registry)
+    return requested_code, "missing", {}
+
+
+def _resolve_ici_response_rows(requested_code: str, order, *, inherit: bool):
+    return _resolve_ici_response_source(requested_code, order, inherit=inherit)
+
+
+def resolve_ici_response_source(cancer_type, *, regimen=None, fallback=True, inherit=True) -> dict:
+    """Resolve the evidence source row used for an ICI response lookup.
+
+    Returns lookup metadata without forcing callers to inspect the ORR map shape:
+
+    - ``requested_cancer_code``: canonical code requested by the caller.
+    - ``resolved_cancer_code``: direct/proxy/ancestor source row, when one exists.
+    - ``inheritance_kind``: ``"direct"``, ``"source_scope"``, ``"ancestor"``, or
+      ``"missing"``.
+    - ``available_regimens``: regimens available at the resolved source row.
+    - source/provenance fields from the selected record when available.
+
+    With ``regimen=None`` and ``fallback=True`` the selected record follows
+    :data:`REGIMEN_FALLBACK`; with ``fallback=False`` the resolver still reports the
+    resolved source and all available regimens but does not choose a single regimen.
+    """
+    requested_code = resolve_cancer_type(cancer_type)
+    order = (regimen,) if regimen is not None else REGIMEN_FALLBACK
+    resolved_code, inheritance_kind, rows = _resolve_ici_response_source(
+        requested_code, order, inherit=inherit
+    )
+    selected_regimen = None
+    selected_row = None
+    if fallback or regimen is not None:
+        for key in order:
+            row = rows.get(str(key))
+            if row is not None:
+                selected_regimen = str(key)
+                selected_row = row
+                break
+    record = (
+        _record_from_row(
+            selected_row,
+            requested_code=requested_code,
+            resolved_code=resolved_code,
+            inheritance_kind=inheritance_kind,
+        )
+        if selected_row is not None
+        else {}
+    )
+    record.update(
+        {
+            "requested_cancer_code": requested_code,
+            "resolved_cancer_code": resolved_code if rows else None,
+            "inheritance_kind": inheritance_kind,
+            "is_inherited_evidence": bool(rows) and requested_code != resolved_code,
+            "selected_regimen": selected_regimen,
+            "available_regimens": tuple(rows),
+            "has_ici_response_source": bool(rows),
+        }
+    )
+    return record
+
+
+def cancer_ici_response(
+    cancer_type=None,
+    *,
+    regimen=None,
+    fallback=True,
+    inherit=True,
+):
     """ICI objective response rate (%) for a cancer type.
 
     ``regimen`` pins one of :data:`REGIMEN_FALLBACK` (``"PD-1"`` / ``"PD-L1"`` /
@@ -282,9 +418,11 @@ def cancer_ici_response(cancer_type=None, *, regimen=None, fallback=True, inheri
     the registry ``parent_code`` chain. Returns ``None`` (or ``{}``) when nothing is
     found.
 
-    With ``cancer_type=None`` returns the whole ``{code: orr}`` map under the same
-    resolution (a single regimen if pinned, else the fallback pick) — ready as a
-    per-cancer plotting axis.
+    With ``cancer_type=None`` returns the whole direct ``{code: orr}`` map (a single
+    regimen if pinned, else the fallback pick) — ready as a per-source plotting axis.
+    Source-scoped children such as ``COAD_MSI`` and ``READ_MSI`` intentionally are not
+    duplicated in bulk maps; use :func:`resolve_ici_response_source` or an individual
+    lookup for requested-code resolution metadata.
     """
     maps = _regimen_maps()
     order = (regimen,) if regimen is not None else REGIMEN_FALLBACK
@@ -325,9 +463,7 @@ def cancer_ici_response(cancer_type=None, *, regimen=None, fallback=True, inheri
             hit = {r: maps[r][cur] for r in REGIMEN_FALLBACK if cur in maps.get(r, {})}
             if hit:
                 return hit
-            if cur not in reg.index:
-                break
-            cur = str(reg.loc[cur].get("parent_code", "") or "").strip() or None
+            cur = _parent_code(cur, reg)
         return {}
 
     val, _ = _resolve_with_fallback(code, maps, order)
@@ -345,9 +481,84 @@ def cancer_ici_response(cancer_type=None, *, regimen=None, fallback=True, inheri
         val, _ = _resolve_with_fallback(cur, maps, order)
         if val is not None:
             return val
-        if cur not in reg.index:
-            break
-        cur = str(reg.loc[cur].get("parent_code", "") or "").strip() or None
+        cur = _parent_code(cur, reg)
+    return None
+
+
+def cancer_ici_response_record(
+    cancer_type=None,
+    *,
+    regimen=None,
+    fallback=True,
+    inherit=True,
+):
+    """Metadata-bearing ICI objective response lookup.
+
+    This mirrors :func:`cancer_ici_response`, but returns the resolved anchor row as a
+    dict instead of only the ORR value. The record includes the joined evidence fields
+    from :func:`cancer_ici_response_df` plus lookup metadata:
+
+    - ``requested_cancer_code``: canonical code requested by the caller.
+    - ``resolved_cancer_code``: source row used for the returned evidence.
+    - ``inheritance_kind``: ``"direct"``, ``"source_scope"``, ``"ancestor"``, or
+      ``"missing"``.
+    - ``is_inherited_evidence``: whether the requested code differs from the resolved
+      source row.
+
+    Source-scoped biomarker cohorts such as ``COAD_MSI`` and ``READ_MSI`` therefore
+    resolve through the curated ``CRC_MSI`` row while preserving the fact that the trial
+    source is metastatic MSI-H/dMMR colorectal cancer rather than a colon- or
+    rectum-specific estimate. With ``cancer_type=None`` the returned bulk map is direct
+    source rows only; use :func:`resolve_ici_response_source` for explicit requested-code
+    source/proxy resolution.
+    """
+    order = (regimen,) if regimen is not None else REGIMEN_FALLBACK
+
+    if cancer_type is None:
+        codes = _bulk_lookup_codes()
+        if regimen is not None:
+            return {
+                code: record
+                for code in codes
+                if (record := cancer_ici_response_record(code, regimen=regimen, inherit=False))
+            }
+        if not fallback:
+            return {
+                code: records
+                for code in codes
+                if (records := cancer_ici_response_record(code, fallback=False, inherit=False))
+            }
+        return {
+            code: record
+            for code in codes
+            if (record := cancer_ici_response_record(code, inherit=False))
+        }
+
+    requested_code = resolve_cancer_type(cancer_type)
+    resolved_code, inheritance_kind, rows = _resolve_ici_response_rows(
+        requested_code, order, inherit=inherit
+    )
+
+    if not fallback and regimen is None:
+        return {
+            key: _record_from_row(
+                row,
+                requested_code=requested_code,
+                resolved_code=resolved_code,
+                inheritance_kind=inheritance_kind,
+            )
+            for key, row in rows.items()
+        }
+
+    for key in order:
+        row = rows.get(str(key))
+        if row is not None:
+            return _record_from_row(
+                row,
+                requested_code=requested_code,
+                resolved_code=resolved_code,
+                inheritance_kind=inheritance_kind,
+            )
     return None
 
 

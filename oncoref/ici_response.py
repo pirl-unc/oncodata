@@ -36,8 +36,10 @@ from .ici import (
     cancer_ici_response,
     cancer_ici_response_df,
     cancer_ici_response_estimates_df,
+    cancer_ici_response_record,
     ici_regimens,
     pooled_ici_response,
+    resolve_ici_response_source,
 )
 
 DEFAULT_ICI_REGIMEN_PRIORITY = REGIMEN_FALLBACK
@@ -80,9 +82,26 @@ def best_available_ici_response(cancer_type=None, *, inherit: bool = True):
     return cancer_ici_response(cancer_type, inherit=inherit)
 
 
+def best_available_ici_response_record(cancer_type=None, *, inherit: bool = True):
+    """Best-available ICI response with source/evidence metadata."""
+    return cancer_ici_response_record(cancer_type, inherit=inherit)
+
+
 def ici_response_by_regimen(cancer_type=None, *, inherit: bool = True):
     """ICI ORR values grouped by regimen instead of using regimen priority."""
     return cancer_ici_response(cancer_type, fallback=False, inherit=inherit)
+
+
+def ici_response_records_by_regimen(cancer_type=None, *, inherit: bool = True):
+    """ICI response records grouped by regimen instead of using regimen priority."""
+    return cancer_ici_response_record(cancer_type, fallback=False, inherit=inherit)
+
+
+def ici_response_source(cancer_type, *, regimen=None, fallback: bool = True, inherit: bool = True):
+    """Direct/proxy/ancestor evidence-source resolution for one requested cancer type."""
+    return resolve_ici_response_source(
+        cancer_type, regimen=regimen, fallback=fallback, inherit=inherit
+    )
 
 
 def selected_ici_regimen(cancer_type):
@@ -97,16 +116,21 @@ __all__ = [
     "apd1_response",
     "apd1_response_df",
     "best_available_ici_response",
+    "best_available_ici_response_record",
     "cancer_apd1_response",
     "cancer_apd1_response_df",
     "cancer_ici_regimen",
     "cancer_ici_response",
     "cancer_ici_response_df",
     "cancer_ici_response_estimates_df",
+    "cancer_ici_response_record",
     "ici_regimens",
     "ici_response_anchor_df",
     "ici_response_by_regimen",
     "ici_response_estimates_df",
+    "ici_response_records_by_regimen",
+    "ici_response_source",
     "pooled_ici_response",
+    "resolve_ici_response_source",
     "selected_ici_regimen",
 ]

@@ -136,6 +136,92 @@ def test_crc_msi_ici_is_single_source_scope_row():
     assert ici.cancer_ici_regimen("READ_MSI") == "PD-1"
 
 
+def test_crc_msi_ici_record_preserves_inheritance_metadata():
+    record = ici.cancer_ici_response_record("COAD_MSI")
+    assert record["requested_cancer_code"] == "COAD_MSI"
+    assert record["resolved_cancer_code"] == "CRC_MSI"
+    assert record["inheritance_kind"] == "source_scope"
+    assert record["is_inherited_evidence"] is True
+    assert record["regimen"] == "PD-1"
+    assert record["selected_regimen"] == "PD-1"
+    assert record["orr_pct"] == 43.8
+    assert record["response_numerator"] == 67
+    assert record["response_denominator"] == 153
+    assert record["response_ci_low"] == 35.8
+    assert record["response_ci_high"] == 52.0
+    assert record["source_anchor"] == "PMID:33264544"
+    assert record["source_scope"] == "aggregate_source"
+    assert record["endpoint_population"] == (
+        "first-line metastatic MSI-H/dMMR colorectal (pembrolizumab arm)"
+    )
+
+    per_regimen = ici.cancer_ici_response_record("READ_MSI", fallback=False)
+    assert set(per_regimen) == {"PD-1", "PD-1+CTLA-4"}
+    assert per_regimen["PD-1"]["requested_cancer_code"] == "READ_MSI"
+    assert per_regimen["PD-1"]["resolved_cancer_code"] == "CRC_MSI"
+    assert per_regimen["PD-1+CTLA-4"]["response_denominator"] == 119
+    assert per_regimen["PD-1+CTLA-4"]["source_anchor"] == "PMID:29355075"
+
+    assert ici.cancer_ici_response_record("READ_MSI", inherit=False) is None
+    assert ici.cancer_ici_response_record("READ_MSI", fallback=False, inherit=False) == {}
+
+
+def test_resolve_ici_response_source_reports_direct_proxy_and_missing():
+    direct = ici.resolve_ici_response_source("SKCM")
+    assert direct["requested_cancer_code"] == "SKCM"
+    assert direct["resolved_cancer_code"] == "SKCM"
+    assert direct["inheritance_kind"] == "direct"
+    assert direct["is_inherited_evidence"] is False
+    assert direct["selected_regimen"] == "PD-1"
+    assert direct["available_regimens"] == ("PD-1", "PD-1+CTLA-4")
+    assert direct["has_ici_response_source"] is True
+    assert direct["source_anchor"] == "PMID:28889792"
+
+    proxy = ici.resolve_ici_response_source("COAD_MSI")
+    assert proxy["requested_cancer_code"] == "COAD_MSI"
+    assert proxy["resolved_cancer_code"] == "CRC_MSI"
+    assert proxy["inheritance_kind"] == "source_scope"
+    assert proxy["is_inherited_evidence"] is True
+    assert proxy["selected_regimen"] == "PD-1"
+    assert proxy["available_regimens"] == ("PD-1", "PD-1+CTLA-4")
+    assert proxy["source_anchor"] == "PMID:33264544"
+    assert proxy["source_scope"] == "aggregate_source"
+
+    per_regimen = ici.resolve_ici_response_source("READ_MSI", fallback=False)
+    assert per_regimen["resolved_cancer_code"] == "CRC_MSI"
+    assert per_regimen["selected_regimen"] is None
+    assert per_regimen["available_regimens"] == ("PD-1", "PD-1+CTLA-4")
+
+    missing = ici.resolve_ici_response_source("NBL")
+    assert missing == {
+        "requested_cancer_code": "NBL",
+        "resolved_cancer_code": None,
+        "inheritance_kind": "missing",
+        "is_inherited_evidence": False,
+        "selected_regimen": None,
+        "available_regimens": (),
+        "has_ici_response_source": False,
+    }
+
+
+def test_ici_response_record_whole_table_matches_value_maps():
+    records = ici.cancer_ici_response_record()
+    values = ici.cancer_ici_response()
+    assert set(records) == set(values)
+    assert {code: record["orr_pct"] for code, record in records.items()} == values
+    assert "COAD_MSI" not in records
+    assert records["CRC_MSI"]["inheritance_kind"] == "direct"
+
+    pdl1_records = ici.cancer_ici_response_record(regimen="PD-L1")
+    pdl1_values = ici.cancer_ici_response(regimen="PD-L1")
+    assert {code: record["orr_pct"] for code, record in pdl1_records.items()} == pdl1_values
+
+
+def test_parent_code_helper_treats_nan_parent_as_missing():
+    registry = ici.cancer_type_registry().set_index("code")
+    assert ici._parent_code("CRC", registry) is None
+
+
 def test_regimen_maps_cached():
     # _regimen_maps is memoized (same object back from the cache).
     assert ici._regimen_maps() is ici._regimen_maps()
