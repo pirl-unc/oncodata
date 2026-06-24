@@ -104,14 +104,140 @@ REGIMEN_LABELS = {
     "PD-1+CTLA-4": "anti-PD-1 + anti-CTLA-4",
 }
 
+REGIMEN_CLASSES = {
+    "PD-1": "anti_pd1_monotherapy",
+    "PD-L1": "anti_pdl1_monotherapy",
+    "PD-1+CTLA-4": "anti_pd1_ctla4_combination",
+}
+
+
+def _mixture_cohort_code_set() -> frozenset[str]:
+    """Registry codes whose evidence rows represent aggregate/source-scope cohorts."""
+    reg = cancer_type_registry()
+    if "mixture_cohort" not in reg.columns:
+        return frozenset()
+    flag = reg["mixture_cohort"].astype(str).str.strip().str.lower().isin({"true", "1", "yes"})
+    return frozenset(reg.loc[flag, "code"].astype(str))
+
+
+def _evidence_type(value_basis) -> str:
+    basis = str(value_basis).strip()
+    if basis == "derived_blend":
+        return "derived_blend"
+    if basis == "reported_context":
+        return "reported_context"
+    return "direct_reported"
+
+
+def _source_scope(code, value_basis, mixture_codes: frozenset[str]) -> str:
+    if str(value_basis).strip() == "derived_blend":
+        return "derived_blend"
+    if str(code) in mixture_codes:
+        return "aggregate_source"
+    return "direct_source"
+
+
+def response_anchor_evidence_df(
+    anchors,
+    *,
+    value_col: str,
+    regimen_col: str = "regimen",
+):
+    """Append evidence/provenance fields to compact representative ICI anchors.
+
+    The compact ICI and aPD1 tables intentionally keep only the plotting anchor fields.
+    The richer audit table (``cancer-ici-response-estimates.csv``) has one primary ORR
+    row for every compact anchor. This helper joins that source row back onto the
+    anchor table so public accessors expose both oncoref's trial identity and
+    pirlygenes-style denominator/evidence semantics without duplicating curation.
+    """
+    df = anchors.copy()
+    estimates = cancer_ici_response_estimates_df()
+    primary_orr = estimates[
+        (estimates["metric"].astype(str).str.upper() == "ORR")
+        & (estimates["role"].astype(str) == "primary")
+    ].copy()
+    primary_orr = primary_orr[
+        [
+            "cancer_code",
+            "regimen",
+            "ref",
+            "setting",
+            "source_n",
+            "metric",
+            "value",
+            "unit",
+            "ci_low",
+            "ci_high",
+            "metric_n",
+            "responders",
+            "source_verified",
+            "value_basis",
+        ]
+    ].rename(
+        columns={
+            "ref": "source_anchor",
+            "setting": "endpoint_population",
+            "source_n": "source_n",
+            "metric": "response_metric",
+            "value": "_response_value",
+            "unit": "response_unit",
+            "ci_low": "response_ci_low",
+            "ci_high": "response_ci_high",
+            "metric_n": "response_denominator",
+            "responders": "response_numerator",
+        }
+    )
+    merged = df.merge(
+        primary_orr,
+        how="left",
+        left_on=["cancer_code", regimen_col],
+        right_on=["cancer_code", "regimen"],
+        suffixes=("", "_evidence"),
+        validate="one_to_one",
+    )
+    if regimen_col != "regimen":
+        merged = merged.drop(columns=["regimen"])
+    missing = merged["response_metric"].isna()
+    if missing.any():
+        cells = merged.loc[missing, ["cancer_code", regimen_col]].astype(str).agg("/".join, axis=1)
+        raise ValueError(f"missing primary ORR evidence rows for: {', '.join(cells)}")
+
+    mixture_codes = _mixture_cohort_code_set()
+    merged["source_anchor"] = merged["source_anchor"].where(merged["source_anchor"].notna(), None)
+    merged["response_metric"] = merged["response_metric"].astype(str).str.upper()
+    merged["response_value_matches_anchor"] = (
+        merged[value_col].astype(float) - merged["_response_value"].astype(float)
+    ).abs() <= 2.0
+    merged["therapy_regimen_class"] = (
+        merged[regimen_col].map(REGIMEN_CLASSES).fillna("other_ici_regimen")
+    )
+    merged["evidence_type"] = merged["value_basis"].map(_evidence_type)
+    merged["histology_match"] = merged["evidence_type"].map(
+        {
+            "direct_reported": "direct",
+            "reported_context": "context",
+            "derived_blend": "derived",
+        }
+    )
+    merged["is_direct_cancer_code_evidence"] = merged["evidence_type"].eq("direct_reported")
+    merged["evidence_source_code"] = merged["cancer_code"].astype(str)
+    merged["source_scope"] = [
+        _source_scope(code, basis, mixture_codes)
+        for code, basis in zip(merged["cancer_code"], merged["value_basis"])
+    ]
+    merged["missing_reason"] = None
+    return merged.drop(columns=["_response_value"])
+
 
 def cancer_ici_response_df():
     """The curated ``cancer-ici-response.csv`` long table: one row per
     (``cancer_code``, ``regimen``) with the representative ORR (%), drug, pivotal trial
     (split into ``trial_name`` / ``trial_alias`` / ``trial_nct`` — the acronym, the
     distinct protocol/sponsor code if any, and the ClinicalTrials.gov id), setting,
-    source PMID/DOI, and confidence. A cancer type may appear under several regimens."""
-    return get_data("cancer-ici-response")
+    source PMID/DOI, confidence, and evidence/provenance fields joined from the
+    audited estimates table. A cancer type may appear under several regimens."""
+    return response_anchor_evidence_df(get_data("cancer-ici-response"), value_col="orr_pct")
 
 
 def ici_regimens() -> tuple[str, ...]:
