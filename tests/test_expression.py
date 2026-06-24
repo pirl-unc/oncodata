@@ -486,6 +486,7 @@ def test_housekeeping_normalize_blanks_sparse_housekeeping_denominator(monkeypat
 
 def test_sample_expression_qc_flags_sparse_samples(tmp_path, monkeypatch):
     import oncoref.gene_families as gf
+    from oncoref import expression_registry
 
     panel = frozenset({"HK1", "HK2", "HK3"})
     monkeypatch.setattr(gf, "clean_tpm_biological_housekeeping_gene_ids", lambda: panel)
@@ -505,6 +506,20 @@ def test_sample_expression_qc_flags_sparse_samples(tmp_path, monkeypatch):
         "cohort_info",
         lambda code: {"source_cohort": "TEST_SOURCE", "n_samples": 2},
     )
+    monkeypatch.setattr(
+        expression_registry,
+        "sources_for_cancer_code",
+        lambda code: [
+            expression_registry.ExpressionSource(
+                id="test-source",
+                category="expression",
+                cancer_codes=("X",),
+                source_type="gdc",
+                unit="TPM",
+                source_cohort="TEST_SOURCE",
+            )
+        ],
+    )
 
     qc = expression.sample_expression_qc(
         "X",
@@ -514,12 +529,56 @@ def test_sample_expression_qc_flags_sparse_samples(tmp_path, monkeypatch):
     ).set_index("sample_id")
 
     assert bool(qc.loc["good", "passes_expression_qc"]) is True
+    assert qc.loc["good", "sample_qc_status"] == "pass"
+    assert qc.loc["good", "source_scale_class"] == "linear_rnaseq_tpm"
+    assert bool(qc.loc["good", "linear_tpm_comparable"]) is True
     assert qc.loc["good", "housekeeping_genes_detected"] == 3
     assert bool(qc.loc["sparse", "passes_expression_qc"]) is False
+    assert qc.loc["sparse", "sample_qc_status"] == "fail"
+    assert qc.loc["sparse", "n_detected_raw"] == 2
+    assert qc.loc["sparse", "n_detected_clean_biological"] == 2
     assert qc.loc["sparse", "n_detected_genes"] == 2
     assert qc.loc["sparse", "housekeeping_genes_detected"] == 1
     assert "low_housekeeping_detection" in qc.loc["sparse", "qc_flags"]
+    assert "low_housekeeping_detection" in qc.loc["sparse", "sample_qc_reasons"]
     assert "high_top_gene_fraction" in qc.loc["sparse", "qc_flags"]
+
+
+def test_per_sample_expression_filters_by_sample_qc(tmp_path, monkeypatch):
+    raw = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["ENSG1", "ENSG2"],
+            "Symbol": ["A", "B"],
+            "pass_sample": [10.0, 20.0],
+            "warn_sample": [30.0, 40.0],
+            "fail_sample": [50.0, 60.0],
+        }
+    )
+    path = tmp_path / "X.parquet"
+    raw.to_parquet(path, index=False)
+    expression._load_per_sample_matrix.cache_clear()
+    monkeypatch.setattr(expression.source_matrices, "ensure", lambda code: path)
+    monkeypatch.setattr(
+        expression,
+        "sample_expression_qc",
+        lambda code, **k: pd.DataFrame(
+            {
+                "sample_id": ["pass_sample", "warn_sample", "fail_sample"],
+                "sample_qc_status": ["pass", "warn", "fail"],
+            }
+        ),
+    )
+
+    passed = expression.per_sample_expression("X", normalize="tpm_raw", sample_qc="pass")
+    assert expression.sample_columns(passed) == ["pass_sample"]
+
+    pass_or_warn = expression.per_sample_expression(
+        "X", normalize="tpm_raw", sample_qc="pass_or_warn"
+    )
+    assert expression.sample_columns(pass_or_warn) == ["pass_sample", "warn_sample"]
+
+    all_samples = expression.per_sample_expression("X", normalize="tpm_raw", sample_qc="all")
+    assert expression.sample_columns(all_samples) == ["pass_sample", "warn_sample", "fail_sample"]
 
 
 def test_per_sample_expression_gene_and_proteoform_levels(tmp_path, monkeypatch):
@@ -612,8 +671,8 @@ def test_cohort_mean_expression_threads_proteoform_and_scope(monkeypatch):
 
     seen = {}
 
-    def fake_per_sample(code, *, normalize, auto_fetch, proteoform, scope):
-        seen.update(proteoform=proteoform, scope=scope)
+    def fake_per_sample(code, *, normalize, auto_fetch, proteoform, scope, sample_qc):
+        seen.update(proteoform=proteoform, scope=scope, sample_qc=sample_qc)
         return pd.DataFrame(
             {
                 "proteoform_key": ["E1"],
@@ -627,7 +686,7 @@ def test_cohort_mean_expression_threads_proteoform_and_scope(monkeypatch):
 
     monkeypatch.setattr(expression, "per_sample_expression", fake_per_sample)
     out = expression.cohort_mean_expression("X", proteoform=True, scope="genome")
-    assert seen == {"proteoform": True, "scope": "genome"}
+    assert seen == {"proteoform": True, "scope": "genome", "sample_qc": "pass"}
     assert expression_level(out) == "proteoform"  # proteoform_key carried through
 
 
@@ -968,9 +1027,9 @@ def test_pooled_cohort_stats_merges_alt_haplotype_aliases(tmp_path, monkeypatch)
     monkeypatch.setattr(expression.source_matrices, "ensure", lambda code: paths[code])
     monkeypatch.setattr(expression, "_resolve_cancer_types", lambda ct, **k: list(ct))
 
-    out = expression.pooled_cohort_stats(["A", "B"], normalize="tpm_raw").set_index(
-        "Ensembl_Gene_ID"
-    )
+    out = expression.pooled_cohort_stats(
+        ["A", "B"], normalize="tpm_raw", sample_qc="all"
+    ).set_index("Ensembl_Gene_ID")
     assert list(out.index) == [primary]  # one canonical row, the primary id
     assert alt not in set(out.index)
     # both cohorts pooled onto it (mean of the two single-sample cohorts)
