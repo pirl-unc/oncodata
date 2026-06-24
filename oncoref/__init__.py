@@ -158,6 +158,8 @@ from .gene_families import (
     clean_tpm_biological_housekeeping_genes,
     clean_tpm_other_technical_gene_ids,
     clean_tpm_ribosomal_gene_ids,
+    hpa_housekeeping_candidates,
+    recommended_hpa_housekeeping_panel,
 )
 from .gene_ids import (
     canonical_gene_id,
@@ -435,6 +437,7 @@ __all__ = [
     "greedy_coverage",
     # HPA normal-tissue reference data
     "hpa_cell_type_expression",
+    "hpa_housekeeping_candidates",
     "hpa_normal_tissue",
     "hpa_rna_consensus",
     "hpa_single_cell",
@@ -477,6 +480,7 @@ __all__ = [
     "proteoform_symbol",
     "proteoform_symbol_map",
     "proteoform_within_sample_top_fraction",
+    "recommended_hpa_housekeeping_panel",
     "renormalize_to_million",
     "representative_cohort_samples",
     "resolve_cancer_type",

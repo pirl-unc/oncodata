@@ -6,6 +6,7 @@
 
 """Normalization-reference gene families (#35, R-norm)."""
 
+import pandas as pd
 import pytest
 
 import oncoref
@@ -68,7 +69,7 @@ def test_clean_tpm_censoring_is_cta_safe():
 def test_housekeeping_panel():
     df = gf.housekeeping_genes()
     assert {"Symbol", "Ensembl_Gene_ID"} <= set(df.columns)
-    assert "ACTB" in set(df["Symbol"])  # canonical housekeeping gene
+    assert "ACTB" in set(df["Symbol"])
     assert gf.housekeeping_gene_ids()
 
 
@@ -143,3 +144,95 @@ def test_censored_references():
     assert gf.clean_tpm_censored_gene_ids()  # the clean_tpm_v4 censored set
     ref = gf.censored_gene_reference_tpm()
     assert ref and all(isinstance(v, float) and v >= 0 for v in ref.values())
+
+
+def _hpa_rows(gene_id: str, symbol: str, values: list[float]) -> list[dict[str, object]]:
+    return [
+        {"Gene": gene_id, "Gene name": symbol, "Tissue": f"tissue_{i}", "nTPM": value}
+        for i, value in enumerate(values)
+    ]
+
+
+def test_hpa_housekeeping_candidates_filter_to_biological_protein_coding(monkeypatch):
+    monkeypatch.setattr(
+        gf,
+        "clean_tpm_censored_gene_ids",
+        lambda include_ribosomal_proteins=True: frozenset({"ENSG_CENS"}),
+    )
+    hpa_rna = pd.DataFrame(
+        _hpa_rows("ENSG_KEEP.5", "KEEP", [100.0, 120.0, 140.0])
+        + _hpa_rows("ENSG_LOW", "LOW", [90.0, 120.0, 140.0])
+        + _hpa_rows("ENSG_SPARSE", "SPARSE", [500.0])
+        + _hpa_rows("ENSG_NAN", "NAN", [500.0, 520.0, None])
+        + _hpa_rows("ENSG_CENS", "CENS", [200.0, 210.0, 220.0])
+        + _hpa_rows("ENSG_NCRNA", "NCRNA", [200.0, 210.0, 220.0])
+    )
+    gene_space = pd.DataFrame(
+        {
+            "ensembl_gene_id": [
+                "ENSG_KEEP",
+                "ENSG_LOW",
+                "ENSG_SPARSE",
+                "ENSG_NAN",
+                "ENSG_CENS",
+                "ENSG_NCRNA",
+            ],
+            "biotype": [
+                "protein_coding",
+                "protein_coding",
+                "protein_coding",
+                "protein_coding",
+                "protein_coding",
+                "lncRNA",
+            ],
+        }
+    )
+
+    out = gf.hpa_housekeeping_candidates(hpa_rna, gene_space=gene_space)
+
+    assert out["Symbol"].tolist() == ["KEEP"]
+    row = out.iloc[0]
+    assert row["Ensembl_Gene_ID"] == "ENSG_KEEP"
+    assert row["min_ntpm"] == pytest.approx(100.0)
+    assert row["mean_ntpm"] == pytest.approx(120.0)
+    assert row["max_ntpm"] == pytest.approx(140.0)
+    assert row["n_tissues"] == 3
+    assert row["n_tissues_expected"] == 3
+    # Population CV, matching the original HPA-wide derivation.
+    assert row["cv"] == pytest.approx((((20.0**2 + 0.0 + 20.0**2) / 3) ** 0.5) / 120.0)
+
+
+def test_recommended_hpa_housekeeping_panel_applies_review_policy(monkeypatch):
+    monkeypatch.setattr(
+        gf,
+        "clean_tpm_censored_gene_ids",
+        lambda include_ribosomal_proteins=True: frozenset(),
+    )
+    hpa_rna = pd.DataFrame(
+        _hpa_rows("ENSG00000096384", "HSP90AB1", [210.0] + [500.0] * 8 + [700.0])
+        # PPIA passes the numeric rule, but is a deliberate biological holdout.
+        + _hpa_rows("ENSG00000196262", "PPIA", [356.0] + [900.0] * 8 + [1200.0])
+        # HSP90AA1 passes, but is redundant with HSP90AB1 in the first-pass panel.
+        + _hpa_rows("ENSG00000080824", "HSP90AA1", [186.0] + [500.0] * 8 + [700.0])
+        # EEF1A1 exceeds the preferred range but is a protected high-abundance exception.
+        + _hpa_rows("ENSG00000156508", "EEF1A1", [1624.0] + [5847.0] * 8 + [11871.0])
+    )
+    gene_space = pd.DataFrame(
+        {
+            "ensembl_gene_id": [
+                "ENSG00000096384",
+                "ENSG00000196262",
+                "ENSG00000080824",
+                "ENSG00000156508",
+            ],
+            "biotype": ["protein_coding"] * 4,
+        }
+    )
+
+    out = gf.recommended_hpa_housekeeping_panel(hpa_rna, gene_space=gene_space)
+
+    assert set(out["Symbol"]) == {"HSP90AB1", "EEF1A1"}
+    assert set(out["Symbol"]).isdisjoint({"PPIA", "HSP90AA1"})
+    eef = out.set_index("Symbol").loc["EEF1A1"]
+    assert eef["max_min_ratio"] > gf.HPA_HOUSEKEEPING_MAX_MIN_RATIO
+    assert eef["selection_reason"] == "high_abundance_literature_exception"

@@ -49,6 +49,24 @@ TECHNICAL_RNA_FAMILIES = ("mitochondrial", "numt_pseudogene", "rrna", "nuclear_r
 #: Back-compat private alias (prefer :data:`TECHNICAL_RNA_FAMILIES`).
 _TECHNICAL_RNA_FAMILIES = TECHNICAL_RNA_FAMILIES
 
+#: Default HPA RNA floor for empirical housekeeping-panel candidates.
+#: The panel is meant to provide a robust denominator, so low-abundance
+#: qPCR-style references are excluded even if they are broad.
+HPA_HOUSEKEEPING_MIN_NTPM: float = 100.0
+#: Maximum tissue coefficient of variation for HPA-derived candidates.
+HPA_HOUSEKEEPING_MAX_CV: float = 0.5
+#: Preferred maximum tissue max/min range for the primary panel.
+HPA_HOUSEKEEPING_MAX_MIN_RATIO: float = 6.5
+#: Deliberate high-abundance/literature-supported range exceptions.
+HPA_HOUSEKEEPING_RANGE_EXCEPTION_IDS = frozenset({"ENSG00000156508"})  # EEF1A1
+#: Biologically plausible but held out of the first-pass denominator.
+HPA_HOUSEKEEPING_HOLDOUT_IDS = frozenset(
+    {
+        "ENSG00000196262",  # PPIA: passes numerically, but context/paralog concerns.
+        "ENSG00000080824",  # HSP90AA1: redundant with HSP90AB1.
+    }
+)
+
 
 def gene_families() -> tuple[str, ...]:
     """The available gene-family names."""
@@ -88,7 +106,7 @@ def technical_rna_gene_ids() -> frozenset[str]:
 
 
 def housekeeping_genes() -> pd.DataFrame:
-    """The housekeeping panel (``Symbol``, ``Ensembl_Gene_ID``, ``Category``, …)."""
+    """The legacy qPCR/reference housekeeping panel."""
     return get_data("housekeeping-genes").copy()
 
 
@@ -195,3 +213,151 @@ def censored_gene_reference_tpm() -> dict[str, float]:
     in every cohort (median across the Treehouse PolyA compendium)."""
     df = get_data("censored-gene-reference-tpm", copy=False)
     return {str(s): float(v) for s, v in zip(df["Symbol"], df["reference_tpm"])}
+
+
+def _unversioned_series(values: pd.Series) -> pd.Series:
+    return values.dropna().astype(str).str.split(".").str[0]
+
+
+def _protein_coding_gene_ids(gene_space: pd.DataFrame | None = None) -> frozenset[str]:
+    """Protein-coding Ensembl gene IDs from the canonical gene-space table."""
+    if gene_space is None:
+        gene_space = get_data("canonical-gene-space", copy=False)
+    gid_col = "ensembl_gene_id" if "ensembl_gene_id" in gene_space.columns else "Ensembl_Gene_ID"
+    if gid_col not in gene_space.columns or "biotype" not in gene_space.columns:
+        raise ValueError("gene_space must contain an Ensembl ID column and 'biotype'")
+    ids = _unversioned_series(
+        gene_space.loc[gene_space["biotype"].astype(str).eq("protein_coding"), gid_col]
+    )
+    return frozenset(ids)
+
+
+def hpa_housekeeping_candidates(
+    hpa_rna: pd.DataFrame | None = None,
+    *,
+    gene_space: pd.DataFrame | None = None,
+    min_ntpm: float = HPA_HOUSEKEEPING_MIN_NTPM,
+    max_cv: float = HPA_HOUSEKEEPING_MAX_CV,
+    protein_coding_only: bool = True,
+    biological_only: bool = True,
+) -> pd.DataFrame:
+    """Empirically derive broad housekeeping-like candidates from HPA tissue RNA.
+
+    The input is the long HPA RNA consensus table with columns ``Gene``, ``Gene name``,
+    ``Tissue``, and ``nTPM``. By default the function loads oncoref's pinned HPA
+    consensus data and filters to protein-coding, clean-TPM-biological genes with
+    complete tissue coverage, ``min(nTPM) >= 100``, and tissue ``CV < 0.5``.
+
+    This is intentionally a candidate scorer, not a replacement for biological review
+    or a drop-in replacement for the active housekeeping denominator. Changing the
+    panel changes the scale of every HK-normalized expression value, so downstream
+    thresholds must be recalibrated and compared against clean TPM, log1p(clean TPM),
+    and percentile-rank clean TPM before this is promoted to the bundled panel.
+    """
+    if hpa_rna is None:
+        from .hpa import hpa_rna_consensus
+
+        hpa_rna = hpa_rna_consensus()
+
+    required = {"Gene", "Gene name", "Tissue", "nTPM"}
+    missing = required - set(hpa_rna.columns)
+    if missing:
+        raise ValueError(f"hpa_rna missing required columns: {sorted(missing)}")
+
+    expr = hpa_rna.loc[:, ["Gene", "Gene name", "Tissue", "nTPM"]].copy()
+    expr["Ensembl_Gene_ID"] = _unversioned_series(expr["Gene"])
+    expr["Symbol"] = expr["Gene name"].astype(str).str.strip()
+    expr["Tissue"] = expr["Tissue"].astype(str).str.strip()
+    expr["nTPM"] = pd.to_numeric(expr["nTPM"], errors="coerce")
+    expr = expr.dropna(subset=["Ensembl_Gene_ID", "Symbol", "Tissue"])
+    n_expected_tissues = expr["Tissue"].nunique()
+    expr = expr.dropna(subset=["nTPM"])
+
+    if protein_coding_only:
+        expr = expr[expr["Ensembl_Gene_ID"].isin(_protein_coding_gene_ids(gene_space))]
+    if biological_only:
+        expr = expr[~expr["Ensembl_Gene_ID"].isin(clean_tpm_censored_gene_ids())]
+
+    # Average duplicate gene/tissue rows defensively, then compute population CV
+    # directly from the long table so callers do not need the old wide HPA matrix.
+    expr = expr.groupby(["Ensembl_Gene_ID", "Symbol", "Tissue"], as_index=False)["nTPM"].mean()
+    expr["_ntpm_sq"] = expr["nTPM"] ** 2
+    stats = expr.groupby(["Ensembl_Gene_ID", "Symbol"], as_index=False).agg(
+        min_ntpm=("nTPM", "min"),
+        mean_ntpm=("nTPM", "mean"),
+        max_ntpm=("nTPM", "max"),
+        mean_ntpm_sq=("_ntpm_sq", "mean"),
+        n_tissues=("Tissue", "nunique"),
+    )
+    stats["n_tissues_expected"] = n_expected_tissues
+    variance = (stats["mean_ntpm_sq"] - stats["mean_ntpm"] ** 2).clip(lower=0.0)
+    denom = stats["mean_ntpm"].where(stats["mean_ntpm"] > 0)
+    stats["cv"] = (variance**0.5) / denom
+    stats["max_min_ratio"] = stats["max_ntpm"] / stats["min_ntpm"].where(stats["min_ntpm"] > 0)
+    stats = stats.drop(columns=["mean_ntpm_sq"])
+    complete = stats["n_tissues"] == stats["n_tissues_expected"]
+    stats = stats[complete & (stats["min_ntpm"] >= min_ntpm) & (stats["cv"] < max_cv)]
+    stats = stats.sort_values(["cv", "max_min_ratio", "Symbol"], kind="stable").reset_index(
+        drop=True
+    )
+    stats.insert(0, "rank", range(1, len(stats) + 1))
+    return stats
+
+
+def recommended_hpa_housekeeping_panel(
+    hpa_rna: pd.DataFrame | None = None,
+    *,
+    gene_space: pd.DataFrame | None = None,
+    target_size: int | None = 30,
+    min_ntpm: float = HPA_HOUSEKEEPING_MIN_NTPM,
+    max_cv: float = HPA_HOUSEKEEPING_MAX_CV,
+    max_min_ratio: float = HPA_HOUSEKEEPING_MAX_MIN_RATIO,
+    range_exception_ids: frozenset[str] = HPA_HOUSEKEEPING_RANGE_EXCEPTION_IDS,
+    holdout_ids: frozenset[str] = HPA_HOUSEKEEPING_HOLDOUT_IDS,
+) -> pd.DataFrame:
+    """Recommended HPA-derived primary housekeeping denominator panel.
+
+    The policy is reproducible and intentionally conservative:
+
+    - start with :func:`hpa_housekeeping_candidates`;
+    - prefer a compressed cross-tissue range (``max/min <= 6.5``);
+    - allow explicit high-abundance/literature-supported range exceptions;
+    - hold out candidates with known biological/paralog redundancy concerns.
+
+    The returned table is still an empirical recommendation. Source-library maintainers
+    should review the exclusion/exception constants and recalibrate every consumer that
+    interprets HK-normalized magnitudes before promoting it to the bundled
+    ``housekeeping-genes.csv`` table. Many analyses may be better served by clean TPM,
+    log1p(clean TPM), or percentile-rank clean TPM instead of HK normalization.
+    """
+    candidates = hpa_housekeeping_candidates(
+        hpa_rna,
+        gene_space=gene_space,
+        min_ntpm=min_ntpm,
+        max_cv=max_cv,
+        protein_coding_only=True,
+        biological_only=True,
+    )
+    exceptions = {str(g).split(".")[0] for g in range_exception_ids}
+    holdouts = {str(g).split(".")[0] for g in holdout_ids}
+    gids = candidates["Ensembl_Gene_ID"].astype(str)
+    keep = ~gids.isin(holdouts) & (
+        candidates["max_min_ratio"].le(max_min_ratio) | gids.isin(exceptions)
+    )
+    out = candidates.loc[keep].copy()
+    out["selection_reason"] = "strict_hpa_range"
+    out.loc[out["Ensembl_Gene_ID"].isin(exceptions), "selection_reason"] = (
+        "high_abundance_literature_exception"
+    )
+
+    if target_size is not None and len(out) > target_size:
+        protected = out[out["Ensembl_Gene_ID"].isin(exceptions)]
+        regular = out[~out["Ensembl_Gene_ID"].isin(exceptions)].head(
+            max(target_size - len(protected), 0)
+        )
+        out = pd.concat([regular, protected], ignore_index=True)
+        out = out.sort_values(["cv", "max_min_ratio", "Symbol"], kind="stable")
+
+    out = out.reset_index(drop=True)
+    out.insert(0, "panel_rank", range(1, len(out) + 1))
+    return out

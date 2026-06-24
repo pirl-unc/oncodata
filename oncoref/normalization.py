@@ -574,6 +574,9 @@ def tpm_to_housekeeping_normalized(
     :func:`oncoref.gene_families.clean_tpm_biological_housekeeping_gene_ids`
     explicitly, because ribosomal legacy references live in clean TPM's non-biological
     ribosomal compartment.
+    Because HK-normalized values are ratios to this panel, numerical thresholds are
+    panel-dependent; prefer clean TPM, log1p(clean TPM), or percentile-rank clean TPM
+    when the analysis needs an absolute, compressed, or rank-only expression space.
     ``value_cols`` defaults to the **named-TPM** columns (:func:`is_expression_value_col`)
     — for a plain ``genes × samples`` frame whose columns aren't ``*_TPM``, pass them
     explicitly or use :func:`normalize_to_housekeeping` (which defaults to all sample
