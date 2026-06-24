@@ -4,7 +4,9 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-from oncoref import ici
+import pandas as pd
+
+from oncoref import apd1, ici
 
 
 def test_regimens_and_table():
@@ -14,6 +16,71 @@ def test_regimens_and_table():
     # all three regimens are actually present (not just PD-1)
     assert set(df["regimen"]) == {"PD-1", "PD-L1", "PD-1+CTLA-4"}
     assert (df["regimen"] == "PD-L1").sum() >= 10  # anti-PD-L1 is well-represented
+
+
+def test_ici_anchor_table_exposes_evidence_schema():
+    df = ici.cancer_ici_response_df()
+    expected = {
+        "response_metric",
+        "response_unit",
+        "response_ci_low",
+        "response_ci_high",
+        "response_numerator",
+        "response_denominator",
+        "source_n",
+        "source_verified",
+        "value_basis",
+        "source_anchor",
+        "endpoint_population",
+        "therapy_regimen_class",
+        "evidence_type",
+        "histology_match",
+        "is_direct_cancer_code_evidence",
+        "evidence_source_code",
+        "source_scope",
+        "missing_reason",
+    }
+    assert expected <= set(df.columns)
+
+    crc = df[(df["cancer_code"] == "CRC_MSI") & (df["regimen"] == "PD-1")].iloc[0]
+    assert crc["response_metric"] == "ORR"
+    assert crc["response_numerator"] == 67
+    assert crc["response_denominator"] == 153
+    assert crc["response_ci_low"] == 35.8
+    assert crc["response_ci_high"] == 52.0
+    assert crc["therapy_regimen_class"] == "anti_pd1_monotherapy"
+    assert crc["evidence_type"] == "direct_reported"
+    assert crc["histology_match"] == "direct"
+    assert bool(crc["is_direct_cancer_code_evidence"]) is True
+    assert crc["source_scope"] == "aggregate_source"
+    assert crc["source_anchor"] == "PMID:33264544"
+
+    coad = df[(df["cancer_code"] == "COAD") & (df["regimen"] == "PD-1")].iloc[0]
+    assert coad["evidence_type"] == "derived_blend"
+    assert coad["histology_match"] == "derived"
+    assert bool(coad["is_direct_cancer_code_evidence"]) is False
+    assert coad["source_scope"] == "derived_blend"
+    assert pd.isna(coad["response_denominator"])
+    assert pd.isna(coad["source_anchor"])
+
+
+def test_apd1_anchor_table_uses_same_evidence_schema_for_fallback_targets():
+    df = apd1.cancer_apd1_response_df()
+    assert {
+        "response_metric",
+        "response_numerator",
+        "response_denominator",
+        "therapy_regimen_class",
+        "evidence_type",
+        "source_scope",
+    } <= set(df.columns)
+
+    acc = df[df["cancer_code"] == "ACC"].iloc[0]
+    assert acc["drug_target"] == "PD-1+CTLA-4"
+    assert acc["therapy_regimen_class"] == "anti_pd1_ctla4_combination"
+    assert acc["response_numerator"] == 3
+    assert acc["response_denominator"] == 21
+    assert acc["evidence_type"] == "direct_reported"
 
 
 def test_per_regimen_and_pin():

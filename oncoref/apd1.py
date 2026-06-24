@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 from .cancer_types import cancer_evidence_source_code, cancer_type_registry, resolve_cancer_type
+from .ici import response_anchor_evidence_df
 from .load_dataset import get_data
 
 
@@ -28,8 +29,14 @@ def cancer_apd1_response_df():
     vs aPD1 ORR). Values are representative anchors, not exact reproducible
     constants — they shift with data cutoff, line of therapy, and biomarker
     selection (PD-L1 / MSI / MMR); the ``setting`` and ``notes`` columns record
-    that context."""
-    return get_data("cancer-apd1-response")
+    that context. Evidence/provenance fields are joined from the audited ICI estimates
+    table, keyed by ``drug_target`` (``PD-1`` / ``PD-L1`` / ``PD-1+CTLA-4``), so
+    non-monotherapy fallback anchors remain explicit."""
+    return response_anchor_evidence_df(
+        get_data("cancer-apd1-response"),
+        value_col="apd1_orr_pct",
+        regimen_col="drug_target",
+    )
 
 
 def cancer_apd1_response(cancer_type=None, *, inherit=True):
