@@ -8,17 +8,46 @@ general or CTA-specific.
 ## Cancer Vocabulary
 
 - `oncoref.cancer_ontology` — cancer-type registry, aliases, parent/child tree,
-  lineage/family groupings, and display helpers.
+  lineage/family groupings, molecular subtype axes, matched normal tissues,
+  source-scoped evidence resolution, and display helpers.
 - `oncoref.cohorts` — expression/source cohort IDs, computed aggregate cohorts,
   source versions, and mixture-cohort flags.
 
 Use these when asking "what cancer type or cohort does this code mean?"
+Prefer the DataFrame-returning query helpers when code will be passed into
+other oncoref domains; they keep the result type and columns stable.
 
 ```python
-from oncoref import cancer_ontology, cohorts
+from oncoref import cancer_ontology, cohorts, expression
 
 cancer_ontology.resolve_cancer_type("prostate")
 cancer_ontology.cancer_type_tree("CRC")
+cancer_ontology.cancer_type_path("COAD_MSI")
+
+# CRC plus anatomical children and molecular leaves.
+crc = cancer_ontology.cancer_type_records(under="CRC")
+crc["code"].tolist()
+
+# Cross-cutting molecular axes can be intersected with hierarchy or lineage.
+msi_crc = cancer_ontology.cancer_type_records(subtype_group="MSI", under="CRC")
+epithelial_msi = cancer_ontology.cancer_type_records(
+    subtype_group="MSI", lineage_group="Epithelial"
+)
+
+# COAD_MSI / READ_MSI keep anatomical expression context but resolve evidence
+# rows through CRC_MSI when published sources are colorectal-level.
+msi_crc[["code", "evidence_source_code", "normal_tissue_code", "hpa_tissues"]]
+
+# Join scalar references for the returned codes.
+cancer_ontology.cancer_type_reference_data(msi_crc)
+
+# Use codes directly with expression accessors.
+codes = cancer_ontology.cancer_type_codes(subtype_group="MSI", under="CRC")
+expression.cancer_reference_expression(codes)
+
+# Matched normal RNA expression is an explicit HPA read.
+cancer_ontology.matched_normal_tissue_expression("COAD", genes=["ENSG00000141510"])
+
 cohorts.cohort_registry_df()
 ```
 

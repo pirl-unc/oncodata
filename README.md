@@ -79,8 +79,10 @@ od.within_sample_top_fraction("PRAD")     # per-gene frac of samples top-5% (wit
 ### Domains
 
 - **Cancer ontology** — `oncoref.cancer_ontology`: `cancer_type_registry`,
-  `resolve_cancer_type`, `cancer_type_info`, tree/family/lineage helpers,
-  `viral_status`, `fusion_status`.
+  `resolve_cancer_type`, `cancer_type_records`, `cancer_type_codes`,
+  `cancer_type_path`, `cancer_type_reference_data`, tree/family/lineage helpers,
+  molecular subtype groups, source-scoped evidence resolution, matched normal
+  tissue helpers, `viral_status`, `fusion_status`.
 - **Cohorts** — `oncoref.cohorts`: `cohort_registry`, `cohort_aggregates`,
   `cohort_source_version`, and mixture-cohort helpers.
 - **TMB** — `cancer_tmb`, `cancer_tmb_df` (parent-chain inheritance).

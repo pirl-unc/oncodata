@@ -26,6 +26,8 @@ import re
 import threading
 from functools import lru_cache
 
+import pandas as pd
+
 from .load_dataset import get_data
 
 #: Ensembl release a cohort's gene ids were harmonized to, parsed from registry provenance
@@ -361,8 +363,6 @@ def cancer_type_info(cancer_type):
     ``source_pmid``, ``notes``, ``viral_etiology``, ``viral_agent``,
     ``fusion_driven``, ``fusion_driver``, ``burden_category``, ``tmb``.
     """
-    import pandas as pd
-
     # Lazy imports avoid an import cycle: tmb/incidence depend on this module's
     # resolve_cancer_type + cancer_type_registry.
     from .incidence import burden_category
@@ -597,6 +597,568 @@ def cancer_type_registry():
     more. Returns a defensive copy so callers can mutate freely.
     """
     return _registry_frame().copy()
+
+
+def _split_semicolon(value) -> tuple[str, ...]:
+    if value is None or pd.isna(value):
+        return ()
+    return tuple(x.strip() for x in str(value).split(";") if x.strip())
+
+
+def cancer_normal_tissue_map():
+    """Curated mapping from registry ``primary_tissue`` values to matched normal
+    tissue references.
+
+    Returns a defensive DataFrame with one row per registry primary-tissue token:
+    ``primary_tissue``, stable ``normal_tissue_code``, display
+    ``normal_tissue_name``, tuple-valued ``hpa_tissues``, and
+    ``match_confidence`` / ``match_basis``. ``match_confidence`` is deliberately
+    explicit because several cancer registry tissues are composite or do not have
+    an exact HPA tissue (for example ``neuroendocrine`` or ``notochord``).
+    """
+    df = get_data("cancer-normal-tissue-map").copy()
+    df["hpa_tissues"] = df["hpa_rna_tissues"].map(_split_semicolon)
+    return df[
+        [
+            "primary_tissue",
+            "normal_tissue_code",
+            "normal_tissue_name",
+            "hpa_tissues",
+            "match_confidence",
+            "match_basis",
+        ]
+    ]
+
+
+def _source_matrix_frame():
+    sm = get_data("source-matrices", copy=False)
+    return sm.rename(
+        columns={
+            "source_cohort": "source_matrix_cohort",
+            "n_samples": "source_matrix_n_samples",
+        }
+    )
+
+
+def _subtype_group_maps():
+    df = cancer_subtype_groupings()
+    groups: dict[str, tuple[str, ...]] = {}
+    axes: dict[str, tuple[str, ...]] = {}
+    if df.empty:
+        return groups, axes
+    for code, grp in df.groupby("member_code", sort=False):
+        groups[str(code)] = tuple(dict.fromkeys(grp["group_code"].astype(str)))
+        axes[str(code)] = tuple(dict.fromkeys(grp["axis"].astype(str)))
+    return groups, axes
+
+
+def _row_is_missing(value) -> bool:
+    return value is None or (not isinstance(value, (tuple, list, dict)) and pd.isna(value))
+
+
+def _normalize_filter_values(values, *, resolver=None) -> set[str] | None:
+    if values is None:
+        return None
+    if isinstance(values, str):
+        raw = [values]
+    else:
+        raw = list(values)
+    out: set[str] = set()
+    for value in raw:
+        if _row_is_missing(value):
+            continue
+        item = str(value)
+        out.add(resolver(item) if resolver is not None else item)
+    return out
+
+
+def _filter_string_values(df: pd.DataFrame, column: str, values) -> pd.DataFrame:
+    wanted = _normalize_filter_values(values)
+    if not wanted:
+        return df
+    lowered = {v.lower() for v in wanted}
+    return df[df[column].astype(str).str.lower().isin(lowered)]
+
+
+def _filter_tuple_values(df: pd.DataFrame, column: str, values) -> pd.DataFrame:
+    wanted = _normalize_filter_values(values)
+    if not wanted:
+        return df
+    wanted_lower = {v.lower() for v in wanted}
+    return df[
+        df[column].map(lambda items: bool({str(x).lower() for x in (items or ())} & wanted_lower))
+    ]
+
+
+def _codes_under(roots, *, include_self: bool) -> set[str]:
+    root_codes = _normalize_filter_values(
+        roots, resolver=lambda x: resolve_cancer_type(x, strict=False) or x
+    )
+    if not root_codes:
+        return set()
+    out: set[str] = set()
+    for code in root_codes:
+        out.update(cancer_type_descendants(code, include_self=include_self))
+    return out
+
+
+_CANCER_TYPE_RECORD_COLUMNS = [
+    "code",
+    "name",
+    "lineage_group",
+    "family",
+    "family_name",
+    "primary_tissue",
+    "normal_tissue_code",
+    "normal_tissue_name",
+    "hpa_tissues",
+    "normal_tissue_match_confidence",
+    "normal_tissue_match_basis",
+    "parent_code",
+    "children",
+    "ancestors",
+    "path",
+    "path_names",
+    "is_leaf",
+    "subtype_groups",
+    "subtype_axes",
+    "evidence_source_code",
+    "evidence_source_kind",
+    "burden_category",
+    "tmb",
+    "has_expression_matrix",
+    "source_matrix_cohort",
+    "source_matrix_n_samples",
+    "expression_source",
+    "source_cohort",
+    "source_pmid",
+    "notes",
+]
+
+
+def _cancer_type_record_frame() -> pd.DataFrame:
+    from .incidence import burden_category
+    from .tmb import cancer_tmb
+
+    df = cancer_type_registry()
+    normal = cancer_normal_tissue_map().rename(
+        columns={
+            "match_confidence": "normal_tissue_match_confidence",
+            "match_basis": "normal_tissue_match_basis",
+        }
+    )
+    df = df.merge(normal, how="left", on="primary_tissue", validate="many_to_one")
+    df = df.merge(_source_matrix_frame(), how="left", left_on="code", right_on="cancer_code")
+    if "cancer_code" in df.columns:
+        df = df.drop(columns=["cancer_code"])
+
+    children = _children_map()
+    groups, axes = _subtype_group_maps()
+    names = CANCER_TYPE_NAMES
+
+    df["lineage_group"] = [cancer_lineage_group(code) for code in df["code"]]
+    df["family_name"] = df["family"].map(family_display_name)
+    df["children"] = [tuple(children.get(str(code), ())) for code in df["code"]]
+    df["ancestors"] = [tuple(cancer_type_ancestors(code)) for code in df["code"]]
+    df["path"] = [tuple(cancer_type_lineage(code)) for code in df["code"]]
+    df["path_names"] = [tuple(names.get(code, code) for code in path) for path in df["path"]]
+    df["is_leaf"] = df["children"].map(lambda x: len(x) == 0)
+    df["subtype_groups"] = [groups.get(str(code), ()) for code in df["code"]]
+    df["subtype_axes"] = [axes.get(str(code), ()) for code in df["code"]]
+    df["evidence_source_code"] = [cancer_evidence_source_code(code) for code in df["code"]]
+    df["evidence_source_kind"] = [
+        "direct" if code == source else "source_scope"
+        for code, source in zip(df["code"], df["evidence_source_code"])
+    ]
+    df["burden_category"] = [burden_category(code) for code in df["code"]]
+    df["tmb"] = [cancer_tmb(code) for code in df["code"]]
+    df["has_expression_matrix"] = df["source_matrix_cohort"].notna()
+    for col in ("source_matrix_n_samples",):
+        df[col] = df[col].where(df[col].notna(), None)
+    for col in _CANCER_TYPE_RECORD_COLUMNS:
+        if col not in df.columns:
+            df[col] = None
+    return df[_CANCER_TYPE_RECORD_COLUMNS].copy()
+
+
+def cancer_type_records(
+    cancer_types=None,
+    *,
+    under=None,
+    include_self: bool = True,
+    include_descendants: bool = False,
+    lineage_group=None,
+    family=None,
+    primary_tissue=None,
+    normal_tissue=None,
+    subtype_group=None,
+    subtype_axis=None,
+    evidence_source=None,
+    expression_only: bool = False,
+    leaves_only: bool = False,
+    query: str | None = None,
+) -> pd.DataFrame:
+    """Flexible cancer-type query returning one stable record DataFrame.
+
+    This is the structured companion to the older single-purpose helpers. Every
+    result has the same columns, including hierarchy fields (``path``,
+    ``ancestors``, ``children``), semantic rollups (``lineage_group``,
+    ``family``), cross-cutting molecular groupings (``subtype_groups`` /
+    ``subtype_axes``), source-scoped evidence resolution
+    (``evidence_source_code``), expression-matrix availability, and matched
+    normal-tissue metadata.
+
+    Examples:
+
+    - ``cancer_type_records(under="CRC")`` gives CRC, COAD, READ, and their MSI/MSS
+      leaves.
+    - ``cancer_type_records(subtype_group="MSI", lineage_group="Epithelial")``
+      gives curated epithelial MSI subtypes.
+    - ``cancer_type_records(family="carcinoma-gi", leaves_only=True)`` gives GI
+      carcinoma leaves.
+
+    Return type is always a DataFrame, including for empty results.
+    """
+    df = _cancer_type_record_frame()
+
+    exact_codes = _normalize_filter_values(
+        cancer_types, resolver=lambda x: resolve_cancer_type(x, strict=False) or x
+    )
+    if exact_codes is not None:
+        if include_descendants:
+            allowed: set[str] = set()
+            for code in exact_codes:
+                allowed.update(cancer_type_descendants(code, include_self=True))
+            exact_codes = allowed
+        df = df[df["code"].isin(exact_codes)]
+
+    if under is not None:
+        df = df[df["code"].isin(_codes_under(under, include_self=include_self))]
+
+    df = _filter_string_values(df, "lineage_group", lineage_group)
+    df = _filter_string_values(df, "family", family)
+    df = _filter_string_values(df, "primary_tissue", primary_tissue)
+
+    if normal_tissue is not None:
+        wanted = {x.lower() for x in (_normalize_filter_values(normal_tissue) or set())}
+        df = df[
+            df.apply(
+                lambda r: (
+                    str(r["normal_tissue_code"]).lower() in wanted
+                    or bool({str(x).lower() for x in (r["hpa_tissues"] or ())} & wanted)
+                ),
+                axis=1,
+            )
+        ]
+
+    df = _filter_tuple_values(df, "subtype_groups", subtype_group)
+    df = _filter_tuple_values(df, "subtype_axes", subtype_axis)
+    df = _filter_string_values(df, "evidence_source_code", evidence_source)
+
+    if expression_only:
+        df = df[df["has_expression_matrix"]]
+    if leaves_only:
+        df = df[df["is_leaf"]]
+    if query:
+        q = str(query).strip().lower()
+        haystack_cols = [
+            "code",
+            "name",
+            "lineage_group",
+            "family",
+            "family_name",
+            "primary_tissue",
+            "normal_tissue_code",
+            "normal_tissue_name",
+        ]
+        mask = pd.Series(False, index=df.index)
+        for col in haystack_cols:
+            mask = mask | df[col].astype(str).str.lower().str.contains(q, regex=False)
+        df = df[mask]
+    return df[_CANCER_TYPE_RECORD_COLUMNS].reset_index(drop=True)
+
+
+def cancer_type_codes(*args, **kwargs) -> list[str]:
+    """Codes from :func:`cancer_type_records` in registry order."""
+    return cancer_type_records(*args, **kwargs)["code"].tolist()
+
+
+_CANCER_TYPE_PATH_COLUMNS = [
+    "level",
+    "kind",
+    "code",
+    "name",
+    "lineage_group",
+    "family",
+    "family_name",
+    "primary_tissue",
+    "normal_tissue_code",
+]
+
+
+def cancer_type_path(cancer_type, *, include_semantic_groups: bool = True) -> pd.DataFrame:
+    """Semantic path for one cancer type as a stable DataFrame.
+
+    With ``include_semantic_groups=True`` (default), the path starts with the
+    derived coarse lineage group and registry family before the strict
+    ``parent_code`` chain. For ``COAD_MSI`` this makes the conceptual hierarchy
+    explicit: Epithelial → Gastrointestinal carcinoma → CRC → COAD → COAD_MSI.
+    """
+    code = resolve_cancer_type(cancer_type)
+    records = cancer_type_records(cancer_type_lineage(code)).set_index("code", drop=False)
+    rows: list[dict] = []
+    leaf = records.loc[code]
+    if include_semantic_groups:
+        if leaf.get("lineage_group"):
+            rows.append(
+                {
+                    "kind": "lineage_group",
+                    "code": leaf["lineage_group"],
+                    "name": leaf["lineage_group"],
+                    "lineage_group": leaf["lineage_group"],
+                    "family": None,
+                    "family_name": None,
+                    "primary_tissue": None,
+                    "normal_tissue_code": None,
+                }
+            )
+        if leaf.get("family"):
+            rows.append(
+                {
+                    "kind": "family",
+                    "code": leaf["family"],
+                    "name": leaf["family_name"],
+                    "lineage_group": leaf["lineage_group"],
+                    "family": leaf["family"],
+                    "family_name": leaf["family_name"],
+                    "primary_tissue": None,
+                    "normal_tissue_code": None,
+                }
+            )
+    for node in cancer_type_lineage(code):
+        r = records.loc[node]
+        rows.append(
+            {
+                "kind": "cancer_type",
+                "code": r["code"],
+                "name": r["name"],
+                "lineage_group": r["lineage_group"],
+                "family": r["family"],
+                "family_name": r["family_name"],
+                "primary_tissue": r["primary_tissue"],
+                "normal_tissue_code": r["normal_tissue_code"],
+            }
+        )
+    for idx, row in enumerate(rows):
+        row["level"] = idx
+    return pd.DataFrame(rows, columns=_CANCER_TYPE_PATH_COLUMNS)
+
+
+def cancer_type_siblings(cancer_type, *, include_self: bool = False) -> pd.DataFrame:
+    """Cancer types that share the same immediate ``parent_code``.
+
+    For example ``cancer_type_siblings("COAD")`` returns ``READ`` because both
+    are direct children of ``CRC``. The return type is the same record DataFrame
+    as :func:`cancer_type_records`.
+    """
+    code = resolve_cancer_type(cancer_type)
+    reg = _registry_frame().set_index("code")
+    parent = None
+    if code in reg.index:
+        value = reg.loc[code].get("parent_code")
+        parent = None if _row_is_missing(value) else str(value).strip() or None
+    if parent is None:
+        codes = [code] if include_self else []
+    else:
+        codes = cancer_type_subtypes_of(parent)
+        if not include_self:
+            codes = [c for c in codes if c != code]
+    return cancer_type_records(codes)
+
+
+def matched_normal_tissues(cancer_types=None, **query_kwargs) -> pd.DataFrame:
+    """Matched normal-tissue rows for queried cancer types.
+
+    Accepts the same filters as :func:`cancer_type_records` and returns one row
+    per matched cancer code with normal-tissue metadata. It does not read HPA
+    expression data; use :func:`matched_normal_tissue_expression` for that.
+    """
+    records = cancer_type_records(cancer_types, **query_kwargs)
+    cols = [
+        "code",
+        "name",
+        "primary_tissue",
+        "normal_tissue_code",
+        "normal_tissue_name",
+        "hpa_tissues",
+        "normal_tissue_match_confidence",
+        "normal_tissue_match_basis",
+    ]
+    return records[cols].reset_index(drop=True)
+
+
+def matched_normal_tissue(cancer_type) -> dict | None:
+    """Single-code normal-tissue match as a dict, or ``None`` when unresolved."""
+    if _row_is_missing(cancer_type):
+        return None
+    code = resolve_cancer_type(cancer_type, strict=False)
+    if code is None:
+        return None
+    df = matched_normal_tissues([code])
+    if df.empty:
+        return None
+    return df.iloc[0].to_dict()
+
+
+def _filter_hpa_genes(df: pd.DataFrame, genes) -> pd.DataFrame:
+    wanted = _normalize_filter_values(genes)
+    if not wanted:
+        return df
+    ids = {g.split(".")[0] for g in wanted}
+    symbols = {g.upper() for g in wanted}
+    gene_ids = df["Gene"].astype(str).str.split(".").str[0]
+    gene_names = df.get("Gene name", pd.Series("", index=df.index)).astype(str).str.upper()
+    return df[gene_ids.isin(ids) | gene_names.isin(symbols)]
+
+
+def matched_normal_tissue_expression(cancer_type, genes=None) -> pd.DataFrame:
+    """HPA RNA consensus expression for a cancer type's matched normal tissue.
+
+    Returns a long DataFrame with HPA ``Gene`` / ``Gene name`` / ``Tissue`` /
+    ``nTPM`` plus ``cancer_code`` and normal-tissue mapping columns. This function
+    may download/cache HPA data on first use; ordinary ontology queries do not.
+    """
+    match = matched_normal_tissue(cancer_type)
+    if match is None:
+        return pd.DataFrame(
+            columns=[
+                "cancer_code",
+                "normal_tissue_code",
+                "normal_tissue_name",
+                "match_confidence",
+                "Gene",
+                "Gene name",
+                "Tissue",
+                "nTPM",
+            ]
+        )
+    from .hpa import hpa_rna_consensus
+
+    tissues = {str(t).lower() for t in (match.get("hpa_tissues") or ())}
+    hpa = hpa_rna_consensus().copy()
+    sub = hpa[hpa["Tissue"].astype(str).str.lower().isin(tissues)]
+    sub = _filter_hpa_genes(sub, genes).copy()
+    sub.insert(0, "cancer_code", match["code"])
+    sub.insert(1, "normal_tissue_code", match["normal_tissue_code"])
+    sub.insert(2, "normal_tissue_name", match["normal_tissue_name"])
+    sub.insert(3, "match_confidence", match["normal_tissue_match_confidence"])
+    return sub.reset_index(drop=True)
+
+
+_CANCER_TYPE_REFERENCE_COLUMNS = [
+    "code",
+    "name",
+    "evidence_source_code",
+    "burden_category",
+    "us_incidence_pct",
+    "us_mortality_pct",
+    "world_incidence_pct",
+    "world_mortality_pct",
+    "tmb",
+    "apd1_orr_pct",
+    "ici_orr_pct",
+    "ici_regimen",
+    "ici_response_source_code",
+    "ici_inheritance_kind",
+    "has_expression_matrix",
+    "source_matrix_cohort",
+    "source_matrix_n_samples",
+    "normal_tissue_code",
+    "hpa_tissues",
+]
+
+_REFERENCE_BURDEN_METRICS = (
+    "us_incidence_pct",
+    "us_mortality_pct",
+    "world_incidence_pct",
+    "world_mortality_pct",
+)
+
+
+def _codes_from_query_input(cancer_types) -> list[str]:
+    if isinstance(cancer_types, pd.DataFrame):
+        if "code" not in cancer_types.columns:
+            raise ValueError("DataFrame cancer_types input must contain a 'code' column")
+        return list(dict.fromkeys(cancer_types["code"].dropna().astype(str)))
+    if cancer_types is None:
+        return cancer_type_codes()
+    if isinstance(cancer_types, str):
+        return [resolve_cancer_type(cancer_types)]
+    return [resolve_cancer_type(x) for x in cancer_types]
+
+
+def cancer_type_reference_data(
+    cancer_types=None,
+    *,
+    regimen=None,
+    fallback: bool = True,
+    inherit: bool = True,
+) -> pd.DataFrame:
+    """Join common scalar oncoref references for cancer-type codes.
+
+    ``cancer_types`` may be ``None`` (all registry codes), one code/name, an
+    iterable of codes/names, or the DataFrame returned by
+    :func:`cancer_type_records`. The result is a stable DataFrame keyed by
+    canonical ``code`` and includes incidence/mortality burden, TMB, anti-PD-1
+    ORR, best-available ICI ORR + source metadata, expression-matrix availability,
+    and matched normal-tissue metadata. Per-gene expression remains in the
+    existing expression/HPA APIs; use the returned ``code`` values with
+    ``cancer_reference_expression`` / ``per_sample_expression`` and
+    ``matched_normal_tissue_expression``.
+    """
+    from .apd1 import cancer_apd1_response
+    from .ici import cancer_ici_response, resolve_ici_response_source
+    from .incidence import cancer_burden
+    from .tmb import cancer_tmb
+
+    codes = _codes_from_query_input(cancer_types)
+    records = cancer_type_records(codes).set_index("code", drop=False)
+    burden_maps = {metric: cancer_burden(metric=metric) for metric in _REFERENCE_BURDEN_METRICS}
+    rows = []
+    for code in codes:
+        if code not in records.index:
+            continue
+        record = records.loc[code]
+        burden = record["burden_category"]
+        ici_source = resolve_ici_response_source(
+            code, regimen=regimen, fallback=fallback, inherit=inherit
+        )
+        rows.append(
+            {
+                "code": code,
+                "name": record["name"],
+                "evidence_source_code": record["evidence_source_code"],
+                "burden_category": burden,
+                "us_incidence_pct": burden_maps["us_incidence_pct"].get(burden),
+                "us_mortality_pct": burden_maps["us_mortality_pct"].get(burden),
+                "world_incidence_pct": burden_maps["world_incidence_pct"].get(burden),
+                "world_mortality_pct": burden_maps["world_mortality_pct"].get(burden),
+                "tmb": cancer_tmb(code, inherit=inherit),
+                "apd1_orr_pct": cancer_apd1_response(code, inherit=inherit),
+                "ici_orr_pct": cancer_ici_response(
+                    code, regimen=regimen, fallback=fallback, inherit=inherit
+                ),
+                "ici_regimen": ici_source.get("selected_regimen"),
+                "ici_response_source_code": ici_source.get("resolved_cancer_code"),
+                "ici_inheritance_kind": ici_source.get("inheritance_kind"),
+                "has_expression_matrix": bool(record["has_expression_matrix"]),
+                "source_matrix_cohort": record["source_matrix_cohort"],
+                "source_matrix_n_samples": record["source_matrix_n_samples"],
+                "normal_tissue_code": record["normal_tissue_code"],
+                "hpa_tissues": record["hpa_tissues"],
+            }
+        )
+    return pd.DataFrame(rows, columns=_CANCER_TYPE_REFERENCE_COLUMNS)
 
 
 def cancer_types_in_family(family):

@@ -1,0 +1,71 @@
+primary_tissue,normal_tissue_code,normal_tissue_name,hpa_rna_tissues,match_confidence,match_basis
+adipose,adipose_tissue,Adipose tissue,adipose tissue,exact,HPA tissue match
+adrenal_cortex,adrenal_gland,Adrenal gland,adrenal gland,site,HPA adrenal gland covers cortex and medulla
+adrenal_medulla,adrenal_gland,Adrenal gland,adrenal gland,site,HPA adrenal gland covers cortex and medulla
+anal_canal,rectum,Rectum,rectum,nearest,HPA lacks anal canal; rectum is closest lower-GI mucosa
+bile_duct,gallbladder,Gallbladder,gallbladder,nearest,HPA lacks bile duct; gallbladder is the closest biliary epithelium
+bladder,urinary_bladder,Urinary bladder,urinary bladder,exact,HPA tissue match
+bone,bone_marrow,Bone marrow,bone marrow,proxy,HPA lacks bone; bone marrow is the skeletal-site proxy
+bone_marrow,bone_marrow,Bone marrow,bone marrow,exact,HPA tissue match
+breast,breast,Breast,breast,exact,HPA tissue match
+cartilage,soft_tissue,Soft tissue,,unresolved,HPA lacks cartilage and HPA v23 RNA has no generic soft-tissue tissue
+cerebellum,cerebellum,Cerebellum,cerebellum,exact,HPA tissue match
+cerebrum,cerebral_cortex,Cerebral cortex,cerebral cortex,site,HPA cerebral cortex represents cerebrum
+cervix,cervix_uterine,Uterine cervix,cervix,exact,HPA tissue match
+choroid_plexus,cerebral_cortex,Cerebral cortex,cerebral cortex,proxy,HPA lacks choroid plexus; cerebral cortex is the closest brain proxy
+colon,colon,Colon,colon,exact,HPA tissue match
+colorectum,colorectum,Colon/rectum,colon;rectum,composite,Colorectal aggregate spans colon and rectum
+endometrium,endometrium,Endometrium,endometrium,exact,HPA tissue match
+ependyma,cerebral_cortex,Cerebral cortex,cerebral cortex,proxy,HPA lacks ependyma; cerebral cortex is the closest brain proxy
+epidermis,skin,Skin,skin,site,HPA skin tissues represent epidermal site
+esophagus,esophagus,Esophagus,esophagus,exact,HPA tissue match
+eye,retina,Retina,retina,site,Retina is the HPA ocular tissue
+fallopian_tube,fallopian_tube,Fallopian tube,fallopian tube,exact,HPA tissue match
+gallbladder,gallbladder,Gallbladder,gallbladder,exact,HPA tissue match
+gi_wall,smooth_muscle,Smooth muscle,smooth muscle,proxy,HPA lacks GI wall/interstitial-cell tissue; smooth muscle is a local proxy
+kidney,kidney,Kidney,kidney,exact,HPA tissue match
+kidney_cns_soft,kidney_cns_soft,Kidney/CNS/soft tissue,kidney;cerebral cortex,composite,"Rhabdoid tumor registry bucket spans kidney, CNS, and soft tissue; HPA v23 RNA has no generic soft-tissue tissue"
+liver,liver,Liver,liver,exact,HPA tissue match
+lung,lung,Lung,lung,exact,HPA tissue match
+lymph_node,lymph_node,Lymph node,lymph node,exact,HPA tissue match
+mediastinum,thymus,Thymus,thymus,nearest,PMBCL is mediastinal/thymic-region B-cell disease; thymus is the local HPA tissue
+meninges,cerebral_cortex,Cerebral cortex,cerebral cortex,proxy,HPA lacks meninges; cerebral cortex is the closest brain proxy
+midline_structures,soft_tissue,Soft tissue,,unresolved,HPA lacks midline structures and HPA v23 RNA has no generic soft-tissue tissue
+nasopharynx,nasopharynx,Nasopharynx,,unresolved,HPA v23 RNA consensus lacks nasopharynx
+nerve_sheath,soft_tissue,Soft tissue,,unresolved,HPA lacks peripheral nerve sheath and HPA v23 RNA has no generic soft-tissue tissue
+neuroendocrine,neuroendocrine,Neuroendocrine composite,adrenal gland;pancreas;small intestine;lung;rectum,composite,Generic NET parent spans multiple site-specific neuroendocrine tissues
+notochord,soft_tissue,Soft tissue,,unresolved,HPA lacks notochord and HPA v23 RNA has no generic soft-tissue tissue
+oral_cavity,tongue,Tongue,tongue,nearest,HPA lacks oral mucosa; tongue is the available oral-cavity tissue
+oropharynx,tonsil,Tonsil,tonsil,nearest,Tonsil is the closest HPA oropharyngeal lymphoid mucosa
+ovary,ovary,Ovary,ovary,exact,HPA tissue match
+pancreas,pancreas,Pancreas,pancreas,exact,HPA tissue match
+penis,skin,Skin,skin,proxy,HPA lacks penis; skin is the closest available tissue
+peripheral_blood,bone_marrow,Bone marrow,bone marrow,proxy,HPA lacks peripheral blood; bone marrow is the hematopoietic proxy
+peritoneum,soft_tissue,Soft tissue,,unresolved,HPA lacks peritoneum and HPA v23 RNA has no generic soft-tissue tissue
+peritoneum_serous,fallopian_tube,Fallopian tube,fallopian tube,nearest,High-grade serous lineage is usually modeled against fallopian tube epithelium
+pharynx,tonsil,Tonsil,tonsil,nearest,HPA lacks generic pharynx; tonsil is the available pharyngeal lymphoid mucosa
+pituitary,pituitary_gland,Pituitary gland,pituitary gland,exact,HPA tissue match
+pleura,soft_tissue,Soft tissue,,unresolved,HPA lacks pleura/mesothelium and HPA v23 RNA has no generic soft-tissue tissue
+pons_midline,cerebral_cortex,Cerebral cortex,cerebral cortex,proxy,HPA lacks pons; cerebral cortex is the closest brain proxy
+prostate,prostate,Prostate,prostate,exact,HPA tissue match
+rectum,rectum,Rectum,rectum,exact,HPA tissue match
+retina,retina,Retina,retina,exact,HPA tissue match
+salivary_gland,salivary_gland,Salivary gland,salivary gland,exact,HPA tissue match
+sellar_suprasellar,pituitary_gland,Pituitary gland,pituitary gland,nearest,Pituitary is the closest HPA sellar-region tissue
+skeletal_muscle,skeletal_muscle,Skeletal muscle,skeletal muscle,exact,HPA tissue match
+skin,skin,Skin,skin,exact,HPA tissue match
+small_intestine,small_intestine,Small intestine,small intestine,exact,HPA tissue match
+smooth_muscle,smooth_muscle,Smooth muscle,smooth muscle,exact,HPA tissue match
+soft_tissue,soft_tissue,Soft tissue,,unresolved,HPA v23 RNA consensus lacks a generic soft-tissue tissue
+spleen_marrow,spleen_marrow,Spleen/bone marrow,spleen;bone marrow,composite,HCL reference spans spleen and marrow compartments
+stomach,stomach,Stomach,stomach,exact,HPA tissue match
+sympathetic_ganglia,adrenal_gland,Adrenal gland,adrenal gland,proxy,HPA lacks sympathetic ganglia; adrenal medulla/neural-crest site is the closest proxy
+testis,testis,Testis,testis,exact,HPA tissue match
+thorax,soft_tissue,Soft tissue,,unresolved,HPA lacks a thorax soft-tissue bucket and HPA v23 RNA has no generic soft-tissue tissue
+thymus,thymus,Thymus,thymus,exact,HPA tissue match
+thyroid,thyroid_gland,Thyroid gland,thyroid gland,exact,HPA tissue match
+thyroid_c_cell,thyroid_gland,Thyroid gland,thyroid gland,site,HPA thyroid includes the C-cell site
+urethra,urinary_bladder,Urinary bladder,urinary bladder,nearest,HPA lacks urethra; urinary bladder is the closest urothelial tissue
+vagina,vagina,Vagina,vagina,exact,HPA tissue match
+vascular_endothelium,soft_tissue,Soft tissue,,unresolved,HPA lacks vascular endothelium and HPA v23 RNA has no generic soft-tissue tissue
+vulva,skin,Skin,skin,nearest,HPA lacks vulva; skin is the closest tissue

@@ -9,6 +9,59 @@ import pytest
 import oncoref as cd
 from oncoref import cancer_types
 
+HPA_RNA_V23_TISSUES = {
+    "adipose tissue",
+    "adrenal gland",
+    "amygdala",
+    "appendix",
+    "basal ganglia",
+    "bone marrow",
+    "breast",
+    "cerebellum",
+    "cerebral cortex",
+    "cervix",
+    "choroid plexus",
+    "colon",
+    "duodenum",
+    "endometrium",
+    "epididymis",
+    "esophagus",
+    "fallopian tube",
+    "gallbladder",
+    "heart muscle",
+    "hippocampal formation",
+    "hypothalamus",
+    "kidney",
+    "liver",
+    "lung",
+    "lymph node",
+    "midbrain",
+    "ovary",
+    "pancreas",
+    "parathyroid gland",
+    "pituitary gland",
+    "placenta",
+    "prostate",
+    "rectum",
+    "retina",
+    "salivary gland",
+    "seminal vesicle",
+    "skeletal muscle",
+    "skin",
+    "small intestine",
+    "smooth muscle",
+    "spinal cord",
+    "spleen",
+    "stomach",
+    "testis",
+    "thymus",
+    "thyroid gland",
+    "tongue",
+    "tonsil",
+    "urinary bladder",
+    "vagina",
+}
+
 
 def test_resolve_common_name_alias():
     assert cancer_types.resolve_cancer_type("prostate") == "PRAD"
@@ -139,3 +192,160 @@ def test_every_registry_family_rolls_up_to_a_lineage_group():
     groups = cancer_types.cancer_lineage_groups()
     missing = sorted(f for f in families if f not in groups)
     assert not missing, f"registry families with no lineage group: {missing}"
+
+
+def test_cancer_type_records_query_hierarchy_and_molecular_groups():
+    crc = cancer_types.cancer_type_records(under="CRC")
+    assert crc["code"].tolist() == [
+        "CRC",
+        "COAD",
+        "READ",
+        "COAD_MSI",
+        "COAD_MSS",
+        "READ_MSI",
+        "READ_MSS",
+    ]
+    assert cancer_types.cancer_type_codes(subtype_group="MSI", under="CRC") == [
+        "COAD_MSI",
+        "READ_MSI",
+    ]
+    epithelial_msi = cancer_types.cancer_type_records(
+        subtype_group="MSI", lineage_group="Epithelial"
+    )
+    assert {"COAD_MSI", "READ_MSI", "UCEC_MSI"} <= set(epithelial_msi["code"])
+    assert set(epithelial_msi["lineage_group"]) == {"Epithelial"}
+
+
+def test_cancer_type_records_empty_selection_stays_empty():
+    empty = cancer_types.cancer_type_records([])
+    assert empty.empty
+    assert list(empty.columns) == list(cancer_types.cancer_type_records(["PRAD"]).columns)
+    assert cancer_types.cancer_type_records([], under="CRC").empty
+    assert cancer_types.cancer_type_siblings("CRC").empty
+
+
+def test_cancer_type_path_makes_semantic_levels_explicit():
+    path = cancer_types.cancer_type_path("COAD_MSI")
+    assert path[["kind", "code"]].apply(tuple, axis=1).tolist() == [
+        ("lineage_group", "Epithelial"),
+        ("family", "carcinoma-gi"),
+        ("cancer_type", "CRC"),
+        ("cancer_type", "COAD"),
+        ("cancer_type", "COAD_MSI"),
+    ]
+    assert path.iloc[-1]["normal_tissue_code"] == "colon"
+
+
+def test_cancer_type_siblings_use_parent_hierarchy():
+    siblings = cancer_types.cancer_type_siblings("COAD")
+    assert siblings["code"].tolist() == ["READ"]
+    molecular_siblings = cancer_types.cancer_type_siblings("COAD_MSI")
+    assert molecular_siblings["code"].tolist() == ["COAD_MSS"]
+
+
+def test_cancer_type_records_include_evidence_expression_and_normal_tissue():
+    records = cancer_types.cancer_type_records(["COAD_MSI", "CRC_MSI"]).set_index("code")
+    assert records.loc["COAD_MSI", "evidence_source_code"] == "CRC_MSI"
+    assert records.loc["COAD_MSI", "evidence_source_kind"] == "source_scope"
+    assert records.loc["COAD_MSI", "normal_tissue_code"] == "colon"
+    assert records.loc["COAD_MSI", "hpa_tissues"] == ("colon",)
+    assert bool(records.loc["COAD_MSI", "has_expression_matrix"]) is True
+
+    assert records.loc["CRC_MSI", "evidence_source_code"] == "CRC_MSI"
+    assert records.loc["CRC_MSI", "evidence_source_kind"] == "direct"
+    assert records.loc["CRC_MSI", "normal_tissue_code"] == "colorectum"
+    assert records.loc["CRC_MSI", "hpa_tissues"] == ("colon", "rectum")
+    assert bool(records.loc["CRC_MSI", "has_expression_matrix"]) is False
+
+
+def test_normal_tissue_map_uses_hpa_rna_v23_tissue_names():
+    tissue_map = cancer_types.cancer_normal_tissue_map().set_index("primary_tissue")
+    used = {
+        str(tissue).lower() for tissues in tissue_map["hpa_tissues"] for tissue in (tissues or ())
+    }
+    assert used <= HPA_RNA_V23_TISSUES
+    assert tissue_map.loc["soft_tissue", "hpa_tissues"] == ()
+    assert tissue_map.loc["soft_tissue", "match_confidence"] == "unresolved"
+    assert tissue_map.loc["oral_cavity", "hpa_tissues"] == ("tongue",)
+    assert tissue_map.loc["pharynx", "hpa_tissues"] == ("tonsil",)
+
+
+def test_cancer_type_reference_data_joins_scalar_oncoref_metrics():
+    refs = cancer_types.cancer_type_reference_data(["COAD_MSI", "READ_MSI"]).set_index("code")
+    assert refs.loc["COAD_MSI", "evidence_source_code"] == "CRC_MSI"
+    assert refs.loc["COAD_MSI", "ici_response_source_code"] == "CRC_MSI"
+    assert refs.loc["COAD_MSI", "ici_inheritance_kind"] == "source_scope"
+    assert refs.loc["COAD_MSI", "tmb"] == 46.0
+    assert refs.loc["READ_MSI", "normal_tissue_code"] == "rectum"
+    assert bool(refs.loc["READ_MSI", "has_expression_matrix"]) is True
+    assert refs.loc["READ_MSI", "us_incidence_pct"] is not None
+
+
+def test_cancer_type_reference_data_honors_inherit_false_for_tmb():
+    refs = cancer_types.cancer_type_reference_data(["LUAD_KRAS"], inherit=False).set_index("code")
+    assert refs.loc["LUAD_KRAS", "tmb"] is None
+
+
+def test_matched_normal_tissue_expression_uses_hpa_tissue_match(monkeypatch):
+    import pandas as pd
+
+    from oncoref import hpa
+
+    hpa_fixture = pd.DataFrame(
+        {
+            "Gene": ["ENSG1", "ENSG1", "ENSG2"],
+            "Gene name": ["G1", "G1", "G2"],
+            "Tissue": ["colon", "rectum", "colon"],
+            "nTPM": [10.0, 20.0, 30.0],
+        }
+    )
+    monkeypatch.setattr(hpa, "hpa_rna_consensus", lambda: hpa_fixture.copy())
+    out = cancer_types.matched_normal_tissue_expression("COAD", genes="G1")
+    assert out["cancer_code"].unique().tolist() == ["COAD"]
+    assert out["normal_tissue_code"].unique().tolist() == ["colon"]
+    assert out["Tissue"].tolist() == ["colon"]
+    assert out["nTPM"].tolist() == [10.0]
+
+
+def test_matched_normal_tissue_missing_input_is_unresolved():
+    assert cancer_types.matched_normal_tissue(None) is None
+    assert cancer_types.matched_normal_tissue("not_a_real_cancer") is None
+    assert cancer_types.matched_normal_tissue_expression(None).empty
+    assert cancer_types.matched_normal_tissue_expression("not_a_real_cancer").empty
+
+
+def test_matched_normal_tissue_expression_uses_hpa_rna_consensus_names(monkeypatch):
+    import pandas as pd
+
+    from oncoref import hpa
+
+    hpa_fixture = pd.DataFrame(
+        {
+            "Gene": ["ENSG1", "ENSG1", "ENSG1", "ENSG1", "ENSG1", "ENSG1"],
+            "Gene name": ["G1", "G1", "G1", "G1", "G1", "G1"],
+            "Tissue": ["cervix", "endometrium", "skin", "stomach", "tongue", "tonsil"],
+            "nTPM": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        }
+    )
+    monkeypatch.setattr(hpa, "hpa_rna_consensus", lambda: hpa_fixture.copy())
+
+    assert cancer_types.matched_normal_tissue_expression("CESC", genes="G1")["Tissue"].tolist() == [
+        "cervix"
+    ]
+    assert cancer_types.matched_normal_tissue_expression("UCEC", genes="G1")["Tissue"].tolist() == [
+        "endometrium"
+    ]
+    assert cancer_types.matched_normal_tissue_expression("SKCM", genes="G1")["Tissue"].tolist() == [
+        "skin"
+    ]
+    assert cancer_types.matched_normal_tissue_expression("STAD", genes="G1")["Tissue"].tolist() == [
+        "stomach"
+    ]
+    assert cancer_types.matched_normal_tissue_expression("HNSC_HPVneg", genes="G1")[
+        "Tissue"
+    ].tolist() == ["tongue"]
+    assert cancer_types.matched_normal_tissue_expression("HNSC", genes="G1")["Tissue"].tolist() == [
+        "tonsil"
+    ]
+    assert cancer_types.matched_normal_tissue_expression("SARC", genes="G1").empty
+    assert cancer_types.matched_normal_tissue_expression("NPC", genes="G1").empty
