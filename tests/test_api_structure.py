@@ -35,8 +35,17 @@ def test_ici_response_facade_delegates_to_compatibility_api():
 
     assert ici_response.apd1_response("SKCM") == apd1.cancer_apd1_response("SKCM")
     assert ici_response.best_available_ici_response("SKCM") == ici.cancer_ici_response("SKCM")
+    assert ici_response.best_available_ici_response_record("SKCM") == (
+        ici.cancer_ici_response_record("SKCM")
+    )
+    assert ici_response.ici_response_source("COAD_MSI") == ici.resolve_ici_response_source(
+        "COAD_MSI"
+    )
     assert ici_response.ici_response_by_regimen("SKCM") == ici.cancer_ici_response(
         "SKCM", fallback=False
+    )
+    assert ici_response.ici_response_records_by_regimen("SKCM") == (
+        ici.cancer_ici_response_record("SKCM", fallback=False)
     )
     assert ici_response.selected_ici_regimen("SKCM") == ici.cancer_ici_regimen("SKCM")
     pd.testing.assert_frame_equal(
