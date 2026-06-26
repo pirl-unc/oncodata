@@ -58,3 +58,87 @@ def test_default_map_is_oncoref_extra_tx():
     df = pd.DataFrame({"transcript_id": ["ENST00000264036"], "tpm": [99.0]})
     out = ee.aggregate_transcripts_to_genes(df)
     assert "MCAM" in set(out["gene"])  # ENST00000264036 -> MCAM in extra-tx-mappings
+
+
+def test_detect_source_row_id_type():
+    assert ee.detect_source_row_id_type(["ENSG00000141510.17", "ENSG00000278311"]) == (
+        "ensembl_gene_id"
+    )
+    assert ee.detect_source_row_id_type(["ENST00000264036", "ENST00000367770.8"]) == (
+        "ensembl_transcript_id"
+    )
+    assert ee.detect_source_row_id_type(["TP53", "GGNBP2"]) == "symbol"
+    assert ee.detect_source_row_id_type(["7157", "1234"]) == "entrez_id"
+    assert ee.detect_source_row_id_type(["ENSG00000141510", "TP53"]) == "mixed"
+
+
+def test_map_source_gene_rows_resolves_ids_symbols_and_transcripts():
+    df = pd.DataFrame(
+        {
+            "gene_id": [
+                "ENSG00000005955.7",  # old GGNBP2 id -> canonical alias
+                "TP53",
+                "ENST00000264036",
+                "NOT_A_REAL_GENE",
+            ],
+            "s1": [2.0, 3.0, 4.0, 10.0],
+        }
+    )
+    audit = ee.map_source_gene_rows(df, row_id_col="gene_id", value_cols=["s1"])
+    by_id = audit.set_index("source_row_id")
+
+    assert by_id.loc["ENSG00000005955.7", "canonical_ensembl_gene_id"] == "ENSG00000278311"
+    assert by_id.loc["ENSG00000005955.7", "mapping_method"] == "ensembl_gene_id_alias"
+    assert by_id.loc["TP53", "canonical_ensembl_gene_id"] == "ENSG00000141510"
+    assert by_id.loc["TP53", "mapping_method"] == "symbol"
+    assert by_id.loc["ENST00000264036", "mapping_method"] == "extra_transcript_mapping"
+    assert by_id.loc["NOT_A_REAL_GENE", "mapping_status"] == "unresolved"
+    assert bool(by_id.loc["NOT_A_REAL_GENE", "high_expression_unresolved"]) is True
+
+    stats = ee.source_gene_mapping_stats(audit)
+    assert stats["n_source_rows"] == 4
+    assert stats["n_resolved_rows"] == 3
+    assert stats["n_high_expression_unresolved_rows"] == 1
+
+
+def test_canonicalize_source_gene_matrix_sums_duplicate_canonical_ids():
+    df = pd.DataFrame(
+        {
+            "gene_id": ["ENSG00000005955.7", "ENSG00000278311", "TP53", "NOT_A_REAL_GENE"],
+            "sample_a": [1.0, 2.0, 5.0, 100.0],
+            "sample_b": [10.0, 20.0, 50.0, 200.0],
+        }
+    )
+    matrix, audit = ee.canonicalize_source_gene_matrix(
+        df, row_id_col="gene_id", value_cols=["sample_a", "sample_b"]
+    )
+    by_gene = matrix.set_index("Ensembl_Gene_ID")
+
+    assert by_gene.loc["ENSG00000278311", "Symbol"] == "GGNBP2"
+    assert by_gene.loc["ENSG00000278311", "sample_a"] == 3.0
+    assert by_gene.loc["ENSG00000278311", "sample_b"] == 30.0
+    assert by_gene.loc["ENSG00000141510", "sample_a"] == 5.0
+    assert "NOT_A_REAL_GENE" in set(
+        audit.loc[audit["mapping_status"] == "unresolved", "source_row_id"]
+    )
+    assert matrix.attrs["source_gene_mapping_stats"]["n_unresolved_rows"] == 1
+
+
+def test_coerce_source_expression_values_distinguishes_missing_nonparse_and_zero():
+    df = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["ENSG00000141510", "ENSG00000278311", "ENSG00000000003"],
+            "s1": ["0", "", None],
+            "s2": ["1.5", "bad", "0"],
+        }
+    )
+    out, diag = ee.coerce_source_expression_values(df, value_cols=["s1", "s2"])
+    by_col = diag.set_index("value_col")
+
+    assert out["s1"].isna().sum() == 2
+    assert out["s2"].isna().sum() == 1
+    assert by_col.loc["s1", "n_literal_zero"] == 1
+    assert by_col.loc["s1", "n_parse_missing"] == 1
+    assert by_col.loc["s1", "n_input_missing"] == 1
+    assert by_col.loc["s2", "n_literal_zero"] == 1
+    assert by_col.loc["s2", "n_parse_missing"] == 1

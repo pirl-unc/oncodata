@@ -133,6 +133,13 @@ antigen_coverage.greedy_antigen_coverage("LUAD", gene_ids={"ENSG00000141510"})
   `source-matrix-sample-qc.csv` plus `expression-artifact-build-metadata.*` in
   the staging directory so bundle releases can record which source samples fed
   percentiles, representatives, and within-sample summaries.
+- `oncoref.expression_engine` — reusable low-level builder primitives for
+  expression tables: identity/value column detection, transcript-to-gene
+  aggregation, source row ID-type detection, source gene-row mapping audits,
+  missing-vs-non-parsing numeric diagnostics, and canonical ENSG aggregation in
+  linear expression space. Use these in builders before committing a source
+  matrix so unresolved high-expression rows and duplicate canonical IDs are
+  explicit artifacts rather than hidden cleanup.
 - `oncoref.normalization` — TPM conversion, clean TPM, technical-RNA filtering,
   log transforms, percentile ranks, and housekeeping normalization.
 
