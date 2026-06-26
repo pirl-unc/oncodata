@@ -1,8 +1,14 @@
 # oncoref
 
-`oncoref` is the base-layer package for curated cancer reference data: cancer
-ontology, cohorts, expression, clean-TPM normalization, TMB, incidence/mortality,
-ICI response, and cancer-testis antigen references.
+`oncoref` is the base-layer package for shared cancer reference data and
+mechanics: cancer ontology, cohorts, expression, clean-TPM normalization, TMB,
+incidence/mortality, ICI response, HPA normal-tissue expression, and HPA-derived
+cancer-testis antigen references.
+
+Downstream packages such as pirlygenes and trufflepig should delegate
+parity-clean shared primitives here, but they may keep curated package-specific
+tables, generated artifacts, and compatibility wrappers until a surface has a
+clear oncoref contract.
 
 Start with the [API guide](api.md) for the organized public modules and where to
 look for each data domain.
