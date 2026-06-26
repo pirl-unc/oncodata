@@ -179,10 +179,32 @@ def test_lineage_group_resolution():
     assert cancer_types.cancer_lineage_group("SARC_OS") == "Sarcoma"
     assert cancer_types.cancer_lineage_group("SKCM") == "Melanoma"
     assert cancer_types.cancer_lineage_group("NET_PANCREAS") == "Neuroendocrine"
+    assert cancer_types.cancer_lineage_group("ASTB") == "CNS"
     # NBL overrides its neuroendocrine family default -> Embryonal, inherited by subtypes.
     assert cancer_types.cancer_lineage_group("NBL") == "Embryonal"
     assert cancer_types.cancer_lineage_group("NBL_MYCNamp") == "Embryonal"
     assert cancer_types.cancer_lineage_group("not_a_real_cancer") is None
+
+
+def test_astb_registry_row_for_trufflepig_parity():
+    assert cancer_types.resolve_cancer_type("ASTB") == "ASTB"
+    assert cancer_types.resolve_cancer_type("astroblastoma (mn1-altered)") == "ASTB"
+
+    raw = cancer_types.cancer_type_registry().set_index("code").loc["ASTB"]
+    assert bool(raw["pediatric"]) is True
+    assert raw["fusion_driven"] == "defining"
+    assert raw["fusion_driver"] == "MN1-BEND2"
+
+    row = cancer_types.cancer_type_records(["ASTB"]).iloc[0]
+    assert row["name"] == "Astroblastoma (MN1-altered)"
+    assert row["family"] == "cns-glial"
+    assert row["primary_tissue"] == "cerebrum"
+    assert row["source_cohort"] == "LITERATURE_CURATED"
+    assert row["source_pmid"] == "PMID:36604386"
+    assert row["lineage_group"] == "CNS"
+    assert row["normal_tissue_code"] == "cerebral_cortex"
+    assert row["hpa_tissues"] == ("cerebral cortex",)
+    assert bool(row["has_expression_matrix"]) is False
 
 
 def test_every_registry_family_rolls_up_to_a_lineage_group():

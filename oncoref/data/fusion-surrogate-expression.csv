@@ -24,7 +24,7 @@ CIC-DUX4,ETV4,activated,SARC_CIC,CIC-DUX4 target.,PMID:16717057
 CIC-DUX4,ETV5,activated,SARC_CIC,CIC-DUX4 target.,PMID:16717057
 CIC-DUX4,DUX4,activated_ectopic,SARC_CIC,DUX4 is normally silenced in somatic tissue; CIC-DUX4 fusion expresses the DUX4 portion.,PMID:16717057
 BCOR-CCNB3,CCNB3,activated_ectopic,SARC_BCOR,CCNB3 is normally testis-restricted; expression in a small-blue-round-cell sarcoma is near-pathognomonic.,PMID:22387997
-MN1-BEND2,BEND2,activated_ectopic,ATRT,BEND2 is normally silent in the CNS; its expression signals MN1-BEND2 fusion astroblastoma.,PMID:29539486
+MN1-BEND2,BEND2,activated_ectopic,ASTB,BEND2 is normally silent in the CNS; its expression signals MN1-BEND2 fusion astroblastoma.,PMID:29539486
 ZFTA-RELA,L1CAM,activated,EPN,ZFTA-RELA drives L1CAM expression via NFκB activation; L1CAM is a pathognomonic IHC + expression marker for RELA-fusion ependymoma.,PMID:24553141
 ZFTA-RELA,CCND1,activated,EPN,NFκB target activated by ZFTA-RELA.,PMID:24553141
 ALK_rearrangement,ALK,activated_ectopic,LUAD;SARC_IMT;ALCL,ALK is normally silent post-development; expression >1 TPM plus an epithelial/mesenchymal context signals ALK rearrangement.,PMID:17625570

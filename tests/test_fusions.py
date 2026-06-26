@@ -14,6 +14,7 @@ from oncoref import (
     cancer_type_registry,
     cancer_types_with_fusion,
     fusion_partners,
+    fusions,
     protein_family,
 )
 
@@ -24,6 +25,14 @@ def test_fusions_for_subtype():
     pairs = set(zip(arms["gene_5prime"], arms["gene_3prime"]))
     assert ("PAX3", "FOXO1") in pairs
     assert ("PAX7", "FOXO1") in pairs
+
+
+def test_astb_fusion_side_tables_match_registry_driver():
+    astb = cancer_fusions("ASTB", defining_only=True)
+    pairs = set(zip(astb["gene_5prime"], astb["gene_3prime"]))
+    assert pairs == {("MN1", "BEND2")}
+    assert cancer_types_with_fusion("MN1-BEND2", defining_only=True) == ["ASTB"]
+    assert fusions.fusion_surrogate_genes_for_cancer("ASTB") == ["BEND2"]
 
 
 def test_defining_only_filter():

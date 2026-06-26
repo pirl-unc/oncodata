@@ -140,6 +140,7 @@ GBM,(none),,,,,,false,false,no,other,high,,"most GBM driven by EGFR amp/EGFRvIII
 LGG,KIAA1549-BRAF,KIAA1549,,BRAF,,~70%,true,true,yes,fusion_transcript,high,PMID:18974108,pilocytic astrocytoma; tandem dup 7q34; MAPK activation; MEK-inhibitor sensitive
 LGG,FGFR3-TACC3,FGFR3,RTK,TACC3,TACC,subset,false,false,yes,fusion_transcript,medium,PMID:22837387,subset of diffuse gliomas; FGFR target
 LGG,(none),,,,,,false,false,no,other,high,,diffuse adult LGG driven by IDH1/2 mutation +/- 1p19q codeletion or ATRX/TP53; not fusion-defined
+ASTB,MN1-BEND2,MN1,,BEND2,,defining,true,true,yes,fusion_transcript,high,PMID:36604386,MN1::BEND2 fusion-defined astroblastoma / high-grade neuroepithelial tumor; BEND2 expression surrogate available
 CHOL,FGFR2-BICC1,FGFR2,RTK,BICC1,,subset,false,false,yes,fusion_transcript,high,PMID:23558953,intrahepatic cholangiocarcinoma; FGFR2 fusions (~10-15% iCCA); FGFR-inhibitor (pemigatinib) target; promiscuous 3' partners
 CHOL,FGFR2-AHCYL1,FGFR2,RTK,AHCYL1,,subset,false,false,yes,fusion_transcript,medium,PMID:24122810,recurrent FGFR2 3' partner in iCCA
 MTC,(none),,,,,,false,false,no,other,high,,medullary thyroid carcinoma: RET germline/somatic POINT mutations (M918T etc.) or RAS; NOT a fusion
