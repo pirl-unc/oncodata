@@ -5,6 +5,13 @@ code should prefer the semantic submodules below. They make the domain boundary
 clear and avoid guessing whether a broad name such as `coverage` or `peptides` is
 general or CTA-specific.
 
+Package boundary: oncoref is the upstream home for shared reference mechanics
+and data that are ready to be reused across the PIRL stack. Downstream packages
+can keep package-specific curation, generated artifacts, and compatibility APIs;
+when a missing data field, gene universe, bundle-integrity rule, or source-QC
+decision affects generated artifacts, the durable fix should live or be exposed
+here rather than only in a downstream compatibility layer.
+
 ## Cancer Vocabulary
 
 - `oncoref.cancer_ontology` — cancer-type registry, aliases, parent/child tree,
@@ -82,6 +89,10 @@ ici_response.ici_response_estimates_df()
 `n_specific_9mers`; those counts are used as weights when computing
 `cta_specific_9mer_load()`.
 
+The CTA definition here is the HPA-derived tissue-restriction call. Broader
+therapy-target curation, MS evidence, and downstream prioritization rules can
+live in consumer packages while they remain package-specific.
+
 ```python
 from oncoref import cta, cta_coverage, cta_peptides
 
@@ -124,6 +135,11 @@ antigen_coverage.greedy_antigen_coverage("LUAD", gene_ids={"ENSG00000141510"})
   percentiles, representatives, and within-sample summaries.
 - `oncoref.normalization` — TPM conversion, clean TPM, technical-RNA filtering,
   log transforms, percentile ranks, and housekeeping normalization.
+
+The normalization helpers are intended to be reusable directly. Expression
+accessors and bundles are also reusable, but downstream packages may keep their
+own packaged expression artifacts until row-set, value, provenance, and QC
+contracts are parity-clean for the specific accessor they want to replace.
 
 Clean TPM has one public compartment contract:
 
