@@ -217,6 +217,58 @@ def test_normalize_to_housekeeping():
     assert np.allclose(out["s1"], np.array([10.0, 30.0, 100.0]) / denom)
 
 
+def test_normalize_to_housekeeping_raises_when_no_panel_rows():
+    df = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["ENSG00000999998", "ENSG00000999999"],
+            "Symbol": ["X1", "X2"],
+            "s1": [10.0, 20.0],
+        }
+    )
+    with pytest.raises(ValueError, match="no housekeeping panel genes present"):
+        norm.normalize_to_housekeeping(df)
+
+    out = norm.normalize_to_housekeeping(df, errors="nan")
+    assert out["s1"].isna().all()
+
+
+def test_normalize_to_housekeeping_raises_without_id_column():
+    df = pd.DataFrame({"Symbol": ["H1", "X"], "s1": [10.0, 20.0]})
+    with pytest.raises(ValueError, match="no id column for housekeeping panel"):
+        norm.normalize_to_housekeeping(df)
+
+    out = norm.normalize_to_housekeeping(df, errors="ignore")
+    assert out.equals(df)
+
+
+def test_normalize_to_housekeeping_raises_for_mixed_failed_columns():
+    hk = list(gf.housekeeping_gene_ids())[:2]
+    gt = pd.DataFrame({"Ensembl_Gene_ID": [*hk, "ENSG00000999999"], "Symbol": ["H1", "H2", "X"]})
+    df = gt.assign(good=[10.0, 30.0, 100.0], failed=[0.0, 0.0, 100.0])
+
+    with pytest.raises(ValueError, match="failed"):
+        norm.normalize_to_housekeeping(
+            df,
+            drop_zero_panel_values=True,
+            min_panel_detected=1,
+        )
+
+    out = norm.normalize_to_housekeeping(
+        df,
+        drop_zero_panel_values=True,
+        min_panel_detected=1,
+        errors="nan",
+    )
+    denom = np.exp(np.mean(np.log(np.array([10.0, 30.0]) + 0.1)))
+    assert np.allclose(out["good"], np.array([10.0, 30.0, 100.0]) / denom)
+    assert out["failed"].isna().all()
+
+
+def test_normalize_to_housekeeping_bad_errors_mode():
+    with pytest.raises(ValueError, match="errors must be"):
+        norm.normalize_to_housekeeping(pd.DataFrame({"s1": [1.0]}), errors="warn")
+
+
 # ---- FPKM->TPM / renormalize-to-million ----
 
 

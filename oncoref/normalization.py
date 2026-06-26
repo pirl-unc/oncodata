@@ -235,7 +235,17 @@ def filter_technical_rna(df: pd.DataFrame) -> pd.DataFrame:
     return df.loc[~mask].reset_index(drop=True)
 
 
-def normalize_to_housekeeping(df: pd.DataFrame, value_cols=None) -> pd.DataFrame:
+def normalize_to_housekeeping(
+    df: pd.DataFrame,
+    value_cols=None,
+    *,
+    panel_ids=None,
+    panel_name: str | None = None,
+    pseudocount: float = 0.1,
+    min_panel_detected: int | None = None,
+    drop_zero_panel_values: bool = False,
+    errors: str = "raise",
+) -> pd.DataFrame:
     """Rescale each value column to its housekeeping-panel baseline (unitless: 1.0 =
     panel level). The df-only convenience over :func:`tpm_to_housekeeping_normalized`
     (the canonical normalizer, which also returns per-column diagnostics) — both use the
@@ -244,12 +254,55 @@ def normalize_to_housekeeping(df: pd.DataFrame, value_cols=None) -> pd.DataFrame
     becomes NaN rather than silently staying on the input scale.
 
     ``value_cols`` defaults to every per-sample value column (not just named-TPM
-    columns), so a plain ``genes × samples`` frame normalizes as expected. A frame
-    without an ``Ensembl_Gene_ID`` column (no way to locate the panel) passes through
-    **unchanged** — call :func:`tpm_to_housekeeping_normalized` directly for the stats
-    dict that reports whether normalization was applied."""
-    out, _ = tpm_to_housekeeping_normalized(df, value_cols=_value_cols(df, value_cols))
+    columns), so a plain ``genes × samples`` frame normalizes as expected.
+
+    Use ``panel_ids`` / ``min_panel_detected`` / ``drop_zero_panel_values`` to apply
+    the same panel and reliability policy as the low-level normalizer.
+
+    ``errors="raise"`` (default) raises when any requested value column cannot be put
+    on the housekeeping ratio scale. ``errors="nan"`` blanks failed requested value
+    columns to ``NaN`` and returns the frame. ``errors="ignore"`` preserves the
+    lower-level passthrough behavior for explicit diagnostic/migration callers. Call
+    :func:`tpm_to_housekeeping_normalized` directly when the per-column record is
+    needed."""
+    if errors not in {"raise", "nan", "ignore"}:
+        raise ValueError("errors must be 'raise', 'nan', or 'ignore'")
+    cols = _value_cols(df, value_cols)
+    out, record = tpm_to_housekeeping_normalized(
+        df,
+        value_cols=cols,
+        panel_ids=panel_ids,
+        panel_name=panel_name,
+        pseudocount=pseudocount,
+        min_panel_detected=min_panel_detected,
+        drop_zero_panel_values=drop_zero_panel_values,
+    )
+    failed = _housekeeping_failed_columns(cols, record)
+    if failed and errors == "raise":
+        reason = record.get("reason") or "housekeeping normalization was not applied"
+        formatted = ", ".join(failed)
+        raise ValueError(
+            f"housekeeping normalization failed for requested value columns: {formatted}; {reason}"
+        )
+    if failed and errors == "nan":
+        out = out.copy()
+        for col in failed:
+            if col in out.columns:
+                out[col] = np.nan
     return out
+
+
+def _housekeeping_failed_columns(value_cols: list[str], record: dict) -> list[str]:
+    cols = [str(c) for c in value_cols]
+    if not cols:
+        return ["<none>"]
+    col_records = record.get("columns") or {}
+    failed: list[str] = []
+    for col in cols:
+        info = col_records.get(col)
+        if not info or float(info.get("denominator") or 0.0) <= 0.0:
+            failed.append(col)
+    return failed
 
 
 def log2_transform(df: pd.DataFrame, value_cols=None, *, pseudocount: float = 1.0) -> pd.DataFrame:
