@@ -128,6 +128,43 @@ def test_map_source_gene_rows_preserves_identifier_unresolved_reasons():
     assert by_id.loc["123456789", "mapping_method"] == "unresolved"
 
 
+def test_map_source_gene_rows_accepts_symbol_only_matrix_by_default():
+    df = pd.DataFrame({"Symbol": ["TP53", "PTEN"], "sample_a": [5.0, 7.0]})
+    audit = ee.map_source_gene_rows(df)
+    by_id = audit.set_index("source_row_id")
+
+    assert by_id.loc["TP53", "canonical_ensembl_gene_id"] == "ENSG00000141510"
+    assert by_id.loc["PTEN", "canonical_ensembl_gene_id"] == "ENSG00000171862"
+
+    matrix, _ = ee.canonicalize_source_gene_matrix(df)
+    assert set(matrix["Symbol"]) == {"TP53", "PTEN"}
+    assert matrix["sample_a"].sum() == 12.0
+
+
+def test_map_source_gene_rows_treats_duplicate_synonym_alias_as_ambiguous():
+    df = pd.DataFrame({"gene_id": ["A3"], "sample_a": [9.0]})
+    audit = ee.map_source_gene_rows(df, row_id_col="gene_id")
+    row = audit.iloc[0]
+
+    assert row["mapping_status"] == "ambiguous"
+    assert row["mapping_method"] == "ambiguous"
+    assert row["unresolved_reason"] == "ambiguous_symbol"
+    assert pd.isna(row["canonical_ensembl_gene_id"])
+
+
+def test_map_source_gene_rows_handles_duplicate_dataframe_index_labels():
+    df = pd.DataFrame(
+        {"gene_id": ["TP53", "PTEN"], "sample_a": [5.0, 7.0]},
+        index=["dup", "dup"],
+    )
+    audit = ee.map_source_gene_rows(df, row_id_col="gene_id")
+
+    assert audit["source_row_index"].tolist() == ["dup", "dup"]
+    assert audit["source_value_sum"].tolist() == [5.0, 7.0]
+    matrix, _ = ee.canonicalize_source_gene_matrix(df, row_id_col="gene_id")
+    assert matrix["sample_a"].sum() == 12.0
+
+
 def test_canonicalize_source_gene_matrix_sums_duplicate_canonical_ids():
     df = pd.DataFrame(
         {

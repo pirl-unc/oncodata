@@ -140,6 +140,34 @@ def _find_optional_column(df: pd.DataFrame, candidates) -> str | None:
     return None
 
 
+def _source_row_columns(
+    df: pd.DataFrame,
+    row_id_col: str | None,
+    symbol_col: str | None,
+    *,
+    require_row_id: bool,
+) -> tuple[str | None, str | None]:
+    if row_id_col is not None and row_id_col not in df.columns:
+        raise ValueError(f"source row ID column {row_id_col!r} is not in expression data")
+    if symbol_col is not None and symbol_col not in df.columns:
+        raise ValueError(f"source symbol column {symbol_col!r} is not in expression data")
+
+    detected_symbol = symbol_col or _find_optional_column(
+        df, _DEFAULT_GENE_SYMBOL_COLUMN_CANDIDATES
+    )
+    detected_id = row_id_col or _find_optional_column(df, _DEFAULT_GENE_ROW_ID_COLUMN_CANDIDATES)
+    if detected_id is None:
+        detected_id = detected_symbol
+    if detected_id is None and require_row_id:
+        raise ValueError(
+            "no source gene row ID or symbol column in expression data; "
+            f"available: {list(df.columns)}"
+        )
+    if detected_symbol == detected_id:
+        detected_symbol = None
+    return detected_id, detected_symbol
+
+
 def _nonempty_text(value) -> str | None:
     if value is None or pd.isna(value):
         return None
@@ -189,7 +217,8 @@ def _canonical_gene_index() -> dict[str, tuple[str, str]]:
 
 @lru_cache(maxsize=1)
 def _symbol_to_gene_index() -> tuple[dict[str, tuple[str, str]], set[str]]:
-    from .gene_ids import canonical_gene_space, resolve_symbol, symbol_synonyms, unversioned
+    from .gene_ids import canonical_gene_space, unversioned
+    from .load_dataset import get_data
 
     df = canonical_gene_space()
     by_symbol: dict[str, list[tuple[str, str]]] = {}
@@ -204,11 +233,34 @@ def _symbol_to_gene_index() -> tuple[dict[str, tuple[str, str]], set[str]]:
             unique[key] = hits[0]
         else:
             ambiguous.add(key)
-    for alias in symbol_synonyms():
-        official = resolve_symbol(alias)
-        hit = unique.get(str(official).upper())
-        if hit is not None:
-            unique.setdefault(str(alias).upper(), hit)
+
+    synonyms = get_data("ncbi-symbol-synonyms", copy=False)
+    alias_to_officials: dict[str, set[str]] = {}
+    for alias, official in zip(synonyms["alias"], synonyms["official_symbol"]):
+        alias_key = _nonempty_text(alias)
+        official_key = _nonempty_text(official)
+        if alias_key is None or official_key is None:
+            continue
+        alias_to_officials.setdefault(alias_key.upper(), set()).add(official_key.upper())
+    for alias_key, official_keys in alias_to_officials.items():
+        if len(official_keys) != 1:
+            ambiguous.add(alias_key)
+            unique.pop(alias_key, None)
+            continue
+        official_key = next(iter(official_keys))
+        if official_key in ambiguous:
+            ambiguous.add(alias_key)
+            unique.pop(alias_key, None)
+            continue
+        hit = unique.get(official_key)
+        if hit is None:
+            continue
+        existing = unique.get(alias_key)
+        if existing is not None and existing[0] != hit[0]:
+            ambiguous.add(alias_key)
+            unique.pop(alias_key, None)
+        else:
+            unique.setdefault(alias_key, hit)
     return unique, ambiguous
 
 
@@ -287,25 +339,20 @@ def map_source_gene_rows(
     through the bundled canonical gene space, and unresolved/ambiguous rows remain
     visible in the audit rather than disappearing.
     """
-    row_id_col = row_id_col or find_column(
-        df, _DEFAULT_GENE_ROW_ID_COLUMN_CANDIDATES, "source gene row ID"
-    )
-    if symbol_col is None:
-        symbol_col = _find_optional_column(df, _DEFAULT_GENE_SYMBOL_COLUMN_CANDIDATES)
-        if symbol_col == row_id_col:
-            symbol_col = None
+    row_id_col, symbol_col = _source_row_columns(df, row_id_col, symbol_col, require_row_id=True)
     cols = _source_value_columns(df, row_id_col, symbol_col, value_cols)
     numeric = (
         df[cols].apply(pd.to_numeric, errors="coerce") if cols else pd.DataFrame(index=df.index)
     )
     row_sums = numeric.sum(axis=1, skipna=True) if cols else pd.Series(0.0, index=df.index)
+    row_sum_values = row_sums.to_numpy(dtype=float)
     id_type = detect_source_row_id_type(df[row_id_col])
     transcript_index = _extra_transcript_gene_index()
 
     rows: list[dict] = []
-    for idx, raw_value in df[row_id_col].items():
+    for pos, (idx, raw_value) in enumerate(df[row_id_col].items()):
         raw_id = _nonempty_text(raw_value)
-        source_symbol = _nonempty_text(df.at[idx, symbol_col]) if symbol_col is not None else None
+        source_symbol = _nonempty_text(df[symbol_col].iloc[pos]) if symbol_col is not None else None
         row_type = detect_source_row_id_type([raw_id])
         canonical_id = canonical_symbol = method = reason = None
         status = "unresolved"
@@ -341,7 +388,7 @@ def map_source_gene_rows(
             method = method or "unresolved"
             reason = reason or "missing_row_identifier"
 
-        source_value_sum = float(row_sums.loc[idx]) if idx in row_sums.index else 0.0
+        source_value_sum = float(row_sum_values[pos]) if pos < len(row_sum_values) else 0.0
         rows.append(
             {
                 "source_row_index": idx,
@@ -375,11 +422,9 @@ def coerce_source_expression_values(
     builders do not have to collapse missingness into measured zero before QC.
     """
     if value_cols is None:
-        row_id_col = row_id_col or _find_optional_column(df, _DEFAULT_GENE_ROW_ID_COLUMN_CANDIDATES)
-        if symbol_col is None:
-            symbol_col = _find_optional_column(df, _DEFAULT_GENE_SYMBOL_COLUMN_CANDIDATES)
-            if symbol_col == row_id_col:
-                symbol_col = None
+        row_id_col, symbol_col = _source_row_columns(
+            df, row_id_col, symbol_col, require_row_id=False
+        )
         cols = _source_value_columns(df, row_id_col, symbol_col, None)
     else:
         cols = list(value_cols)
@@ -424,13 +469,7 @@ def canonicalize_source_gene_matrix(
     row-level mapping table from :func:`map_source_gene_rows`, including unresolved
     high-expression rows for builder QC reports.
     """
-    row_id_col = row_id_col or find_column(
-        df, _DEFAULT_GENE_ROW_ID_COLUMN_CANDIDATES, "source gene row ID"
-    )
-    if symbol_col is None:
-        symbol_col = _find_optional_column(df, _DEFAULT_GENE_SYMBOL_COLUMN_CANDIDATES)
-        if symbol_col == row_id_col:
-            symbol_col = None
+    row_id_col, symbol_col = _source_row_columns(df, row_id_col, symbol_col, require_row_id=True)
     cols = _source_value_columns(df, row_id_col, symbol_col, value_cols)
     coerced, parse_diagnostics = coerce_source_expression_values(df, cols)
     audit = map_source_gene_rows(
