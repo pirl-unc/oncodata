@@ -28,6 +28,7 @@ complete ``tx_to_gene_name`` (e.g. built from pyensembl on its side).
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from functools import lru_cache
 
 import pandas as pd
@@ -69,6 +70,48 @@ _DEFAULT_TX_COLUMN_CANDIDATES = (
     "name",
 )
 _DEFAULT_TPM_COLUMN_CANDIDATES = ("tpm",)
+_DEFAULT_GENE_ROW_ID_COLUMN_CANDIDATES = (
+    "Ensembl_Gene_ID",
+    "ensembl_gene_id",
+    "gene_id",
+    "gene",
+    "Gene",
+    "id",
+    "ID",
+    "target_id",
+    "name",
+)
+_DEFAULT_GENE_SYMBOL_COLUMN_CANDIDATES = (
+    "Symbol",
+    "symbol",
+    "gene_symbol",
+    "gene_name",
+    "external_gene_name",
+)
+
+SOURCE_GENE_MAPPING_AUDIT_COLUMNS = (
+    "source_row_index",
+    "source_row_id",
+    "source_row_id_type",
+    "source_symbol",
+    "mapping_status",
+    "mapping_method",
+    "canonical_ensembl_gene_id",
+    "canonical_symbol",
+    "unresolved_reason",
+    "source_value_sum",
+    "high_expression_unresolved",
+)
+
+SOURCE_VALUE_PARSE_DIAGNOSTIC_COLUMNS = (
+    "value_col",
+    "n_values",
+    "n_input_missing",
+    "n_parse_missing",
+    "n_literal_zero",
+    "parse_missing_fraction",
+    "literal_zero_fraction",
+)
 
 
 def find_column(df: pd.DataFrame, candidates, column_name: str) -> str:
@@ -86,6 +129,397 @@ def find_column(df: pd.DataFrame, candidates, column_name: str) -> str:
     raise ValueError(
         f"no column for {column_name} in expression data; available: {list(df.columns)}"
     )
+
+
+def _find_optional_column(df: pd.DataFrame, candidates) -> str | None:
+    by_lower = {str(col).lower(): col for col in df.columns}
+    for cand in candidates:
+        col = by_lower.get(str(cand).lower())
+        if col is not None:
+            return col
+    return None
+
+
+def _source_row_columns(
+    df: pd.DataFrame,
+    row_id_col: str | None,
+    symbol_col: str | None,
+    *,
+    require_row_id: bool,
+) -> tuple[str | None, str | None]:
+    if row_id_col is not None and row_id_col not in df.columns:
+        raise ValueError(f"source row ID column {row_id_col!r} is not in expression data")
+    if symbol_col is not None and symbol_col not in df.columns:
+        raise ValueError(f"source symbol column {symbol_col!r} is not in expression data")
+
+    detected_symbol = symbol_col or _find_optional_column(
+        df, _DEFAULT_GENE_SYMBOL_COLUMN_CANDIDATES
+    )
+    detected_id = row_id_col or _find_optional_column(df, _DEFAULT_GENE_ROW_ID_COLUMN_CANDIDATES)
+    if detected_id is None:
+        detected_id = detected_symbol
+    if detected_id is None and require_row_id:
+        raise ValueError(
+            "no source gene row ID or symbol column in expression data; "
+            f"available: {list(df.columns)}"
+        )
+    if detected_symbol == detected_id:
+        detected_symbol = None
+    return detected_id, detected_symbol
+
+
+def _nonempty_text(value) -> str | None:
+    if value is None or pd.isna(value):
+        return None
+    text = str(value).strip()
+    if not text or text.lower() == "nan":
+        return None
+    return text
+
+
+def detect_source_row_id_type(values: Iterable) -> str:
+    """Classify source expression row identifiers.
+
+    Returns one of ``"ensembl_gene_id"``, ``"ensembl_transcript_id"``,
+    ``"entrez_id"``, ``"symbol"``, ``"mixed"``, or ``"unknown"``. The detector is
+    deliberately conservative: it is used to annotate builder audit rows, not to
+    silently decide a lossy mapping path.
+    """
+    s = pd.Series(list(values), dtype="object").map(_nonempty_text).dropna()
+    if s.empty:
+        return "unknown"
+    upper = s.str.upper()
+    ensg = upper.str.match(r"^ENSG\d+(?:\.\d+)?$")
+    enst = upper.str.match(r"^ENST\d+(?:\.\d+)?$")
+    entrez = upper.str.match(r"^\d+$")
+    symbol = upper.str.match(r"^[A-Z][A-Z0-9_.-]*$") & ~(ensg | enst | entrez)
+    patterns = {
+        "ensembl_gene_id": ensg,
+        "ensembl_transcript_id": enst,
+        "entrez_id": entrez,
+        "symbol": symbol,
+    }
+    fractions = {name: float(mask.mean()) for name, mask in patterns.items()}
+    best, frac = max(fractions.items(), key=lambda kv: kv[1])
+    return best if frac >= 0.8 else "mixed"
+
+
+@lru_cache(maxsize=1)
+def _canonical_gene_index() -> dict[str, tuple[str, str]]:
+    from .gene_ids import canonical_gene_space, unversioned
+
+    df = canonical_gene_space()
+    return {
+        unversioned(gid): (unversioned(gid), str(sym))
+        for gid, sym in zip(df["ensembl_gene_id"], df["symbol"])
+    }
+
+
+@lru_cache(maxsize=1)
+def _symbol_to_gene_index() -> tuple[dict[str, tuple[str, str]], set[str]]:
+    from .gene_ids import canonical_gene_space, unversioned
+    from .load_dataset import get_data
+
+    df = canonical_gene_space()
+    by_symbol: dict[str, list[tuple[str, str]]] = {}
+    for gid, sym in zip(df["ensembl_gene_id"], df["symbol"]):
+        key = str(sym).upper()
+        by_symbol.setdefault(key, []).append((unversioned(gid), str(sym)))
+    unique: dict[str, tuple[str, str]] = {}
+    ambiguous: set[str] = set()
+    for key, hits in by_symbol.items():
+        ids = {gid for gid, _ in hits}
+        if len(ids) == 1:
+            unique[key] = hits[0]
+        else:
+            ambiguous.add(key)
+
+    synonyms = get_data("ncbi-symbol-synonyms", copy=False)
+    alias_to_officials: dict[str, set[str]] = {}
+    for alias, official in zip(synonyms["alias"], synonyms["official_symbol"]):
+        alias_key = _nonempty_text(alias)
+        official_key = _nonempty_text(official)
+        if alias_key is None or official_key is None:
+            continue
+        alias_to_officials.setdefault(alias_key.upper(), set()).add(official_key.upper())
+    for alias_key, official_keys in alias_to_officials.items():
+        if len(official_keys) != 1:
+            ambiguous.add(alias_key)
+            unique.pop(alias_key, None)
+            continue
+        official_key = next(iter(official_keys))
+        if official_key in ambiguous:
+            ambiguous.add(alias_key)
+            unique.pop(alias_key, None)
+            continue
+        hit = unique.get(official_key)
+        if hit is None:
+            continue
+        existing = unique.get(alias_key)
+        if existing is not None and existing[0] != hit[0]:
+            ambiguous.add(alias_key)
+            unique.pop(alias_key, None)
+        else:
+            unique.setdefault(alias_key, hit)
+    return unique, ambiguous
+
+
+@lru_cache(maxsize=1)
+def _extra_transcript_gene_index() -> dict[str, tuple[str, str]]:
+    from .gene_ids import extra_transcript_mappings, resolve_ensembl_id, unversioned
+
+    df = extra_transcript_mappings()
+    out: dict[str, tuple[str, str]] = {}
+    for tx, gid, sym in zip(df["transcript_id"], df["ensembl_gene_id"], df["gene_symbol"]):
+        tx_key = str(tx).split(".", 1)[0].upper()
+        raw_gid = _nonempty_text(gid)
+        if raw_gid is not None:
+            gene_id = resolve_ensembl_id(raw_gid.upper())
+            hit = _canonical_gene_index().get(unversioned(gene_id))
+            if hit is not None:
+                out.setdefault(tx_key, hit)
+                continue
+        hit_id, hit_symbol, _, _ = _resolve_symbol(str(sym))
+        if hit_id is not None and hit_symbol is not None:
+            out.setdefault(tx_key, (hit_id, hit_symbol))
+    return out
+
+
+def _source_value_columns(
+    df: pd.DataFrame, row_id_col: str | None, symbol_col: str | None, value_cols
+) -> list[str]:
+    if value_cols is not None:
+        cols = [str(c) for c in value_cols]
+        missing = [c for c in cols if c not in df.columns]
+        if missing:
+            raise ValueError(f"requested source expression value columns are missing: {missing}")
+        return cols
+    excluded = {c for c in (row_id_col, symbol_col) if c is not None}
+    return [c for c in df.columns if c not in excluded]
+
+
+def _resolve_gene_id(raw_id: str) -> tuple[str | None, str | None, str, str | None]:
+    from .gene_ids import resolve_ensembl_id, unversioned
+
+    raw = unversioned(raw_id).upper()
+    canonical = resolve_ensembl_id(raw)
+    hit = _canonical_gene_index().get(canonical)
+    if hit is None:
+        return None, None, "unresolved", "unknown_ensembl_gene_id"
+    method = "ensembl_gene_id" if canonical == raw else "ensembl_gene_id_alias"
+    return hit[0], hit[1], method, None
+
+
+def _resolve_symbol(symbol: str) -> tuple[str | None, str | None, str, str | None]:
+    from .gene_ids import resolve_symbol
+
+    symbol_index, ambiguous = _symbol_to_gene_index()
+    raw = str(symbol).strip()
+    key = raw.upper()
+    official = resolve_symbol(raw)
+    official_key = str(official).upper()
+    if key in ambiguous or official_key in ambiguous:
+        return None, None, "ambiguous", "ambiguous_symbol"
+    hit = symbol_index.get(key) or symbol_index.get(official_key)
+    if hit is None:
+        return None, None, "unresolved", "unknown_symbol"
+    method = "symbol_synonym" if official_key != key else "symbol"
+    return hit[0], hit[1], method, None
+
+
+def map_source_gene_rows(
+    df: pd.DataFrame,
+    *,
+    row_id_col: str | None = None,
+    symbol_col: str | None = None,
+    value_cols=None,
+    high_expression_threshold: float = 1.0,
+) -> pd.DataFrame:
+    """Return a row-level mapping audit for a source gene-expression matrix.
+
+    Builders can use this before aggregation to make identifier handling explicit:
+    versioned/alt Ensembl IDs are migrated to the canonical gene space, known
+    transcript IDs use oncoref's supplemental transcript map, symbols/synonyms map
+    through the bundled canonical gene space, and unresolved/ambiguous rows remain
+    visible in the audit rather than disappearing.
+    """
+    row_id_col, symbol_col = _source_row_columns(df, row_id_col, symbol_col, require_row_id=True)
+    cols = _source_value_columns(df, row_id_col, symbol_col, value_cols)
+    numeric = (
+        df[cols].apply(pd.to_numeric, errors="coerce") if cols else pd.DataFrame(index=df.index)
+    )
+    row_sums = numeric.sum(axis=1, skipna=True) if cols else pd.Series(0.0, index=df.index)
+    row_sum_values = row_sums.to_numpy(dtype=float)
+    id_type = detect_source_row_id_type(df[row_id_col])
+    transcript_index = _extra_transcript_gene_index()
+
+    rows: list[dict] = []
+    for pos, (idx, raw_value) in enumerate(df[row_id_col].items()):
+        raw_id = _nonempty_text(raw_value)
+        source_symbol = _nonempty_text(df[symbol_col].iloc[pos]) if symbol_col is not None else None
+        row_type = detect_source_row_id_type([raw_id])
+        canonical_id = canonical_symbol = method = reason = None
+        status = "unresolved"
+
+        if raw_id is not None and row_type == "ensembl_gene_id":
+            canonical_id, canonical_symbol, method, reason = _resolve_gene_id(raw_id)
+        elif raw_id is not None and row_type == "ensembl_transcript_id":
+            tx = transcript_index.get(str(raw_id).split(".", 1)[0].upper())
+            if tx is not None and tx[0] in _canonical_gene_index():
+                canonical_id, canonical_symbol = tx
+                method = "extra_transcript_mapping"
+            else:
+                method = "unresolved"
+                reason = "unknown_ensembl_transcript_id"
+        elif raw_id is not None and row_type == "entrez_id":
+            method = "unresolved"
+            reason = "unsupported_entrez_id"
+
+        if canonical_id is None:
+            symbol_candidate = source_symbol
+            if symbol_candidate is None and row_type == "symbol":
+                symbol_candidate = raw_id
+            if symbol_candidate is not None:
+                canonical_id, canonical_symbol, method, reason = _resolve_symbol(symbol_candidate)
+
+        if canonical_id is not None:
+            status = "resolved"
+            reason = None
+        elif method == "ambiguous":
+            status = "ambiguous"
+        else:
+            status = "unresolved"
+            method = method or "unresolved"
+            reason = reason or "missing_row_identifier"
+
+        source_value_sum = float(row_sum_values[pos]) if pos < len(row_sum_values) else 0.0
+        rows.append(
+            {
+                "source_row_index": idx,
+                "source_row_id": raw_id,
+                "source_row_id_type": row_type if row_type != "unknown" else id_type,
+                "source_symbol": source_symbol,
+                "mapping_status": status,
+                "mapping_method": method,
+                "canonical_ensembl_gene_id": canonical_id,
+                "canonical_symbol": canonical_symbol,
+                "unresolved_reason": reason,
+                "source_value_sum": source_value_sum,
+                "high_expression_unresolved": bool(
+                    status != "resolved" and source_value_sum >= high_expression_threshold
+                ),
+            }
+        )
+    return pd.DataFrame(rows, columns=SOURCE_GENE_MAPPING_AUDIT_COLUMNS)
+
+
+def coerce_source_expression_values(
+    df: pd.DataFrame,
+    value_cols=None,
+    *,
+    row_id_col: str | None = None,
+    symbol_col: str | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Coerce source expression values to numeric and report parse/missing diagnostics.
+
+    Literal zeros, input missing values, and non-parsing cells are counted separately so
+    builders do not have to collapse missingness into measured zero before QC.
+    """
+    if value_cols is None:
+        row_id_col, symbol_col = _source_row_columns(
+            df, row_id_col, symbol_col, require_row_id=False
+        )
+        cols = _source_value_columns(df, row_id_col, symbol_col, None)
+    else:
+        cols = _source_value_columns(df, None, None, value_cols)
+    out = df.copy()
+    rows: list[dict] = []
+    for col in cols:
+        if col not in out.columns:
+            continue
+        raw = out[col]
+        input_missing = raw.isna()
+        coerced = pd.to_numeric(raw, errors="coerce")
+        parse_missing = coerced.isna() & ~input_missing
+        literal_zero = coerced == 0
+        n = len(raw)
+        rows.append(
+            {
+                "value_col": col,
+                "n_values": n,
+                "n_input_missing": int(input_missing.sum()),
+                "n_parse_missing": int(parse_missing.sum()),
+                "n_literal_zero": int(literal_zero.sum()),
+                "parse_missing_fraction": float(parse_missing.sum() / n) if n else 0.0,
+                "literal_zero_fraction": float(literal_zero.sum() / n) if n else 0.0,
+            }
+        )
+        out[col] = coerced
+    return out, pd.DataFrame(rows, columns=SOURCE_VALUE_PARSE_DIAGNOSTIC_COLUMNS)
+
+
+def canonicalize_source_gene_matrix(
+    df: pd.DataFrame,
+    *,
+    row_id_col: str | None = None,
+    symbol_col: str | None = None,
+    value_cols=None,
+    high_expression_threshold: float = 1.0,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Map source rows to canonical ENSG IDs and sum duplicate rows in linear space.
+
+    Returns ``(matrix, audit)``. ``matrix`` has stable ``Ensembl_Gene_ID`` /
+    ``Symbol`` columns plus the requested value columns. ``audit`` is the full
+    row-level mapping table from :func:`map_source_gene_rows`, including unresolved
+    high-expression rows for builder QC reports.
+    """
+    row_id_col, symbol_col = _source_row_columns(df, row_id_col, symbol_col, require_row_id=True)
+    cols = _source_value_columns(df, row_id_col, symbol_col, value_cols)
+    coerced, parse_diagnostics = coerce_source_expression_values(df, cols)
+    audit = map_source_gene_rows(
+        coerced,
+        row_id_col=row_id_col,
+        symbol_col=symbol_col,
+        value_cols=cols,
+        high_expression_threshold=high_expression_threshold,
+    )
+    resolved = audit["mapping_status"] == "resolved"
+    if not resolved.any():
+        empty = pd.DataFrame(columns=["Ensembl_Gene_ID", "Symbol", *cols])
+        empty.attrs["source_gene_mapping_stats"] = source_gene_mapping_stats(audit)
+        empty.attrs["source_value_parse_diagnostics"] = parse_diagnostics
+        return empty, audit
+
+    work = coerced.loc[resolved.to_numpy(), cols].copy()
+    work.insert(0, "Symbol", audit.loc[resolved, "canonical_symbol"].to_numpy())
+    work.insert(0, "Ensembl_Gene_ID", audit.loc[resolved, "canonical_ensembl_gene_id"].to_numpy())
+    grouped = work.groupby("Ensembl_Gene_ID", sort=False)
+    ids = grouped[["Symbol"]].first()
+    values = grouped[cols].sum(min_count=1)
+    out = ids.join(values).reset_index()
+    out.attrs["source_gene_mapping_stats"] = source_gene_mapping_stats(audit)
+    out.attrs["source_value_parse_diagnostics"] = parse_diagnostics
+    return out[["Ensembl_Gene_ID", "Symbol", *cols]], audit
+
+
+def source_gene_mapping_stats(audit: pd.DataFrame) -> dict:
+    """Compact counts from a :func:`map_source_gene_rows` audit table."""
+    if audit.empty:
+        return {
+            "n_source_rows": 0,
+            "n_resolved_rows": 0,
+            "n_unresolved_rows": 0,
+            "n_ambiguous_rows": 0,
+            "n_high_expression_unresolved_rows": 0,
+        }
+    status = audit["mapping_status"].value_counts().to_dict()
+    return {
+        "n_source_rows": len(audit),
+        "n_resolved_rows": int(status.get("resolved", 0)),
+        "n_unresolved_rows": int(status.get("unresolved", 0)),
+        "n_ambiguous_rows": int(status.get("ambiguous", 0)),
+        "n_high_expression_unresolved_rows": int(audit["high_expression_unresolved"].sum()),
+    }
 
 
 def expanded_tx_map(tx_to_gene_name: dict) -> dict:
@@ -163,6 +597,11 @@ def aggregate_transcripts_to_genes(
 
 __all__ = [
     "aggregate_transcripts_to_genes",
+    "canonicalize_source_gene_matrix",
+    "coerce_source_expression_values",
+    "detect_source_row_id_type",
     "expanded_tx_map",
     "find_column",
+    "map_source_gene_rows",
+    "source_gene_mapping_stats",
 ]
