@@ -4,6 +4,8 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
+import hashlib
+import io
 import tarfile
 import urllib.error
 
@@ -46,6 +48,8 @@ def test_status_reports_missing_without_download(monkeypatch, tmp_path):
     assert snap["all_local"] is False
     assert snap["completion_marker"]["present"] is False
     assert snap["completion_marker"]["valid"] is False
+    assert snap["release_manifest_url"] == data_bundle.RELEASE_MANIFEST_URL
+    assert snap["release_checksum_url"] == data_bundle.RELEASE_CHECKSUM_URL
     assert set(snap["items"]) == set(data_bundle.DOWNLOADABLE_PATHS)
     assert all(not v["present"] for v in snap["items"].values())
 
@@ -72,6 +76,47 @@ def _bundle_tarball(tmp_path, source_root, *, missing=()):
     return tar_path
 
 
+def _release_manifest(tar_path):
+    return {
+        "manifest_version": data_bundle.BUNDLE_MANIFEST_VERSION,
+        "data_version": DATA_VERSION,
+        "source": "oncoref",
+        "repo": data_bundle.GITHUB_REPO,
+        "manifest_url": data_bundle.RELEASE_MANIFEST_URL,
+        "tarball": {
+            "filename": data_bundle.TARBALL_FILENAME,
+            "url": data_bundle.RELEASE_URL,
+            "bytes": tar_path.stat().st_size,
+            "sha256": hashlib.sha256(tar_path.read_bytes()).hexdigest(),
+            "downloadable_paths": list(data_bundle.DOWNLOADABLE_PATHS),
+        },
+    }
+
+
+def test_fetch_release_manifest_accepts_sha256_sidecar(monkeypatch):
+    sha = "a" * 64
+
+    class Response(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.close()
+
+    def fake_urlopen(url):
+        if url == data_bundle.RELEASE_MANIFEST_URL:
+            raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+        if url == data_bundle.RELEASE_CHECKSUM_URL:
+            return Response(f"{sha}  {data_bundle.TARBALL_FILENAME}\n".encode())
+        raise AssertionError(url)
+
+    monkeypatch.setattr(data_bundle.urllib.request, "urlopen", fake_urlopen)
+
+    manifest = data_bundle._fetch_release_manifest(data_bundle.RELEASE_SOURCES[0])
+    assert manifest["tarball"]["sha256"] == sha
+    assert manifest["tarball"]["filename"] == data_bundle.TARBALL_FILENAME
+
+
 def test_is_local_requires_nonempty_dirs(monkeypatch, tmp_path):
     # #21: an interrupted extract that created the shard directories but no
     # shards must NOT read as "local" (else ensure_local never re-fetches).
@@ -92,7 +137,7 @@ def test_is_local_requires_nonempty_dirs(monkeypatch, tmp_path):
         if not target.suffix:
             (target / "shard.parquet").write_text("data")
     assert data_bundle.is_local() is True
-    with pytest.raises(RuntimeError, match="completion marker"):
+    with pytest.raises(RuntimeError, match="checksum-verified completion marker"):
         data_bundle.verify_local()
 
 
@@ -105,7 +150,12 @@ def test_download_and_extract_writes_completion_marker(monkeypatch, tmp_path):
     tar_path = _bundle_tarball(tmp_path, src)
     monkeypatch.setattr(data_bundle.urllib.request, "urlopen", lambda url: tar_path.open("rb"))
 
-    data_bundle._download_and_extract("https://example.test/bundle.tar.gz", root, verbose=False)
+    data_bundle._download_and_extract(
+        "https://example.test/bundle.tar.gz",
+        root,
+        verbose=False,
+        release_manifest=_release_manifest(tar_path),
+    )
 
     snap = data_bundle.status()
     assert data_bundle.is_local() is True
@@ -113,8 +163,31 @@ def test_download_and_extract_writes_completion_marker(monkeypatch, tmp_path):
     assert snap["completion_marker"]["present"] is True
     assert snap["completion_marker"]["valid"] is True
     assert snap["completion_marker"]["source_url"] == "https://example.test/bundle.tar.gz"
+    assert snap["completion_marker"]["verified_sha256"] is True
     assert all(item["complete"] for item in snap["items"].values())
     assert all(item["file_count"] >= 1 for item in snap["items"].values())
+
+
+def test_download_and_extract_rejects_checksum_mismatch(monkeypatch, tmp_path):
+    root = tmp_path / f"v{DATA_VERSION}"
+    root.mkdir()
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(root))
+    src = tmp_path / "src"
+    _write_bundle_fixture(src)
+    tar_path = _bundle_tarball(tmp_path, src)
+    manifest = _release_manifest(tar_path)
+    manifest["tarball"]["sha256"] = "0" * 64
+    monkeypatch.setattr(data_bundle.urllib.request, "urlopen", lambda url: tar_path.open("rb"))
+
+    with pytest.raises(data_bundle.BundleIntegrityError, match="sha256 mismatch"):
+        data_bundle._download_and_extract(
+            "https://example.test/bundle.tar.gz",
+            root,
+            verbose=False,
+            release_manifest=manifest,
+        )
+
+    assert data_bundle.status()["completion_marker"]["present"] is False
 
 
 def test_download_and_extract_rejects_incomplete_tarball(monkeypatch, tmp_path):
@@ -128,7 +201,12 @@ def test_download_and_extract_rejects_incomplete_tarball(monkeypatch, tmp_path):
     monkeypatch.setattr(data_bundle.urllib.request, "urlopen", lambda url: tar_path.open("rb"))
 
     with pytest.raises(tarfile.TarError, match=missing):
-        data_bundle._download_and_extract("https://example.test/bad.tar.gz", root, verbose=False)
+        data_bundle._download_and_extract(
+            "https://example.test/bad.tar.gz",
+            root,
+            verbose=False,
+            release_manifest=_release_manifest(tar_path),
+        )
 
     assert not (root / missing).exists()
     assert data_bundle.status()["completion_marker"]["present"] is False
@@ -152,49 +230,73 @@ def test_release_urls_prefer_oncoref_then_pirlygenes():
     assert "pirl-unc/oncoref" in data_bundle.RELEASE_URL
     assert "pirl-unc/pirlygenes" in data_bundle.FALLBACK_RELEASE_URL
     assert f"v{DATA_VERSION}" in data_bundle.RELEASE_URL
+    assert data_bundle.RELEASE_MANIFEST_URL.endswith(
+        f"/v{DATA_VERSION}/oncoref-data-v{DATA_VERSION}.manifest.json"
+    )
+    assert data_bundle.RELEASE_CHECKSUM_URL.endswith(
+        f"/v{DATA_VERSION}/oncoref-data-v{DATA_VERSION}.tar.gz.sha256"
+    )
 
 
-def test_fetch_falls_back_when_primary_404s(monkeypatch, tmp_path):
+def test_fetch_primary_404_fails_without_fallback(monkeypatch, tmp_path):
     monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path / f"v{DATA_VERSION}"))
     attempted = []
+    monkeypatch.setattr(data_bundle, "_fetch_release_manifest", lambda source: None)
 
-    def fake_download(url, root, *, verbose):
+    def fake_download(url, root, *, verbose, release_manifest=None):
         attempted.append(url)
         if url == data_bundle.RELEASE_URL:
             raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
         # fallback "succeeds"
 
     monkeypatch.setattr(data_bundle, "_download_and_extract", fake_download)
-    out = data_bundle.fetch(verbose=False)
-    assert out == data_bundle.cache_dir()
-    assert attempted == [data_bundle.RELEASE_URL, data_bundle.FALLBACK_RELEASE_URL]
+    with pytest.raises(RuntimeError, match="checksum-verified primary source"):
+        data_bundle.fetch(verbose=False)
+    assert attempted == [data_bundle.RELEASE_URL]
 
 
-def test_fetch_falls_back_on_corrupt_primary_tarball(monkeypatch, tmp_path):
+def test_fetch_corrupt_primary_tarball_fails_without_fallback(monkeypatch, tmp_path):
     # A 200 response whose body isn't a valid tar (e.g. an HTML error page) must
-    # fall back to the next source, not propagate.
+    # fail loudly rather than silently using a cross-project fallback.
     monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path / f"v{DATA_VERSION}"))
     attempted = []
+    monkeypatch.setattr(data_bundle, "_fetch_release_manifest", lambda source: None)
 
-    def fake_download(url, root, *, verbose):
+    def fake_download(url, root, *, verbose, release_manifest=None):
         attempted.append(url)
         if url == data_bundle.RELEASE_URL:
             raise tarfile.ReadError("not a gzip file")
 
     monkeypatch.setattr(data_bundle, "_download_and_extract", fake_download)
-    out = data_bundle.fetch(verbose=False)
-    assert out == data_bundle.cache_dir()
-    assert attempted == [data_bundle.RELEASE_URL, data_bundle.FALLBACK_RELEASE_URL]
+    with pytest.raises(RuntimeError, match="checksum-verified primary source"):
+        data_bundle.fetch(verbose=False)
+    assert attempted == [data_bundle.RELEASE_URL]
 
 
 def test_fetch_raises_when_all_sources_fail(monkeypatch, tmp_path):
     monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path / f"v{DATA_VERSION}"))
+    monkeypatch.setattr(data_bundle, "_fetch_release_manifest", lambda source: None)
 
-    def always_404(url, root, *, verbose):
+    def always_404(url, root, *, verbose, release_manifest=None):
         raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
 
     monkeypatch.setattr(data_bundle, "_download_and_extract", always_404)
-    with pytest.raises(RuntimeError, match="could not download"):
+    with pytest.raises(RuntimeError, match="checksum-verified primary source"):
+        data_bundle.fetch(verbose=False)
+
+
+def test_fetch_primary_missing_manifest_fails_without_fallback(monkeypatch, tmp_path):
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path / f"v{DATA_VERSION}"))
+
+    def missing_manifest(source):
+        if source["name"] == "oncoref":
+            raise data_bundle.BundleIntegrityError("missing release manifest/checksum")
+        pytest.fail("must not fall back after primary integrity failure")
+
+    monkeypatch.setattr(data_bundle, "_fetch_release_manifest", missing_manifest)
+    monkeypatch.setattr(data_bundle, "_download_and_extract", lambda *a, **k: None)
+
+    with pytest.raises(RuntimeError, match="integrity check failed"):
         data_bundle.fetch(verbose=False)
 
 

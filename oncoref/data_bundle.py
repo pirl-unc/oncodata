@@ -26,11 +26,10 @@ Cache layout (version-pinned so upgrades trigger a re-fetch):
     hpa-cell-type-expression.csv
 
 oncoref now owns the bundle: new downloads land under ``~/.cache/oncoref``
-and prefer the ``pirl-unc/oncoref`` release. To avoid a forced re-download
-during the migration, an already-populated legacy ``~/.cache/pirlygenes`` cache
-for the current version is reused as-is, and the fetch falls back to the
-``pirl-unc/pirlygenes`` release if oncoref hasn't published this version's
-tarball yet. The ``PIRLYGENES_BUNDLED_DATA`` env var is still honored;
+and use the checksum-verified ``pirl-unc/oncoref`` release for the active
+``DATA_VERSION``. To avoid a forced re-download during the migration, an
+already-populated legacy ``~/.cache/pirlygenes`` cache for the current version
+is reused as-is. The ``PIRLYGENES_BUNDLED_DATA`` env var is still honored;
 ``CANCERDATA_BUNDLED_DATA`` takes precedence when set.
 
 Public API:
@@ -45,6 +44,7 @@ Public API:
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import shutil
@@ -62,23 +62,57 @@ def _release_url(repo: str, filename: str) -> str:
     return f"https://github.com/{repo}/releases/download/v{DATA_VERSION}/{filename}"
 
 
-# oncoref owns the bundle: its own release is tried first. The historical
-# pirlygenes release is kept as a fallback for one migration release so a version
-# whose oncoref tarball isn't uploaded yet still fetches (a 404 from the
-# primary falls through to the fallback rather than hanging the user).
+# oncoref owns the bundle: its own release is the checksum-verified source.
+# The historical pirlygenes release metadata remains here for explicit migration
+# audits, but the primary oncoref source must be complete for normal fetches.
 GITHUB_REPO = "pirl-unc/oncoref"
 TARBALL_FILENAME = f"oncoref-data-v{DATA_VERSION}.tar.gz"
 RELEASE_URL = _release_url(GITHUB_REPO, TARBALL_FILENAME)
+MANIFEST_FILENAME = f"oncoref-data-v{DATA_VERSION}.manifest.json"
+CHECKSUM_FILENAME = f"{TARBALL_FILENAME}.sha256"
+RELEASE_MANIFEST_URL = _release_url(GITHUB_REPO, MANIFEST_FILENAME)
+RELEASE_CHECKSUM_URL = _release_url(GITHUB_REPO, CHECKSUM_FILENAME)
 
 FALLBACK_GITHUB_REPO = "pirl-unc/pirlygenes"
 FALLBACK_TARBALL_FILENAME = f"pirlygenes-data-v{DATA_VERSION}.tar.gz"
 FALLBACK_RELEASE_URL = _release_url(FALLBACK_GITHUB_REPO, FALLBACK_TARBALL_FILENAME)
+FALLBACK_MANIFEST_FILENAME = f"pirlygenes-data-v{DATA_VERSION}.manifest.json"
+FALLBACK_CHECKSUM_FILENAME = f"{FALLBACK_TARBALL_FILENAME}.sha256"
+FALLBACK_RELEASE_MANIFEST_URL = _release_url(FALLBACK_GITHUB_REPO, FALLBACK_MANIFEST_FILENAME)
+FALLBACK_RELEASE_CHECKSUM_URL = _release_url(FALLBACK_GITHUB_REPO, FALLBACK_CHECKSUM_FILENAME)
+
+RELEASE_SOURCES: tuple[dict, ...] = (
+    {
+        "name": "oncoref",
+        "repo": GITHUB_REPO,
+        "url": RELEASE_URL,
+        "tarball_filename": TARBALL_FILENAME,
+        "manifest_url": RELEASE_MANIFEST_URL,
+        "checksum_url": RELEASE_CHECKSUM_URL,
+        "require_integrity": True,
+    },
+    {
+        "name": "pirlygenes",
+        "repo": FALLBACK_GITHUB_REPO,
+        "url": FALLBACK_RELEASE_URL,
+        "tarball_filename": FALLBACK_TARBALL_FILENAME,
+        "manifest_url": FALLBACK_RELEASE_MANIFEST_URL,
+        "checksum_url": FALLBACK_RELEASE_CHECKSUM_URL,
+        "require_integrity": False,
+    },
+)
 
 #: Release URLs tried in order until one downloads.
-RELEASE_URLS: tuple[str, ...] = (RELEASE_URL, FALLBACK_RELEASE_URL)
+RELEASE_URLS: tuple[str, ...] = tuple(source["url"] for source in RELEASE_SOURCES)
 
 CACHE_COMPLETE_FILENAME = ".oncoref-bundle-complete.json"
 CACHE_MANIFEST_VERSION = 1
+BUNDLE_MANIFEST_VERSION = 1
+
+
+class BundleIntegrityError(RuntimeError):
+    """Raised when a release manifest/checksum is missing or does not match."""
+
 
 #: Env var that overrides the cache (points at the version-pinned dir).
 CACHE_DIR_ENV_VAR = "CANCERDATA_BUNDLED_DATA"
@@ -169,6 +203,118 @@ def _entry_inventory(path: Path) -> dict:
     }
 
 
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _read_url_text(url: str) -> str:
+    with urllib.request.urlopen(url) as resp:
+        return resp.read().decode("utf-8")
+
+
+def _parse_checksum_text(text: str, *, filename: str) -> dict:
+    first = next((line.strip() for line in text.splitlines() if line.strip()), "")
+    parts = first.split()
+    if not parts:
+        raise BundleIntegrityError(f"empty checksum file for {filename}")
+    sha256 = parts[0].strip()
+    if len(sha256) != 64 or any(c not in "0123456789abcdefABCDEF" for c in sha256):
+        raise BundleIntegrityError(f"invalid sha256 checksum for {filename}: {sha256!r}")
+    recorded_name = parts[-1].lstrip("*") if len(parts) > 1 else filename
+    if Path(recorded_name).name != filename:
+        raise BundleIntegrityError(f"checksum file names {recorded_name!r}, expected {filename!r}")
+    return {
+        "manifest_version": BUNDLE_MANIFEST_VERSION,
+        "data_version": DATA_VERSION,
+        "tarball": {
+            "filename": filename,
+            "sha256": sha256.lower(),
+        },
+    }
+
+
+def _validate_release_manifest(manifest: dict, source: dict, *, manifest_url: str) -> dict:
+    if manifest.get("data_version") != DATA_VERSION:
+        raise BundleIntegrityError(
+            f"{manifest_url} is for data_version {manifest.get('data_version')!r}, "
+            f"expected {DATA_VERSION!r}"
+        )
+    if manifest.get("manifest_version") not in (None, BUNDLE_MANIFEST_VERSION):
+        raise BundleIntegrityError(
+            f"{manifest_url} uses unsupported manifest_version {manifest.get('manifest_version')!r}"
+        )
+    tarball = dict(manifest.get("tarball") or {})
+    filename = tarball.get("filename") or source["tarball_filename"]
+    if filename != source["tarball_filename"]:
+        raise BundleIntegrityError(
+            f"{manifest_url} describes tarball {filename!r}, "
+            f"expected {source['tarball_filename']!r}"
+        )
+    sha256 = str(tarball.get("sha256", "")).lower()
+    if len(sha256) != 64 or any(c not in "0123456789abcdef" for c in sha256):
+        raise BundleIntegrityError(f"{manifest_url} lacks a valid tarball sha256")
+    paths = tarball.get("downloadable_paths") or manifest.get("downloadable_paths")
+    if paths is not None and tuple(paths) != DOWNLOADABLE_PATHS:
+        raise BundleIntegrityError(
+            f"{manifest_url} downloadable_paths do not match this oncoref build"
+        )
+    normalized = {
+        "manifest_version": manifest.get("manifest_version", BUNDLE_MANIFEST_VERSION),
+        "data_version": DATA_VERSION,
+        "source": source["name"],
+        "repo": source["repo"],
+        "manifest_url": manifest_url,
+        "tarball": {
+            "filename": filename,
+            "url": source["url"],
+            "sha256": sha256,
+            "bytes": tarball.get("bytes"),
+            "downloadable_paths": list(DOWNLOADABLE_PATHS),
+        },
+    }
+    return normalized
+
+
+def _fetch_release_manifest(source: dict) -> dict | None:
+    """Fetch and validate the release manifest/checksum for a bundle source.
+
+    The oncoref-owned source is strict: a missing manifest/checksum is a release
+    contract violation. The pirlygenes source is legacy migration fallback; it is
+    used only when oncoref's tarball is absent and remains marked unverified if it
+    has no same-release checksum.
+    """
+    manifest_url = source["manifest_url"]
+    try:
+        manifest = json.loads(_read_url_text(manifest_url))
+        return _validate_release_manifest(manifest, source, manifest_url=manifest_url)
+    except urllib.error.HTTPError as manifest_error:
+        if manifest_error.code != 404:
+            raise
+    except json.JSONDecodeError as e:
+        raise BundleIntegrityError(f"{manifest_url} is not valid JSON: {e}") from e
+
+    checksum_url = source["checksum_url"]
+    try:
+        manifest = _parse_checksum_text(
+            _read_url_text(checksum_url),
+            filename=source["tarball_filename"],
+        )
+        return _validate_release_manifest(manifest, source, manifest_url=checksum_url)
+    except urllib.error.HTTPError as checksum_error:
+        if checksum_error.code != 404:
+            raise
+        if source["require_integrity"]:
+            raise BundleIntegrityError(
+                f"missing release manifest/checksum for {source['url']} "
+                f"(tried {manifest_url} and {checksum_url})"
+            ) from checksum_error
+        return None
+
+
 def _bundle_inventory(root: Path) -> dict[str, dict]:
     return {p: _entry_inventory(root / p) for p in DOWNLOADABLE_PATHS}
 
@@ -193,21 +339,34 @@ def _read_completion_marker(root: Path) -> dict | None:
 
 def _completion_marker_valid(root: Path) -> bool:
     marker = _read_completion_marker(root)
+    release_manifest = marker.get("release_manifest") if marker else None
+    tarball = release_manifest.get("tarball") if isinstance(release_manifest, dict) else None
     return bool(
         marker
         and marker.get("manifest_version") == CACHE_MANIFEST_VERSION
         and marker.get("data_version") == DATA_VERSION
         and tuple(marker.get("downloadable_paths", ())) == DOWNLOADABLE_PATHS
+        and isinstance(tarball, dict)
+        and tarball.get("sha256")
         and not _incomplete_bundle_paths(root)
     )
 
 
-def _write_completion_marker(root: Path, *, source_url: str) -> None:
+def _write_completion_marker(
+    root: Path,
+    *,
+    source_url: str,
+    release_manifest: dict | None,
+) -> None:
     marker = _completion_marker_path(root)
     payload = {
         "manifest_version": CACHE_MANIFEST_VERSION,
         "data_version": DATA_VERSION,
         "source_url": source_url,
+        "release_manifest": release_manifest,
+        "verified_sha256": bool(
+            release_manifest and release_manifest.get("tarball", {}).get("sha256")
+        ),
         "downloadable_paths": list(DOWNLOADABLE_PATHS),
         "inventory": _bundle_inventory(root),
     }
@@ -228,7 +387,13 @@ def find(relative_path: str) -> Path | None:
     return candidate if candidate.exists() else None
 
 
-def _download_and_extract(url: str, root: Path, *, verbose: bool) -> None:
+def _download_and_extract(
+    url: str,
+    root: Path,
+    *,
+    verbose: bool,
+    release_manifest: dict | None = None,
+) -> None:
     """Download a tarball from ``url`` and extract it into ``root``.
 
     Extraction goes into a staging dir first and is promoted into ``root`` only
@@ -243,6 +408,19 @@ def _download_and_extract(url: str, root: Path, *, verbose: bool) -> None:
     try:
         with urllib.request.urlopen(url) as resp, tmp_path.open("wb") as h:
             shutil.copyfileobj(resp, h, length=1024 * 1024)
+        if release_manifest:
+            tarball = release_manifest["tarball"]
+            expected_bytes = tarball.get("bytes")
+            if expected_bytes is not None and tmp_path.stat().st_size != int(expected_bytes):
+                raise BundleIntegrityError(
+                    f"{url} size mismatch: got {tmp_path.stat().st_size} bytes, "
+                    f"expected {expected_bytes}"
+                )
+            actual_sha256 = _sha256_file(tmp_path)
+            if actual_sha256 != tarball["sha256"]:
+                raise BundleIntegrityError(
+                    f"{url} sha256 mismatch: got {actual_sha256}, expected {tarball['sha256']}"
+                )
         if verbose:
             sys.stderr.write("oncoref: extracting...\n")
             sys.stderr.flush()
@@ -266,7 +444,7 @@ def _download_and_extract(url: str, root: Path, *, verbose: bool) -> None:
             elif dest.exists():
                 dest.unlink()
             shutil.move(str(entry), str(dest))
-        _write_completion_marker(root, source_url=url)
+        _write_completion_marker(root, source_url=url, release_manifest=release_manifest)
     finally:
         tmp_path.unlink(missing_ok=True)
         shutil.rmtree(staging, ignore_errors=True)
@@ -275,15 +453,17 @@ def _download_and_extract(url: str, root: Path, *, verbose: bool) -> None:
 def fetch(*, verbose: bool = True) -> Path:
     """Download + extract the bundle for this version into the cache.
 
-    Tries each URL in :data:`RELEASE_URLS` (oncoref first, pirlygenes fallback)
-    until one succeeds, so a version not yet published on the oncoref release
-    transparently falls back. Always overwrites — safe to call to repair a corrupt
-    cache. Returns the cache directory.
+    The oncoref-owned source must publish a same-release manifest or sha256 asset
+    for the exact ``DATA_VERSION``; missing assets, failed downloads, and checksum
+    failures stop the fetch instead of silently relying on a cross-project
+    fallback. Always overwrites — safe to call to repair a corrupt cache. Returns
+    the cache directory.
     """
     root = cache_dir()
     root.mkdir(parents=True, exist_ok=True)
     errors: list[str] = []
-    for url in RELEASE_URLS:
+    for source in RELEASE_SOURCES:
+        url = source["url"]
         if verbose:
             sys.stderr.write(
                 f"oncoref: downloading data bundle for v{DATA_VERSION} "
@@ -293,11 +473,34 @@ def fetch(*, verbose: bool = True) -> Path:
             )
             sys.stderr.flush()
         try:
-            _download_and_extract(url, root, verbose=verbose)
+            release_manifest = _fetch_release_manifest(source)
+            _download_and_extract(
+                url,
+                root,
+                verbose=verbose,
+                release_manifest=release_manifest,
+            )
+        except BundleIntegrityError as e:
+            errors.append(f"{url}: {e}")
+            if source["require_integrity"]:
+                raise RuntimeError(
+                    "oncoref: data bundle release integrity check failed:\n  " + "\n  ".join(errors)
+                ) from e
+            if verbose:
+                sys.stderr.write(
+                    f"oncoref: {url} integrity unavailable ({e}); trying next source\n"
+                )
+                sys.stderr.flush()
+            continue
         except (urllib.error.URLError, tarfile.TarError) as e:
             # URLError covers HTTPError (404); TarError covers a corrupt body or
-            # an HTML error page served with 200 — fall back to the next source.
+            # an HTML error page served with 200.
             errors.append(f"{url}: {e}")
+            if source["require_integrity"]:
+                raise RuntimeError(
+                    "oncoref: data bundle release download failed for the "
+                    "checksum-verified primary source:\n  " + "\n  ".join(errors)
+                ) from e
             if verbose:
                 sys.stderr.write(f"oncoref: {url} unavailable ({e}); trying next source\n")
                 sys.stderr.flush()
@@ -341,11 +544,14 @@ def status() -> dict:
         "cache_dir": str(root),
         "release_url": RELEASE_URL,
         "release_urls": list(RELEASE_URLS),
+        "release_manifest_url": RELEASE_MANIFEST_URL,
+        "release_checksum_url": RELEASE_CHECKSUM_URL,
         "completion_marker": {
             "path": str(_completion_marker_path(root)),
             "present": marker is not None,
             "valid": _completion_marker_valid(root),
             "source_url": marker.get("source_url") if marker else None,
+            "verified_sha256": bool(marker and marker.get("verified_sha256")),
         },
         "items": items,
         "all_local": is_local(),
@@ -367,7 +573,7 @@ def verify_local() -> dict:
         )
     if not snap["completion_marker"]["valid"]:
         raise RuntimeError(
-            "oncoref data bundle lacks a valid completion marker; "
+            "oncoref data bundle lacks a valid checksum-verified completion marker; "
             "run `oncoref data fetch bundle` to refresh it"
         )
     return snap
@@ -452,15 +658,26 @@ def prune_cache(*, keep_current: bool = True, dry_run: bool = False) -> list[dic
 
 
 __all__ = [
+    "BUNDLE_MANIFEST_VERSION",
     "CACHE_COMPLETE_FILENAME",
+    "CHECKSUM_FILENAME",
     "DOWNLOADABLE_PATHS",
+    "FALLBACK_CHECKSUM_FILENAME",
     "FALLBACK_GITHUB_REPO",
+    "FALLBACK_MANIFEST_FILENAME",
+    "FALLBACK_RELEASE_CHECKSUM_URL",
+    "FALLBACK_RELEASE_MANIFEST_URL",
     "FALLBACK_RELEASE_URL",
     "FALLBACK_TARBALL_FILENAME",
     "GITHUB_REPO",
+    "MANIFEST_FILENAME",
+    "RELEASE_CHECKSUM_URL",
+    "RELEASE_MANIFEST_URL",
+    "RELEASE_SOURCES",
     "RELEASE_URL",
     "RELEASE_URLS",
     "TARBALL_FILENAME",
+    "BundleIntegrityError",
     "cache_dir",
     "cache_root",
     "ensure_local",
