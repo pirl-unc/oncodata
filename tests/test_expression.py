@@ -69,6 +69,37 @@ def test_cohort_gene_percentiles_missing_raises(percentile_cache, monkeypatch):
         expression.cohort_gene_percentiles("BRCA")
 
 
+def test_cohort_gene_percentiles_missing_empty_schema(percentile_cache, monkeypatch):
+    _no_cached_matrix(monkeypatch)
+    df = expression.cohort_gene_percentiles("BRCA", on_missing="empty", include_provenance=True)
+
+    assert df.empty
+    assert list(df.columns[:2]) == ["Ensembl_Gene_ID", "Symbol"]
+    assert "p0" in df.columns and "p100" in df.columns
+    assert "cancer_code" in df.columns
+    assert df.attrs["schema_version"] == expression.PERCENTILE_ARTIFACT_SCHEMA_VERSION
+    assert df.attrs["cancer_code"] == "BRCA"
+    assert "missing_reason" in df.attrs
+
+
+def test_cohort_gene_percentiles_provenance_columns_and_attrs(percentile_cache):
+    df = expression.cohort_gene_percentiles("PRAD", include_provenance=True)
+
+    assert set(df.columns) >= {
+        "cancer_code",
+        "normalization",
+        "expression_unit",
+        "percentile_basis",
+        "artifact_schema_version",
+        "data_version",
+        "source_matrix_version",
+    }
+    assert set(df["cancer_code"]) == {"PRAD"}
+    assert set(df["normalization"]) == {"tpm_clean"}
+    assert df.attrs["schema_version"] == expression.PERCENTILE_ARTIFACT_SCHEMA_VERSION
+    assert df.attrs["cancer_code"] == "PRAD"
+
+
 @pytest.fixture
 def proteoform_percentile_cache(monkeypatch, tmp_path):
     monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
@@ -225,6 +256,68 @@ def test_representatives_provenance_requires_long_format():
     # a no-op, so it must fail loudly rather than silently dropping the request.
     with pytest.raises(ValueError, match="include_provenance=True requires format='long'"):
         expression.representative_cohort_samples("PRAD", include_provenance=True)
+
+
+def test_representative_provenance_includes_source_sample_and_selection_metadata(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
+    d = tmp_path / "cancer-reference-expression-representatives"
+    d.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["ENSG1"],
+            "Symbol": ["GENE1"],
+            "PRAD__rep1": [1.0],
+        }
+    ).to_parquet(d / "PRAD.parquet", index=False)
+    pd.DataFrame(
+        {
+            "representative_id": ["PRAD__rep1"],
+            "source_cohort": ["PRAD"],
+            "source_project": ["TCGA"],
+            "source_sample": ["TCGA-XX-0001"],
+            "n_cohort_samples": [10],
+        }
+    ).to_csv(d / "_provenance.csv", index=False)
+
+    df = expression.representative_cohort_samples("PRAD", format="long", include_provenance=True)
+
+    assert df.loc[0, "source_sample"] == "TCGA-XX-0001"
+    assert df.loc[0, "selection_rank"] == 1
+    assert df.loc[0, "selection_method"] == expression.REPRESENTATIVE_SELECTION_METHOD
+    assert df.loc[0, "selection_basis"] == expression.REPRESENTATIVE_SELECTION_BASIS
+    assert df.loc[0, "artifact_schema_version"] == expression.REPRESENTATIVE_ARTIFACT_SCHEMA_VERSION
+    assert df.attrs["schema_version"] == expression.REPRESENTATIVE_ARTIFACT_SCHEMA_VERSION
+    assert df.attrs["cancer_codes"] == ["PRAD"]
+
+
+def test_representative_empty_long_schema_includes_requested_provenance(monkeypatch, tmp_path):
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
+    (tmp_path / "cancer-reference-expression-representatives").mkdir(parents=True)
+
+    df = expression.representative_cohort_samples("PRAD", format="long", include_provenance=True)
+
+    assert df.empty
+    assert list(df.columns) == [
+        "Ensembl_Gene_ID",
+        "Symbol",
+        "cancer_code",
+        "representative_id",
+        "expression",
+        "source_cohort",
+        "source_version",
+        "source_project",
+        "source_sample",
+        "n_cohort_samples",
+        "selection_rank",
+        "selection_method",
+        "selection_basis",
+        "artifact_schema_version",
+        "data_version",
+        "source_matrix_version",
+    ]
+    assert df.attrs["schema_version"] == expression.REPRESENTATIVE_ARTIFACT_SCHEMA_VERSION
 
 
 def test_representative_wide_does_not_fragment_genes(monkeypatch, tmp_path):

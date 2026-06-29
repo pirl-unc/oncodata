@@ -178,6 +178,26 @@ and `SOURCE_MATRIX_VERSION`. This accessor is the compatibility surface for
 reference-expression reads; expression artifact row-set/value parity is still
 tracked separately in the upstream parity issues.
 
+Representative and percentile artifact readers have explicit downstream-facing
+contracts:
+
+- `expression.representative_cohort_samples(..., format="long",
+  include_provenance=True)` includes the representative id, source cohort/project,
+  source sample id, cohort sample count, deterministic selection rank/method/basis,
+  artifact schema version, `DATA_VERSION`, and `SOURCE_MATRIX_VERSION`.
+- `expression.cohort_gene_percentiles(..., include_provenance=True)` appends the
+  cohort code, normalization, expression unit, percentile basis, artifact schema
+  version, `DATA_VERSION`, and `SOURCE_MATRIX_VERSION`.
+- Missing percentile shards still raise by default. Use
+  `on_missing="empty"` to return an empty but schema-stable frame with
+  `df.attrs["missing_reason"]`, which is useful for compatibility adapters that
+  need to distinguish unavailable upstream data from private downstream fallback
+  data.
+
+These APIs expose the artifact contract. They do not by themselves rebuild the
+representative/percentile bundles, so row-set and value parity with pirlygenes is
+still governed by the gene-universe and expression-artifact parity issues.
+
 Clean TPM has one public compartment contract:
 
 - `clean-tpm-censored-genes.csv:category == "ribosomal_protein"` — 16%

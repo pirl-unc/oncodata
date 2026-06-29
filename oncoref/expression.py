@@ -69,7 +69,12 @@ import pandas as pd
 
 from . import data_bundle, source_matrices
 from .cancer_types import cohort_aggregates, resolve_cancer_type
-from .expression_builders import WITHIN_SAMPLE_THRESHOLDS as _WITHIN_SAMPLE_THRESHOLD_COLS
+from .expression_builders import (
+    PERCENTILE_BREAKPOINTS as _PERCENTILE_BREAKPOINTS,
+)
+from .expression_builders import (
+    WITHIN_SAMPLE_THRESHOLDS as _WITHIN_SAMPLE_THRESHOLD_COLS,
+)
 from .expression_engine import id_columns, sample_columns
 from .gene_ids import ensembl_id_alias_symbols, resolve_ensembl_id, unversioned
 from .load_dataset import _BUNDLED_DATA_DIR, _register_derived_cache, get_data
@@ -153,6 +158,11 @@ SHARD_DATASETS: dict[str, ShardDataset] = {
 _REPRESENTATIVES = SHARD_DATASETS["representatives"]
 _PERCENTILES = SHARD_DATASETS["percentiles"]
 _WITHIN_SAMPLE = SHARD_DATASETS["within_sample"]
+
+REPRESENTATIVE_ARTIFACT_SCHEMA_VERSION = "representative_expression_v1"
+PERCENTILE_ARTIFACT_SCHEMA_VERSION = "cohort_percentile_expression_v1"
+REPRESENTATIVE_SELECTION_METHOD = "central_medoid_then_farthest_first"
+REPRESENTATIVE_SELECTION_BASIS = "biological_clean_tpm_log1p_distance"
 
 
 # How many cleaned per-sample matrices to keep in the in-process LRU. Each frame is
@@ -259,6 +269,173 @@ def _gene_filter_mask(df: pd.DataFrame, genes: str | Iterable[str] | None) -> pd
         | ids.map(unversioned).isin(wanted_unversioned)
         | df["Symbol"].astype(str).isin(wanted)
     )
+
+
+_REPRESENTATIVE_PROVENANCE_COLUMNS = [
+    "source_cohort",
+    "source_version",
+    "source_project",
+    "source_sample",
+    "n_cohort_samples",
+    "selection_rank",
+    "selection_method",
+    "selection_basis",
+    "artifact_schema_version",
+    "data_version",
+    "source_matrix_version",
+]
+
+
+def _representative_rank(representative_id: object) -> int | None:
+    text = str(representative_id)
+    prefix, sep, suffix = text.rpartition("__rep")
+    if not prefix or not sep:
+        return None
+    try:
+        return int(suffix)
+    except ValueError:
+        return None
+
+
+def _representative_attrs(
+    *, codes: Iterable[str], normalize: str, format: str, k: int | None
+) -> dict[str, object]:
+    return {
+        "artifact": "representative_samples",
+        "schema_version": REPRESENTATIVE_ARTIFACT_SCHEMA_VERSION,
+        "data_version": DATA_VERSION,
+        "source_matrix_version": SOURCE_MATRIX_VERSION,
+        "cancer_codes": list(codes),
+        "normalize": normalize,
+        "format": format,
+        "k": k,
+        "selection_method": REPRESENTATIVE_SELECTION_METHOD,
+        "selection_basis": REPRESENTATIVE_SELECTION_BASIS,
+    }
+
+
+def _representative_empty_frame(*, include_provenance: bool) -> pd.DataFrame:
+    cols = ["Ensembl_Gene_ID", "Symbol", "cancer_code", "representative_id", "expression"]
+    if include_provenance:
+        cols.extend(_REPRESENTATIVE_PROVENANCE_COLUMNS)
+    return pd.DataFrame(columns=cols)
+
+
+def _attach_representative_provenance(long: pd.DataFrame, root: Path) -> pd.DataFrame:
+    prov_path = root / "_provenance.csv"
+    if prov_path.exists():
+        prov = pd.read_csv(prov_path)
+        keep = ["representative_id", *_REPRESENTATIVE_PROVENANCE_COLUMNS]
+        long = long.merge(
+            prov[[c for c in keep if c in prov.columns]],
+            on="representative_id",
+            how="left",
+        )
+    for col in ("source_cohort", "source_version", "source_project", "source_sample"):
+        if col not in long.columns:
+            long[col] = pd.NA
+    for col in ("n_cohort_samples", "selection_rank"):
+        if col not in long.columns:
+            long[col] = pd.NA
+    if "selection_rank" in long.columns:
+        ranks = pd.Series(long["representative_id"].map(_representative_rank), index=long.index)
+        long["selection_rank"] = (
+            long["selection_rank"].astype("Int64").fillna(ranks).astype("Int64")
+        )
+    long["selection_method"] = REPRESENTATIVE_SELECTION_METHOD
+    long["selection_basis"] = REPRESENTATIVE_SELECTION_BASIS
+    long["artifact_schema_version"] = REPRESENTATIVE_ARTIFACT_SCHEMA_VERSION
+    long["data_version"] = DATA_VERSION
+    long["source_matrix_version"] = SOURCE_MATRIX_VERSION
+    return long
+
+
+def _percentile_cols() -> list[str]:
+    return [f"p{bp}" for bp in _PERCENTILE_BREAKPOINTS]
+
+
+def _percentile_identity_cols(*, proteoform: bool) -> list[str]:
+    if proteoform:
+        return ["proteoform_key", "Ensembl_Gene_ID", "Symbol", "proteoform_members"]
+    return ["Ensembl_Gene_ID", "Symbol"]
+
+
+def _percentile_provenance_columns() -> list[str]:
+    return [
+        "cancer_code",
+        "normalization",
+        "expression_unit",
+        "percentile_basis",
+        "artifact_schema_version",
+        "data_version",
+        "source_matrix_version",
+    ]
+
+
+def _percentile_attrs(
+    *,
+    code: str,
+    as_tpm: bool,
+    proteoform: bool,
+    scope: str,
+    source: str,
+    missing_reason: str | None = None,
+) -> dict[str, object]:
+    attrs: dict[str, object] = {
+        "artifact": "cohort_gene_percentiles",
+        "schema_version": PERCENTILE_ARTIFACT_SCHEMA_VERSION,
+        "data_version": DATA_VERSION,
+        "source_matrix_version": SOURCE_MATRIX_VERSION,
+        "cancer_code": code,
+        "as_tpm": as_tpm,
+        "proteoform": proteoform,
+        "scope": scope,
+        "source": source,
+        "normalization": "tpm_clean" if as_tpm else "tpm_clean_log1p",
+        "expression_unit": "tpm_clean" if as_tpm else "log1p_tpm_clean",
+        "percentile_basis": "biological_clean_tpm_across_samples",
+    }
+    if missing_reason is not None:
+        attrs["missing_reason"] = missing_reason
+    return attrs
+
+
+def _empty_percentile_frame(
+    *,
+    code: str,
+    as_tpm: bool,
+    proteoform: bool,
+    scope: str,
+    include_provenance: bool,
+    missing_reason: str,
+) -> pd.DataFrame:
+    cols = [*_percentile_identity_cols(proteoform=proteoform), *_percentile_cols()]
+    if include_provenance:
+        cols.extend(_percentile_provenance_columns())
+    out = pd.DataFrame(columns=cols)
+    out.attrs.update(
+        _percentile_attrs(
+            code=code,
+            as_tpm=as_tpm,
+            proteoform=proteoform,
+            scope=scope,
+            source="missing",
+            missing_reason=missing_reason,
+        )
+    )
+    return out
+
+
+def _attach_percentile_provenance(df: pd.DataFrame, *, code: str, as_tpm: bool) -> pd.DataFrame:
+    out = df.copy()
+    out["cancer_code"] = code
+    out["normalization"] = "tpm_clean" if as_tpm else "tpm_clean_log1p"
+    out["expression_unit"] = "tpm_clean" if as_tpm else "log1p_tpm_clean"
+    out["percentile_basis"] = "biological_clean_tpm_across_samples"
+    out["artifact_schema_version"] = PERCENTILE_ARTIFACT_SCHEMA_VERSION
+    out["data_version"] = DATA_VERSION
+    out["source_matrix_version"] = SOURCE_MATRIX_VERSION
+    return out
 
 
 def available_representative_cohorts() -> list[str]:
@@ -1098,7 +1275,9 @@ def representative_cohort_samples(
     ``cancer_types`` accepts a code, alias, or iterable; a computed-aggregate
     code expands to its member subtypes; ``None`` returns every cohort that ships
     representatives. ``k`` keeps at most the first ``k`` reps per cohort.
-    ``format`` is ``"wide"`` (genes × reps) or ``"long"``.
+    ``format`` is ``"wide"`` (genes × reps) or ``"long"``. Long output can attach
+    representative-level provenance: source cohort/project/sample, selection rank,
+    selection method/basis, and package/data schema versions.
     """
     if normalize not in ("tpm_clean", "tpm_clean_log1p"):
         raise ValueError(
@@ -1173,35 +1352,32 @@ def representative_cohort_samples(
 
     if format == "wide":
         if not wide_parts:
-            return pd.DataFrame(columns=base)
+            out = pd.DataFrame(columns=base)
+            out.attrs.update(
+                _representative_attrs(codes=codes, normalize=normalize, format=format, k=k)
+            )
+            return out
         combined = pd.concat(wide_parts, axis=1, join="outer").sort_index()
         if combined.index.has_duplicates:  # belt-and-suspenders: one row per gene id
             combined = combined.groupby(level=0).first()
         out = combined.reset_index(names="Ensembl_Gene_ID")
         out.insert(1, "Symbol", out["Ensembl_Gene_ID"].map(_canonical_symbol))
+        out.attrs.update(
+            _representative_attrs(codes=codes, normalize=normalize, format=format, k=k)
+        )
         return out
 
     if not long_parts:
-        cols = [*base, "cancer_code", "representative_id", "expression"]
-        return pd.DataFrame(columns=cols)
+        out = _representative_empty_frame(include_provenance=include_provenance)
+        out.attrs.update(
+            _representative_attrs(codes=codes, normalize=normalize, format=format, k=k)
+        )
+        return out
     long = pd.concat(long_parts, ignore_index=True)
     long.insert(1, "Symbol", long["Ensembl_Gene_ID"].map(_canonical_symbol))
     if include_provenance:
-        prov_path = root / "_provenance.csv"
-        if prov_path.exists():
-            prov = pd.read_csv(prov_path)
-            keep = [
-                "representative_id",
-                "source_cohort",
-                "source_version",
-                "source_project",
-                "n_cohort_samples",
-            ]
-            long = long.merge(
-                prov[[c for c in keep if c in prov.columns]],
-                on="representative_id",
-                how="left",
-            )
+        long = _attach_representative_provenance(long, root)
+    long.attrs.update(_representative_attrs(codes=codes, normalize=normalize, format=format, k=k))
     return long
 
 
@@ -1276,6 +1452,8 @@ def cohort_gene_percentiles(
     proteoform: bool = False,
     scope: str = "cta",
     auto_fetch: bool = False,
+    include_provenance: bool = False,
+    on_missing: str = "raise",
 ) -> pd.DataFrame:
     """Tail-weighted per-gene percentile vector for one cohort.
 
@@ -1289,6 +1467,10 @@ def cohort_gene_percentiles(
     ``expm1``-restores clean-TPM values, ``as_tpm=False`` returns the stored
     log1p values.
 
+    ``include_provenance=True`` appends stable artifact/provenance columns. Missing
+    cohorts still raise by default; pass ``on_missing="empty"`` to return an
+    empty schema-stable frame with ``attrs["missing_reason"]`` instead.
+
     With ``proteoform=True``, the vector is one row per proteoform key
     (``proteoform_key``/``Symbol`` carry the collapsed identity), identical-protein
     members summed **before** the percentiles are computed (``scope`` ``"cta"``/``"genome"``,
@@ -1301,14 +1483,41 @@ def cohort_gene_percentiles(
     per-sample matrix cached (pass ``auto_fetch=True`` to download it); otherwise a
     clear error.
     """
+    if on_missing not in ("raise", "empty"):
+        raise ValueError("on_missing must be 'raise' or 'empty'")
+
     code = resolve_cancer_type(cancer_type)
-    df = _read_shard_or_recompute(
-        _PERCENTILES, code, proteoform=proteoform, auto_fetch=auto_fetch, scope=scope
-    )
+    try:
+        df = _read_shard_or_recompute(
+            _PERCENTILES, code, proteoform=proteoform, auto_fetch=auto_fetch, scope=scope
+        )
+        source = "shard_or_recomputed"
+    except ValueError as e:
+        if on_missing != "empty" or "per-sample matrix isn't cached" not in str(e):
+            raise
+        return _empty_percentile_frame(
+            code=code,
+            as_tpm=as_tpm,
+            proteoform=proteoform,
+            scope=scope,
+            include_provenance=include_provenance,
+            missing_reason=str(e),
+        )
     bp_cols = sample_columns(df)
     df[bp_cols] = df[bp_cols].astype("float32")
     if as_tpm:
         df[bp_cols] = np.expm1(df[bp_cols])
+    if include_provenance:
+        df = _attach_percentile_provenance(df, code=code, as_tpm=as_tpm)
+    df.attrs.update(
+        _percentile_attrs(
+            code=code,
+            as_tpm=as_tpm,
+            proteoform=proteoform,
+            scope=scope,
+            source=source,
+        )
+    )
     return df
 
 
@@ -1563,15 +1772,32 @@ def proteoform_pooled_cohort_stats(
 
 
 def gene_cohort_percentiles(
-    cancer_type, *, as_tpm: bool = True, auto_fetch: bool = False
+    cancer_type,
+    *,
+    as_tpm: bool = True,
+    auto_fetch: bool = False,
+    include_provenance: bool = False,
+    on_missing: str = "raise",
 ) -> pd.DataFrame:
     """Gene-level per-cohort **percentile vectors**. Proteoform counterpart:
     :func:`proteoform_cohort_percentiles`. (Alias of :func:`cohort_gene_percentiles`.)"""
-    return cohort_gene_percentiles(cancer_type, as_tpm=as_tpm, auto_fetch=auto_fetch)
+    return cohort_gene_percentiles(
+        cancer_type,
+        as_tpm=as_tpm,
+        auto_fetch=auto_fetch,
+        include_provenance=include_provenance,
+        on_missing=on_missing,
+    )
 
 
 def proteoform_cohort_percentiles(
-    cancer_type, *, as_tpm: bool = True, scope: str = "cta", auto_fetch: bool = True
+    cancer_type,
+    *,
+    as_tpm: bool = True,
+    scope: str = "cta",
+    auto_fetch: bool = True,
+    include_provenance: bool = False,
+    on_missing: str = "raise",
 ) -> pd.DataFrame:
     """Proteoform-level per-cohort **percentile vectors** (members summed before
     ranking, ``scope`` ``"cta"``/``"genome"``). Gene-level counterpart:
@@ -1580,7 +1806,13 @@ def proteoform_cohort_percentiles(
     here (unlike the gene variant, which reads a shipped shard); pass ``False`` to
     require the matrix already be cached."""
     return cohort_gene_percentiles(
-        cancer_type, as_tpm=as_tpm, proteoform=True, scope=scope, auto_fetch=auto_fetch
+        cancer_type,
+        as_tpm=as_tpm,
+        proteoform=True,
+        scope=scope,
+        auto_fetch=auto_fetch,
+        include_provenance=include_provenance,
+        on_missing=on_missing,
     )
 
 
