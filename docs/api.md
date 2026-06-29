@@ -148,6 +148,14 @@ accessors and bundles are also reusable, but downstream packages may keep their
 own packaged expression artifacts until row-set, value, provenance, and QC
 contracts are parity-clean for the specific accessor they want to replace.
 
+`expression.pan_cancer_expression()` defaults to oncoref's entity-first schema:
+HPA normal tissue columns are `<tissue>_nTPM_raw`, TCGA source/provenance
+columns are `<CODE>_FPKM_raw`, deterministic TCGA TPM companions are
+`<CODE>_TPM_raw`, and analysis columns append `_clean`, `_hk`, `_percentile`, or
+`_log1p`. For migration code that needs pirlygenes' unsuffixed column names, use
+`column_style="pirlygenes"`; the legacy `to_tpm=True` keyword is accepted as a
+compatibility alias for that view and maps the default call to `normalize="tpm"`.
+
 Clean TPM has one public compartment contract:
 
 - `clean-tpm-censored-genes.csv:category == "ribosomal_protein"` — 16%

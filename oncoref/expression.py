@@ -74,6 +74,7 @@ from .expression_engine import id_columns, sample_columns
 from .gene_ids import ensembl_id_alias_symbols, resolve_ensembl_id, unversioned
 from .load_dataset import _BUNDLED_DATA_DIR, _register_derived_cache, get_data
 from .normalization import clean_tpm, percentile_rank, tpm_to_housekeeping_normalized
+from .version import DATA_VERSION, SOURCE_MATRIX_VERSION
 
 
 @dataclass(frozen=True)
@@ -1535,14 +1536,16 @@ def pan_cancer_expression(
     genes: str | Iterable[str] | None = None,
     *,
     normalize: str | Iterable[str] | None = "tpm_clean",
+    to_tpm: bool | None = None,
+    column_style: str | None = None,
 ) -> pd.DataFrame:
     """Wide pan-cancer reference: each gene's expression across **50 HPA normal
     tissues** and **33 TCGA tumor cohorts**, tumor and normal side by side in one
     frame — the combined companion to the per-cohort accessors above.
 
-    Columns are entity-first: ``<tissue>_nTPM_raw`` for HPA normal tissues and
-    ``<CODE>_TPM_raw`` for TCGA tumor cohorts. Source ``FPKM_<CODE>`` columns are
-    deterministically converted FPKM→TPM before being exposed as ``*_TPM_raw``.
+    Columns are entity-first: ``<tissue>_nTPM_raw`` for HPA normal tissues,
+    ``<CODE>_FPKM_raw`` for TCGA source/provenance values, and ``<CODE>_TPM_raw``
+    for deterministic FPKM→TPM tumor companions.
     The default ``normalize="tpm_clean"`` (alias ``"clean_tpm"``) appends
     clean TPM companions named ``<entity>_<measure>_clean``.
     ``normalize="housekeeping"`` / ``"hk"`` appends ``*_hk`` columns, and
@@ -1551,10 +1554,24 @@ def pan_cancer_expression(
     TPM/nTPM values, respectively. Pass ``normalize=None`` or ``"tpm"`` for the
     raw TPM/nTPM companions only.
 
+    ``column_style="pirlygenes"`` returns the same data with pirlygenes-style
+    unsuffixed analysis names (for example ``LUAD_FPKM``, ``LUAD_TPM``, and
+    ``liver_nTPM``). The legacy ``to_tpm`` keyword is accepted as a compatibility
+    alias; when used without an explicit ``column_style`` it selects the
+    pirlygenes-style output and, for the default normalization, maps to
+    ``normalize="tpm"``.
+
     ``genes`` filters to the given Ensembl gene ids (version-insensitive) or
     symbols; ``None`` returns the full matrix. The FPKM→TPM conversion runs over
     **all** genes before any filtering, so a filtered slice still carries the
     cohort-wide TPM scaling."""
+    if to_tpm is not None:
+        if normalize == "tpm_clean":
+            normalize = "tpm" if to_tpm else None
+        if column_style is None:
+            column_style = "pirlygenes"
+    column_style = _pan_cancer_column_style(column_style)
+
     df = get_data("pan-cancer-expression")
     # Dense canonical space: sum alt-haplotype/patch copies into their primary gene and
     # relabel retired ids (oncoref#135 item 6). The cohort/tissue columns are per-gene
@@ -1567,39 +1584,54 @@ def pan_cancer_expression(
     out = df[id_cols].copy()
 
     raw_cols: list[str] = []
+    raw_parts: list[pd.DataFrame] = []
     ntpm_cols = [c for c in df.columns if c.startswith("nTPM_")]
+    ntpm_data: dict[str, pd.Series] = {}
     for col in ntpm_cols:
         entity = col[len("nTPM_") :]
         target = f"{entity}_nTPM_raw"
-        out[target] = pd.to_numeric(df[col], errors="coerce")
+        ntpm_data[target] = pd.to_numeric(df[col], errors="coerce")
         raw_cols.append(target)
+    if ntpm_data:
+        raw_parts.append(pd.DataFrame(ntpm_data, index=df.index))
 
     fpkm_cols = [c for c in df.columns if c.startswith("FPKM_")]
     if fpkm_cols:
         from .normalization import fpkm_to_tpm
 
         converted, _ = fpkm_to_tpm(df[id_cols + fpkm_cols], value_cols=fpkm_cols)
+        fpkm_data: dict[str, pd.Series] = {}
         for col in fpkm_cols:
             entity = col[len("FPKM_") :]
+            provenance_col = f"{entity}_FPKM_raw"
+            fpkm_data[provenance_col] = pd.to_numeric(df[col], errors="coerce")
             target = f"{entity}_TPM_raw"
-            out[target] = converted[col]
+            fpkm_data[target] = converted[col]
             raw_cols.append(target)
+        raw_parts.append(pd.DataFrame(fpkm_data, index=df.index))
 
     tpm_cols = [c for c in df.columns if c.startswith("TPM_")]
+    tpm_data: dict[str, pd.Series] = {}
     for col in tpm_cols:
         entity = col[len("TPM_") :]
         target = f"{entity}_TPM_raw"
-        out[target] = pd.to_numeric(df[col], errors="coerce")
+        tpm_data[target] = pd.to_numeric(df[col], errors="coerce")
         raw_cols.append(target)
+    if tpm_data:
+        raw_parts.append(pd.DataFrame(tpm_data, index=df.index))
+    if raw_parts:
+        out = pd.concat([out, *raw_parts], axis=1)
 
     modes = _pan_cancer_normalize_modes(normalize)
     clean_cols: list[str] = []
     if modes & {"tpm_clean", "housekeeping", "hk", "percentile", "tpm_clean_log1p"}:
         clean = clean_tpm(out[raw_cols], gene_table=out[id_cols])
+        clean_data: dict[str, pd.Series] = {}
         for col in raw_cols:
             target = col[: -len("_raw")] + "_clean"
-            out[target] = clean[col]
+            clean_data[target] = clean[col]
             clean_cols.append(target)
+        out = pd.concat([out, pd.DataFrame(clean_data, index=out.index)], axis=1)
 
     if modes & {"housekeeping", "hk"}:
         hk_input_cols = clean_cols or raw_cols
@@ -1614,26 +1646,34 @@ def pan_cancer_expression(
             drop_zero_panel_values=True,
             warn_on_unreliable=True,
         )
+        hk_data: dict[str, pd.Series] = {}
         for col in hk_input_cols:
             target = col.rsplit("_", 1)[0] + "_hk"
-            out[target] = hk[col]
+            hk_data[target] = hk[col]
+        out = pd.concat([out, pd.DataFrame(hk_data, index=out.index)], axis=1)
 
     if "percentile" in modes:
         pct_input_cols = clean_cols or raw_cols
         pct = percentile_rank(out[id_cols + pct_input_cols], value_cols=pct_input_cols)
+        pct_data: dict[str, pd.Series] = {}
         for col in pct_input_cols:
             target = col.rsplit("_", 1)[0] + "_percentile"
-            out[target] = pct[col]
+            pct_data[target] = pct[col]
+        out = pd.concat([out, pd.DataFrame(pct_data, index=out.index)], axis=1)
 
     if "tpm_log1p" in modes:
+        log_data: dict[str, np.ndarray] = {}
         for col in raw_cols:
             target = col + "_log1p"
-            out[target] = np.log1p(out[col].to_numpy(dtype=float))
+            log_data[target] = np.log1p(out[col].to_numpy(dtype=float))
+        out = pd.concat([out, pd.DataFrame(log_data, index=out.index)], axis=1)
 
     if "tpm_clean_log1p" in modes:
+        clean_log_data: dict[str, np.ndarray] = {}
         for col in clean_cols:
             target = col + "_log1p"
-            out[target] = np.log1p(out[col].to_numpy(dtype=float))
+            clean_log_data[target] = np.log1p(out[col].to_numpy(dtype=float))
+        out = pd.concat([out, pd.DataFrame(clean_log_data, index=out.index)], axis=1)
 
     if genes is not None:
         wanted = {genes} if isinstance(genes, str) else set(genes)
@@ -1646,7 +1686,37 @@ def pan_cancer_expression(
             | out["Symbol"].astype(str).isin(wanted)
         )
         out = out[mask].reset_index(drop=True)
+    out = _format_pan_cancer_columns(out, column_style=column_style)
+    out.attrs["oncoref"] = {
+        "dataset": "pan-cancer-expression",
+        "data_version": DATA_VERSION,
+        "source_matrix_version": SOURCE_MATRIX_VERSION,
+        "column_style": column_style,
+    }
     return out
+
+
+def _pan_cancer_column_style(column_style: str | None) -> str:
+    if column_style is None:
+        return "oncoref"
+    style = str(column_style).lower()
+    aliases = {"default": "oncoref", "entity_first": "oncoref", "legacy": "pirlygenes"}
+    style = aliases.get(style, style)
+    if style not in {"oncoref", "pirlygenes"}:
+        raise ValueError("column_style must be None, 'oncoref', or 'pirlygenes'")
+    return style
+
+
+def _format_pan_cancer_columns(df: pd.DataFrame, *, column_style: str) -> pd.DataFrame:
+    if column_style == "oncoref":
+        return df
+    rename: dict[str, str] = {}
+    for col in df.columns:
+        if col.endswith("_raw_log1p"):
+            rename[col] = col.replace("_raw_log1p", "_log1p")
+        elif col.endswith(("_nTPM_raw", "_FPKM_raw", "_TPM_raw")):
+            rename[col] = col[: -len("_raw")]
+    return df.rename(columns=rename)
 
 
 def _pan_cancer_normalize_modes(normalize: str | Iterable[str] | None) -> set[str]:

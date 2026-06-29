@@ -894,10 +894,12 @@ def test_pan_cancer_expression_converts_fpkm_to_tpm(monkeypatch):
     out = expression.pan_cancer_expression()
     # FPKM_<CODE> tumor columns become entity-first <CODE>_TPM_raw;
     # HPA nTPM columns become <tissue>_nTPM_raw. Clean companions are default.
-    assert "LUAD_TPM_raw" in out.columns and "FPKM_LUAD" not in out.columns
+    assert "LUAD_FPKM_raw" in out.columns and "FPKM_LUAD" not in out.columns
+    assert "LUAD_TPM_raw" in out.columns
     assert "liver_nTPM_raw" in out.columns
     assert "LUAD_TPM_clean" in out.columns and "liver_nTPM_clean" in out.columns
     assert "TPM_LUAD" not in out.columns and "nTPM_liver" not in out.columns
+    assert out["LUAD_FPKM_raw"].tolist() == pytest.approx([2.0, 8.0])
     # Each TCGA column is rescaled to sum 1e6: FPKM_LUAD [2,8] -> [200000, 800000].
     assert out["LUAD_TPM_raw"].tolist() == pytest.approx([200000.0, 800000.0])
     assert out["BLCA_TPM_raw"].sum() == pytest.approx(1e6)
@@ -906,9 +908,48 @@ def test_pan_cancer_expression_converts_fpkm_to_tpm(monkeypatch):
 def test_pan_cancer_expression_raw_only(monkeypatch):
     monkeypatch.setattr(expression, "get_data", lambda name: _pan_cancer_fixture())
     out = expression.pan_cancer_expression(normalize=None)
+    assert "LUAD_FPKM_raw" in out.columns
     assert "LUAD_TPM_raw" in out.columns
     assert "LUAD_TPM_clean" not in out.columns
+    assert out["LUAD_FPKM_raw"].tolist() == pytest.approx([2.0, 8.0])
     assert out["LUAD_TPM_raw"].tolist() == pytest.approx([200000.0, 800000.0])
+
+
+def test_pan_cancer_expression_pirlygenes_column_style(monkeypatch):
+    monkeypatch.setattr(expression, "get_data", lambda name: _pan_cancer_fixture())
+    out = expression.pan_cancer_expression(normalize="tpm", column_style="pirlygenes")
+
+    assert {"liver_nTPM", "LUAD_FPKM", "LUAD_TPM"} <= set(out.columns)
+    assert not any(c.endswith("_raw") for c in out.columns)
+    assert out["LUAD_FPKM"].tolist() == pytest.approx([2.0, 8.0])
+    assert out["LUAD_TPM"].tolist() == pytest.approx([200000.0, 800000.0])
+    assert out.attrs["oncoref"]["column_style"] == "pirlygenes"
+
+
+def test_pan_cancer_expression_to_tpm_legacy_keyword(monkeypatch):
+    monkeypatch.setattr(expression, "get_data", lambda name: _pan_cancer_fixture())
+    out = expression.pan_cancer_expression(genes=["ENSG00000001"], to_tpm=True)
+
+    assert out["Symbol"].tolist() == ["GENE1"]
+    assert {"liver_nTPM", "LUAD_FPKM", "LUAD_TPM"} <= set(out.columns)
+    assert "LUAD_TPM_clean" not in out.columns
+    assert out["LUAD_TPM"].iloc[0] == pytest.approx(200000.0)
+
+
+def test_pan_cancer_expression_empty_gene_filter_preserves_schema(monkeypatch):
+    monkeypatch.setattr(expression, "get_data", lambda name: _pan_cancer_fixture())
+    empty = expression.pan_cancer_expression(genes=[], normalize="tpm", column_style="pirlygenes")
+    full = expression.pan_cancer_expression(normalize="tpm", column_style="pirlygenes")
+
+    assert empty.empty
+    assert list(empty.columns) == list(full.columns)
+    assert empty.attrs["oncoref"]["dataset"] == "pan-cancer-expression"
+
+
+def test_pan_cancer_expression_bad_column_style(monkeypatch):
+    monkeypatch.setattr(expression, "get_data", lambda name: _pan_cancer_fixture())
+    with pytest.raises(ValueError, match="column_style"):
+        expression.pan_cancer_expression(column_style="source")
 
 
 def test_pan_cancer_expression_accepts_clean_tpm_alias(monkeypatch):
