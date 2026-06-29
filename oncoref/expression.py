@@ -450,6 +450,58 @@ def available_percentile_cohorts(*, proteoform: bool = False, scope: str = "cta"
     return _available_cohorts(_PERCENTILES, proteoform=proteoform, scope=scope)
 
 
+def expression_artifact_gene_universe_deltas(
+    *,
+    product: str | None = None,
+    cancer_type: str | None = None,
+    delta_kind: str | None = None,
+    status: str | None = None,
+) -> pd.DataFrame:
+    """Known row-universe deltas between pirlygenes and oncoref expression artifacts.
+
+    This is a provenance/audit table, not a value-transforming compatibility shim. It
+    records the known remapped, missing, and extra rows from the pirlygenes 5.23.2 vs
+    oncoref 5.23.0 parity run tracked in #191/#193 so downstream migration code can
+    distinguish intentional canonicalization from unresolved artifact differences.
+
+    Optional filters are exact for ``product``, ``delta_kind``, and ``status``.
+    ``cancer_type`` resolves aliases and matches semicolon-separated cohort lists in the
+    table (for deltas shared by PRAD/COAD_MSI/READ_MSI, for example).
+    """
+    df = get_data("expression-artifact-gene-universe-deltas")
+    if product is not None:
+        df = df[df["product"].astype(str) == str(product)]
+    if delta_kind is not None:
+        df = df[df["delta_kind"].astype(str) == str(delta_kind)]
+    if status is not None:
+        df = df[df["status"].astype(str) == str(status)]
+    if cancer_type is not None:
+        code = resolve_cancer_type(cancer_type)
+
+        def _matches(cell: object) -> bool:
+            codes = [c for c in str(cell or "").split(";") if c]
+            return code in codes
+
+        df = df[df["cancer_code"].map(_matches)]
+    df = df.reset_index(drop=True)
+    df.attrs["comparison"] = "pirlygenes_5.23.2_vs_oncoref_5.23.0"
+    df.attrs["issues"] = ["#191", "#193"]
+    return df
+
+
+def expression_artifact_gene_universe_delta_summary() -> pd.DataFrame:
+    """Counts of known expression-artifact row-universe deltas by product/status."""
+    df = expression_artifact_gene_universe_deltas()
+    if df.empty:
+        return pd.DataFrame(columns=["product", "cancer_code", "delta_kind", "status", "n"])
+    return (
+        df.groupby(["product", "cancer_code", "delta_kind", "status"], dropna=False)
+        .size()
+        .rename("n")
+        .reset_index()
+    )
+
+
 _PER_SAMPLE_NORMALIZE = ("tpm_raw", "tpm_clean", "tpm_clean_log1p", "tpm_clean_hk")
 _SAMPLE_QC_MODES = ("all", "pass", "pass_or_warn")
 SAMPLE_EXPRESSION_QC_POLICY_VERSION = "sample_expression_qc_v1"

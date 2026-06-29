@@ -198,6 +198,16 @@ These APIs expose the artifact contract. They do not by themselves rebuild the
 representative/percentile bundles, so row-set and value parity with pirlygenes is
 still governed by the gene-universe and expression-artifact parity issues.
 
+`expression.expression_artifact_gene_universe_deltas()` exposes the known
+pirlygenes/oncoref row-universe deltas from the current parity audit: canonical
+remaps such as legacy `PAXX` to its oncoref ENSG, CLL percentile replacement rows
+that are known but absent from the current output, representative-sample rows
+missing from oncoref, and examples of oncoref-only technical/noncoding rows.
+Use `expression.expression_artifact_gene_universe_delta_summary()` for counts by
+product/cohort/status. This table is intentionally provenance: it makes
+differences explicit for migration code, but does not synthesize missing
+expression rows or alter artifact values.
+
 Clean TPM has one public compartment contract:
 
 - `clean-tpm-censored-genes.csv:category == "ribosomal_protein"` — 16%

@@ -133,6 +133,10 @@ CANCERDATA_ORIGINATED: dict[str, tuple[str, str]] = {
     "proteoform-groups": ("gene-id", "byte-identical CTA proteoform groups"),
     "proteoform-groups-genome": ("gene-id", "byte-identical proteoform groups (genome-wide)"),
     "source-matrices": ("expression", "per-cohort raw-matrix registry (code/source/n_samples)"),
+    "expression-artifact-gene-universe-deltas": (
+        "expression",
+        "known pirlygenes/oncoref expression artifact row-universe deltas",
+    ),
     "tissue-burden-map": ("ontology", "primary_tissue -> anatomic burden category"),
     "family-burden-map": ("ontology", "registry family -> burden category (fallback)"),
     "cta-ihc-unreliable": ("cta", "CTAs whose HPA IHC is cross-reactive (RNA-only fallback)"),

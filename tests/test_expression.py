@@ -36,6 +36,42 @@ def test_available_percentile_cohorts(percentile_cache):
     assert expression.available_percentile_cohorts() == ["PRAD"]
 
 
+def test_expression_artifact_gene_universe_deltas_expose_known_remaps():
+    df = expression.expression_artifact_gene_universe_deltas()
+
+    paxx = df[
+        (df["legacy_ensembl_gene_id"] == "ENSG00000148362")
+        & (df["oncoref_ensembl_gene_id"] == "ENSG00000310560")
+    ]
+    assert not paxx.empty
+    assert set(paxx["symbol"]) == {"PAXX"}
+    assert df.attrs["comparison"] == "pirlygenes_5.23.2_vs_oncoref_5.23.0"
+
+
+def test_expression_artifact_gene_universe_deltas_filter_by_product_and_code():
+    cll = expression.expression_artifact_gene_universe_deltas(
+        product="cohort_gene_percentiles",
+        cancer_type="CLL",
+        delta_kind="pirlygenes_only",
+    )
+
+    assert len(cll) == 11
+    assert set(cll["status"]) == {"canonical_replacement_absent_from_output"}
+    assert "ENSG00000225489" in set(cll["legacy_ensembl_gene_id"])
+
+
+def test_expression_artifact_gene_universe_delta_summary():
+    summary = expression.expression_artifact_gene_universe_delta_summary()
+
+    hit = summary[
+        (summary["product"] == "cohort_gene_percentiles")
+        & (summary["cancer_code"] == "CLL")
+        & (summary["delta_kind"] == "pirlygenes_only")
+        & (summary["status"] == "canonical_replacement_absent_from_output")
+    ]
+    assert hit["n"].iloc[0] == 11
+
+
 def test_cohort_gene_percentiles_as_tpm(percentile_cache):
     df = expression.cohort_gene_percentiles("PRAD", as_tpm=True)
     assert list(df["Symbol"]) == ["TSPAN6", "TNMD"]
