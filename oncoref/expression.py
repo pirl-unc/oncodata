@@ -762,16 +762,21 @@ def cancer_reference_expression(
     The default long form mirrors the downstream reference contract:
     ``Ensembl_Gene_ID``, ``Symbol``, ``cancer_code``, ``source_cohort``,
     ``normalization``, ``expression`` (median clean TPM), ``q1`` and ``q3``.
-    Wide form returns one row per gene with ``<CODE>_TPM_clean`` columns.
+    Wide form returns one row per gene with ``<CODE>_<normalization>`` columns.
+
+    ``normalize`` accepts one mode or an iterable of modes:
+      - ``"tpm_clean"`` / ``"clean_tpm"``: shipped biological clean-TPM percentiles;
+      - ``"tpm_clean_biological"``: explicit alias for that biological-only artifact;
+      - ``"tpm_clean_log1p"``: stored log1p biological clean-TPM percentiles;
+      - ``"tpm_raw"`` / ``"tpm"`` / ``"raw_tpm"``: raw-TPM cohort stats recomputed from
+        the source matrix.
+
+    Raw-TPM mode needs the per-sample source matrix available; pass
+    ``auto_fetch=True`` to download it.
     """
     modes = _reference_normalize_modes(normalize)
     if format not in ("long", "wide"):
         raise ValueError("format must be 'long' or 'wide'")
-    if modes != {"tpm_clean"}:
-        raise ValueError(
-            "cancer_reference_expression currently supports normalize='tpm_clean' "
-            "(alias 'clean_tpm')"
-        )
     available = set(available_percentile_cohorts())
     if cancer_types is None:
         codes = sorted(available)
@@ -782,31 +787,29 @@ def cancer_reference_expression(
     long_parts: list[pd.DataFrame] = []
     wide_parts: list[pd.DataFrame] = []
     for code in codes:
-        pct = cohort_gene_percentiles(code, as_tpm=True, auto_fetch=auto_fetch)
-        pct = pct[_gene_filter_mask(pct, genes)].reset_index(drop=True)
-        if format == "long":
-            part = pct[["Ensembl_Gene_ID", "Symbol", "p25", "p50", "p75"]].copy()
-            part.insert(2, "cancer_code", code)
-            if include_provenance:
-                part.insert(3, "source_cohort", code)
-            part["normalization"] = "tpm_clean"
-            part = part.rename(columns={"p50": "expression", "p25": "q1", "p75": "q3"})
-            cols = ["Ensembl_Gene_ID", "Symbol", "cancer_code"]
-            if include_provenance:
-                cols.append("source_cohort")
-            cols += ["normalization", "expression", "q1", "q3"]
-            long_parts.append(part[cols])
-        else:
-            part = pct[["Ensembl_Gene_ID", "Symbol", "p50"]].rename(
-                columns={"p50": f"{code}_TPM_clean"}
-            )
-            wide_parts.append(part)
+        for mode in modes:
+            ref, method = _reference_expression_frame(code, mode, auto_fetch=auto_fetch)
+            ref = ref[_gene_filter_mask(ref, genes)].reset_index(drop=True)
+            label = _REFERENCE_NORMALIZE_LABELS[mode]
+            if format == "long":
+                part = ref[["Ensembl_Gene_ID", "Symbol", "p25", "p50", "p75"]].copy()
+                part.insert(2, "cancer_code", code)
+                part["normalization"] = label
+                part = part.rename(columns={"p50": "expression", "p25": "q1", "p75": "q3"})
+                if include_provenance:
+                    provenance = _reference_expression_provenance(code, mode, method)
+                    for col, value in provenance.items():
+                        part[col] = value
+                long_parts.append(part[_reference_long_columns(include_provenance)])
+            else:
+                suffix = _REFERENCE_WIDE_SUFFIXES[mode]
+                part = ref[["Ensembl_Gene_ID", "Symbol", "p50"]].rename(
+                    columns={"p50": f"{code}_{suffix}"}
+                )
+                wide_parts.append(part)
 
     if format == "long":
-        cols = ["Ensembl_Gene_ID", "Symbol", "cancer_code"]
-        if include_provenance:
-            cols.append("source_cohort")
-        cols += ["normalization", "expression", "q1", "q3"]
+        cols = _reference_long_columns(include_provenance)
         if not long_parts:
             return pd.DataFrame(columns=cols)
         return pd.concat(long_parts, ignore_index=True)
@@ -816,12 +819,102 @@ def cancer_reference_expression(
     return _merge_cancer_reference_wide_parts(wide_parts)
 
 
-def _reference_normalize_modes(normalize: str | Iterable[str]) -> set[str]:
+_REFERENCE_NORMALIZE_ALIASES = {
+    "clean_tpm": "tpm_clean",
+    "tpm_clean": "tpm_clean",
+    "clean_tpm_biological": "tpm_clean_biological",
+    "tpm_clean_biological": "tpm_clean_biological",
+    "biological_clean_tpm": "tpm_clean_biological",
+    "tpm_clean_log1p": "tpm_clean_log1p",
+    "clean_tpm_log1p": "tpm_clean_log1p",
+    "tpm": "tpm_raw",
+    "raw_tpm": "tpm_raw",
+    "tpm_raw": "tpm_raw",
+}
+
+_REFERENCE_NORMALIZE_LABELS = {
+    "tpm_clean": "tpm_clean",
+    "tpm_clean_biological": "tpm_clean_biological",
+    "tpm_clean_log1p": "tpm_clean_log1p",
+    "tpm_raw": "tpm_raw",
+}
+
+_REFERENCE_WIDE_SUFFIXES = {
+    "tpm_clean": "TPM_clean",
+    "tpm_clean_biological": "TPM_clean_biological",
+    "tpm_clean_log1p": "TPM_clean_log1p",
+    "tpm_raw": "TPM_raw",
+}
+
+_REFERENCE_PROVENANCE_COLUMNS = [
+    "source_cohort",
+    "source_type",
+    "source_unit",
+    "source_scale_class",
+    "linear_tpm_comparable",
+    "reference_method",
+    "data_version",
+    "source_matrix_version",
+]
+
+
+def _reference_normalize_modes(normalize: str | Iterable[str]) -> list[str]:
     if isinstance(normalize, str):
-        modes = {normalize.lower()}
+        requested = [normalize]
     else:
-        modes = {str(mode).lower() for mode in normalize}
-    return {"tpm_clean" if mode == "clean_tpm" else mode for mode in modes}
+        requested = list(normalize)
+    modes: list[str] = []
+    bad: list[str] = []
+    for mode in requested:
+        key = str(mode).lower()
+        resolved = _REFERENCE_NORMALIZE_ALIASES.get(key)
+        if resolved is None:
+            bad.append(str(mode))
+        elif resolved not in modes:
+            modes.append(resolved)
+    if bad:
+        supported = ", ".join(sorted(_REFERENCE_NORMALIZE_ALIASES))
+        raise ValueError(f"unsupported reference normalize mode(s): {bad}; supported: {supported}")
+    return modes
+
+
+def _reference_long_columns(include_provenance: bool) -> list[str]:
+    cols = ["Ensembl_Gene_ID", "Symbol", "cancer_code", "normalization"]
+    if include_provenance:
+        cols += _REFERENCE_PROVENANCE_COLUMNS
+    return [*cols, "expression", "q1", "q3"]
+
+
+def _reference_expression_frame(
+    code: str, mode: str, *, auto_fetch: bool
+) -> tuple[pd.DataFrame, str]:
+    if mode in {"tpm_clean", "tpm_clean_biological"}:
+        return cohort_gene_percentiles(code, as_tpm=True, auto_fetch=auto_fetch), "percentile_shard"
+    if mode == "tpm_clean_log1p":
+        return (
+            cohort_gene_percentiles(code, as_tpm=False, auto_fetch=auto_fetch),
+            "percentile_shard_log1p",
+        )
+    if mode == "tpm_raw":
+        return (
+            cohort_stats(code, normalize="tpm_raw", auto_fetch=auto_fetch, sample_qc="all"),
+            "source_matrix_stats",
+        )
+    raise AssertionError(f"unhandled reference normalize mode: {mode}")
+
+
+def _reference_expression_provenance(code: str, mode: str, method: str) -> dict:
+    meta = _selected_expression_source_metadata(code)
+    return {
+        "source_cohort": meta["source_cohort"] or code,
+        "source_type": meta["source_type"],
+        "source_unit": meta["unit"],
+        "source_scale_class": meta["source_scale_class"],
+        "linear_tpm_comparable": bool(meta["linear_tpm_comparable"]),
+        "reference_method": method,
+        "data_version": DATA_VERSION,
+        "source_matrix_version": SOURCE_MATRIX_VERSION,
+    }
 
 
 def _merge_cancer_reference_wide_parts(parts: list[pd.DataFrame]) -> pd.DataFrame:

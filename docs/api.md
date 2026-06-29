@@ -156,6 +156,25 @@ columns are `<CODE>_FPKM_raw`, deterministic TCGA TPM companions are
 `column_style="pirlygenes"`; the legacy `to_tpm=True` keyword is accepted as a
 compatibility alias for that view and maps the default call to `normalize="tpm"`.
 
+`expression.cancer_reference_expression()` returns cohort-level tumor reference
+expression with stable long or wide output. It accepts canonical cancer codes,
+aliases, and aggregate cohorts, resolves gene filters by ENSG or symbol, and can
+return one or more normalization modes in one call:
+
+- `normalize="tpm_clean"` / `"clean_tpm"` — shipped biological clean-TPM
+  percentiles.
+- `normalize="tpm_clean_biological"` — explicit name for that biological-only
+  reference artifact.
+- `normalize="tpm_clean_log1p"` — stored log1p biological clean-TPM percentiles.
+- `normalize="tpm_raw"` / `"tpm"` — source-matrix raw TPM summaries recomputed
+  through `cohort_stats`.
+
+Long output includes source/provenance columns by default, including source
+cohort, source type/unit, source scale class, reference method, `DATA_VERSION`,
+and `SOURCE_MATRIX_VERSION`. This accessor is the compatibility surface for
+reference-expression reads; expression artifact row-set/value parity is still
+tracked separately in the upstream parity issues.
+
 Clean TPM has one public compartment contract:
 
 - `clean-tpm-censored-genes.csv:category == "ribosomal_protein"` — 16%
