@@ -117,12 +117,14 @@ from .cta import (
     cta_unfiltered_gene_names,
 )
 from .expression import (
+    REFERENCE_EXPRESSION_SCHEMA_VERSION,
     SHARD_DATASETS,
     ShardDataset,
     available_percentile_cohorts,
     available_representative_cohorts,
     available_within_sample_cohorts,
     cancer_reference_expression,
+    cancer_reference_expression_availability,
     cohort_gene_percentiles,
     cohort_mean_expression,
     cohort_stats,
@@ -286,6 +288,7 @@ __all__ = [
     "CANCER_TYPE_NAMES",
     "OTHER_TECHNICAL_FRACTION",
     "PROPORTION_METRICS",
+    "REFERENCE_EXPRESSION_SCHEMA_VERSION",
     "REGIMEN_FALLBACK",
     "REGIMEN_LABELS",
     "RIBOSOMAL_PROTEIN_FRACTION",
@@ -345,6 +348,7 @@ __all__ = [
     "cancer_normal_tissue_map",
     "cancer_ontology",
     "cancer_reference_expression",
+    "cancer_reference_expression_availability",
     "cancer_subtype_group",
     "cancer_subtype_groupings",
     # TMB

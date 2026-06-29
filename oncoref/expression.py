@@ -161,6 +161,7 @@ _WITHIN_SAMPLE = SHARD_DATASETS["within_sample"]
 
 REPRESENTATIVE_ARTIFACT_SCHEMA_VERSION = "representative_expression_v1"
 PERCENTILE_ARTIFACT_SCHEMA_VERSION = "cohort_percentile_expression_v1"
+REFERENCE_EXPRESSION_SCHEMA_VERSION = "cancer_reference_expression_v1"
 REPRESENTATIVE_SELECTION_METHOD = "central_medoid_then_farthest_first"
 REPRESENTATIVE_SELECTION_BASIS = "biological_clean_tpm_log1p_distance"
 
@@ -984,6 +985,8 @@ def cancer_reference_expression(
     *,
     format: str = "long",
     include_provenance: bool = True,
+    include_request_metadata: bool = False,
+    on_missing: str = "omit",
     auto_fetch: bool = False,
 ) -> pd.DataFrame:
     """Observed tumor expression references as cohort-level clean TPM summaries.
@@ -1001,22 +1004,46 @@ def cancer_reference_expression(
         the source matrix.
 
     Raw-TPM mode needs the per-sample source matrix available; pass
-    ``auto_fetch=True`` to download it.
+    ``auto_fetch=True`` to download it. Missing requested cohorts are omitted by
+    default to preserve the historical behavior; pass ``on_missing="empty"`` to
+    preserve a schema-stable empty result with missing-request metadata in
+    ``df.attrs["missing_requests"]`` or ``on_missing="raise"`` to fail when any
+    requested cohort/mode is unavailable.
     """
     modes = _reference_normalize_modes(normalize)
     if format not in ("long", "wide"):
         raise ValueError("format must be 'long' or 'wide'")
-    available = set(available_percentile_cohorts())
-    if cancer_types is None:
-        codes = sorted(available)
-    else:
-        requested = _resolve_cancer_types(cancer_types, expand_aggregates=True) or []
-        codes = [code for code in dict.fromkeys(requested) if code in available]
+    if on_missing not in ("omit", "empty", "raise"):
+        raise ValueError("on_missing must be 'omit', 'empty', or 'raise'")
+    if include_request_metadata and format != "long":
+        raise ValueError("include_request_metadata=True requires format='long'")
+
+    requests = _reference_expression_requests(cancer_types, modes)
+    availability = _reference_expression_availability_for_requests(requests, modes)
+    missing = availability.loc[~availability["available"]].reset_index(drop=True)
+    if on_missing == "raise" and not missing.empty:
+        detail = ", ".join(
+            f"{r.cancer_code}/{r.normalization}: {r.missing_reason}"
+            for r in missing.itertuples(index=False)
+        )
+        raise ValueError(f"missing cancer reference expression artifact(s): {detail}")
+    available_keys = {
+        (str(r.requested_code), str(r.cancer_code), str(r.normalization))
+        for r in availability.loc[availability["available"]].itertuples(index=False)
+    }
+    request_lookup = {
+        (str(r.requested_code), str(r.cancer_code), str(r.normalization)): r
+        for r in availability.loc[availability["available"]].itertuples(index=False)
+    }
 
     long_parts: list[pd.DataFrame] = []
     wide_parts: list[pd.DataFrame] = []
-    for code in codes:
+    for request in requests:
+        code = request["cancer_code"]
         for mode in modes:
+            request_key = (request["requested_code"], code, mode)
+            if request_key not in available_keys:
+                continue
             ref, method = _reference_expression_frame(code, mode, auto_fetch=auto_fetch)
             ref = ref[_gene_filter_mask(ref, genes)].reset_index(drop=True)
             label = _REFERENCE_NORMALIZE_LABELS[mode]
@@ -1024,12 +1051,20 @@ def cancer_reference_expression(
                 part = ref[["Ensembl_Gene_ID", "Symbol", "p25", "p50", "p75"]].copy()
                 part.insert(2, "cancer_code", code)
                 part["normalization"] = label
+                if include_request_metadata:
+                    request_row = request_lookup[request_key]
+                    part["requested_code"] = request_row.requested_code
+                    part["request_kind"] = request_row.request_kind
+                    part["available"] = bool(request_row.available)
+                    part["missing_reason"] = str(request_row.missing_reason)
                 part = part.rename(columns={"p50": "expression", "p25": "q1", "p75": "q3"})
                 if include_provenance:
                     provenance = _reference_expression_provenance(code, mode, method)
                     for col, value in provenance.items():
                         part[col] = value
-                long_parts.append(part[_reference_long_columns(include_provenance)])
+                long_parts.append(
+                    part[_reference_long_columns(include_provenance, include_request_metadata)]
+                )
             else:
                 suffix = _REFERENCE_WIDE_SUFFIXES[mode]
                 part = ref[["Ensembl_Gene_ID", "Symbol", "p50"]].rename(
@@ -1038,14 +1073,36 @@ def cancer_reference_expression(
                 wide_parts.append(part)
 
     if format == "long":
-        cols = _reference_long_columns(include_provenance)
+        cols = _reference_long_columns(include_provenance, include_request_metadata)
         if not long_parts:
-            return pd.DataFrame(columns=cols)
-        return pd.concat(long_parts, ignore_index=True)
+            out = pd.DataFrame(columns=cols)
+        else:
+            out = pd.concat(long_parts, ignore_index=True)
+        _attach_reference_expression_attrs(out, availability if on_missing != "omit" else None)
+        return out
 
     if not wide_parts:
-        return pd.DataFrame(columns=["Ensembl_Gene_ID", "Symbol"])
-    return _merge_cancer_reference_wide_parts(wide_parts)
+        out = pd.DataFrame(columns=["Ensembl_Gene_ID", "Symbol"])
+    else:
+        out = _merge_cancer_reference_wide_parts(wide_parts)
+    _attach_reference_expression_attrs(out, availability if on_missing != "omit" else None)
+    return out
+
+
+def cancer_reference_expression_availability(
+    cancer_types: str | Iterable[str] | None = None,
+    normalize: str | Iterable[str] = "tpm_clean",
+) -> pd.DataFrame:
+    """Availability/provenance table for :func:`cancer_reference_expression`.
+
+    The result is one row per requested cancer code (expanding computed aggregate
+    requests to member cohorts) and normalization mode. It is intentionally
+    gene-independent: use it to decide whether an empty expression frame means an
+    empty gene filter or an unavailable upstream artifact.
+    """
+    modes = _reference_normalize_modes(normalize)
+    requests = _reference_expression_requests(cancer_types, modes)
+    return _reference_expression_availability_for_requests(requests, modes)
 
 
 _REFERENCE_NORMALIZE_ALIASES = {
@@ -1086,6 +1143,137 @@ _REFERENCE_PROVENANCE_COLUMNS = [
     "source_matrix_version",
 ]
 
+_REFERENCE_REQUEST_COLUMNS = [
+    "requested_code",
+    "request_kind",
+    "available",
+    "missing_reason",
+]
+
+
+def _reference_expression_requests(
+    cancer_types: str | Iterable[str] | None, modes: list[str]
+) -> list[dict[str, str]]:
+    """Resolved request rows while preserving aggregate-vs-direct intent."""
+    if cancer_types is None:
+        return [
+            {"requested_code": code, "cancer_code": code, "request_kind": "default_available"}
+            for code in _reference_available_codes_for_modes(modes)
+        ]
+    raw_values = [cancer_types] if isinstance(cancer_types, str) else list(cancer_types)
+    aggregates = cohort_aggregates()
+    rows: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for raw in raw_values:
+        resolved = resolve_cancer_type(raw)
+        members = aggregates.get(str(raw)) or aggregates.get(resolved)
+        if members:
+            expanded = [(member, "aggregate_member") for member in members]
+        else:
+            expanded = [(resolved, "direct")]
+        for code, kind in expanded:
+            key = (resolved, code)
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append({"requested_code": resolved, "cancer_code": code, "request_kind": kind})
+    return rows
+
+
+def _reference_available_codes_for_modes(modes: list[str]) -> list[str]:
+    out: set[str] = set()
+    if any(mode in {"tpm_clean", "tpm_clean_biological", "tpm_clean_log1p"} for mode in modes):
+        out.update(available_percentile_cohorts())
+    if "tpm_raw" in modes:
+        out.update(source_matrices.available_cohorts())
+    return sorted(out)
+
+
+def _reference_expression_availability_for_requests(
+    requests: list[dict[str, str]], modes: list[str]
+) -> pd.DataFrame:
+    percentile_available = set(available_percentile_cohorts())
+    source_matrix_available = set(source_matrices.available_cohorts())
+    rows: list[dict] = []
+    for request in requests:
+        code = request["cancer_code"]
+        for mode in modes:
+            available, missing_reason = _reference_mode_availability(
+                code, mode, percentile_available, source_matrix_available
+            )
+            method = _reference_expected_method(mode)
+            row = {
+                "requested_code": request["requested_code"],
+                "cancer_code": code,
+                "request_kind": request["request_kind"],
+                "normalization": _REFERENCE_NORMALIZE_LABELS[mode],
+                "available": bool(available),
+                "missing_reason": "" if available else missing_reason,
+                "reference_method": method,
+                "artifact_schema_version": REFERENCE_EXPRESSION_SCHEMA_VERSION,
+                "data_version": DATA_VERSION,
+                "source_matrix_version": SOURCE_MATRIX_VERSION,
+            }
+            row.update(_reference_expression_provenance(code, mode, method))
+            rows.append(row)
+    columns = [
+        "requested_code",
+        "cancer_code",
+        "request_kind",
+        "normalization",
+        "available",
+        "missing_reason",
+        "source_cohort",
+        "source_type",
+        "source_unit",
+        "source_scale_class",
+        "linear_tpm_comparable",
+        "reference_method",
+        "artifact_schema_version",
+        "data_version",
+        "source_matrix_version",
+    ]
+    out = pd.DataFrame(rows, columns=columns)
+    out.attrs["artifact_schema_version"] = REFERENCE_EXPRESSION_SCHEMA_VERSION
+    out.attrs["data_version"] = DATA_VERSION
+    out.attrs["source_matrix_version"] = SOURCE_MATRIX_VERSION
+    out.attrs["issues"] = ["#207"]
+    return out
+
+
+def _reference_mode_availability(
+    code: str,
+    mode: str,
+    percentile_available: set[str],
+    source_matrix_available: set[str],
+) -> tuple[bool, str]:
+    if mode in {"tpm_clean", "tpm_clean_biological", "tpm_clean_log1p"}:
+        return (True, "") if code in percentile_available else (False, "no_percentile_artifact")
+    if mode == "tpm_raw":
+        return (True, "") if code in source_matrix_available else (False, "no_source_matrix")
+    raise AssertionError(f"unhandled reference normalize mode: {mode}")
+
+
+def _reference_expected_method(mode: str) -> str:
+    if mode in {"tpm_clean", "tpm_clean_biological"}:
+        return "percentile_shard"
+    if mode == "tpm_clean_log1p":
+        return "percentile_shard_log1p"
+    if mode == "tpm_raw":
+        return "source_matrix_stats"
+    raise AssertionError(f"unhandled reference normalize mode: {mode}")
+
+
+def _attach_reference_expression_attrs(df: pd.DataFrame, availability: pd.DataFrame | None) -> None:
+    df.attrs["artifact_schema_version"] = REFERENCE_EXPRESSION_SCHEMA_VERSION
+    df.attrs["data_version"] = DATA_VERSION
+    df.attrs["source_matrix_version"] = SOURCE_MATRIX_VERSION
+    if availability is None:
+        return
+    missing = availability.loc[~availability["available"]]
+    df.attrs["availability"] = availability.to_dict("records")
+    df.attrs["missing_requests"] = missing.to_dict("records")
+
 
 def _reference_normalize_modes(normalize: str | Iterable[str]) -> list[str]:
     if isinstance(normalize, str):
@@ -1107,8 +1295,10 @@ def _reference_normalize_modes(normalize: str | Iterable[str]) -> list[str]:
     return modes
 
 
-def _reference_long_columns(include_provenance: bool) -> list[str]:
+def _reference_long_columns(include_provenance: bool, include_request_metadata: bool) -> list[str]:
     cols = ["Ensembl_Gene_ID", "Symbol", "cancer_code", "normalization"]
+    if include_request_metadata:
+        cols += _REFERENCE_REQUEST_COLUMNS
     if include_provenance:
         cols += _REFERENCE_PROVENANCE_COLUMNS
     return [*cols, "expression", "q1", "q3"]

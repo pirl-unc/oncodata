@@ -903,6 +903,93 @@ def test_cancer_reference_expression_multiple_normalizations(monkeypatch):
     assert wide.loc[0, "X_TPM_clean_log1p"] == pytest.approx(np.log1p(3.0))
 
 
+def test_cancer_reference_expression_availability_reports_missing(monkeypatch):
+    monkeypatch.setattr(expression, "available_percentile_cohorts", lambda: ["X"])
+    monkeypatch.setattr(expression.source_matrices, "available_cohorts", lambda: ["Y"])
+    monkeypatch.setattr(expression, "resolve_cancer_type", lambda code: str(code).upper())
+
+    out = expression.cancer_reference_expression_availability(
+        ["x", "z"], normalize=["tpm_clean", "tpm_raw"]
+    )
+
+    assert list(out.columns) == [
+        "requested_code",
+        "cancer_code",
+        "request_kind",
+        "normalization",
+        "available",
+        "missing_reason",
+        "source_cohort",
+        "source_type",
+        "source_unit",
+        "source_scale_class",
+        "linear_tpm_comparable",
+        "reference_method",
+        "artifact_schema_version",
+        "data_version",
+        "source_matrix_version",
+    ]
+    assert out.attrs["artifact_schema_version"] == expression.REFERENCE_EXPRESSION_SCHEMA_VERSION
+    keyed = out.set_index(["cancer_code", "normalization"])
+    assert bool(keyed.loc[("X", "tpm_clean"), "available"]) is True
+    assert keyed.loc[("X", "tpm_raw"), "missing_reason"] == "no_source_matrix"
+    assert keyed.loc[("Z", "tpm_clean"), "missing_reason"] == "no_percentile_artifact"
+
+
+def test_cancer_reference_expression_missing_empty_and_raise(monkeypatch):
+    monkeypatch.setattr(expression, "available_percentile_cohorts", lambda: ["X"])
+    monkeypatch.setattr(expression.source_matrices, "available_cohorts", lambda: [])
+    monkeypatch.setattr(expression, "resolve_cancer_type", lambda code: str(code).upper())
+
+    empty = expression.cancer_reference_expression("z", on_missing="empty")
+    assert empty.empty
+    assert list(empty.columns) == [
+        "Ensembl_Gene_ID",
+        "Symbol",
+        "cancer_code",
+        "normalization",
+        "source_cohort",
+        "source_type",
+        "source_unit",
+        "source_scale_class",
+        "linear_tpm_comparable",
+        "reference_method",
+        "data_version",
+        "source_matrix_version",
+        "expression",
+        "q1",
+        "q3",
+    ]
+    assert empty.attrs["missing_requests"][0]["cancer_code"] == "Z"
+    assert empty.attrs["missing_requests"][0]["missing_reason"] == "no_percentile_artifact"
+    with pytest.raises(ValueError, match="Z/tpm_clean: no_percentile_artifact"):
+        expression.cancer_reference_expression("z", on_missing="raise")
+
+
+def test_cancer_reference_expression_request_metadata_for_aggregate(monkeypatch):
+    pct = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["E1"],
+            "Symbol": ["A"],
+            "p25": [1.0],
+            "p50": [3.0],
+            "p75": [5.0],
+        }
+    )
+    monkeypatch.setattr(expression, "available_percentile_cohorts", lambda: ["X", "Y"])
+    monkeypatch.setattr(expression, "cohort_aggregates", lambda: {"AGG": ["X", "Y"]})
+    monkeypatch.setattr(expression, "resolve_cancer_type", lambda code: str(code).upper())
+    monkeypatch.setattr(expression, "cohort_gene_percentiles", lambda *a, **k: pct.copy())
+
+    out = expression.cancer_reference_expression("agg", include_request_metadata=True)
+
+    assert out["requested_code"].tolist() == ["AGG", "AGG"]
+    assert out["cancer_code"].tolist() == ["X", "Y"]
+    assert out["request_kind"].tolist() == ["aggregate_member", "aggregate_member"]
+    assert out["available"].tolist() == [True, True]
+    assert out["missing_reason"].tolist() == ["", ""]
+
+
 def test_cancer_reference_expression_raw_tpm_uses_source_stats(monkeypatch):
     stats = pd.DataFrame(
         {
@@ -915,6 +1002,7 @@ def test_cancer_reference_expression_raw_tpm_uses_source_stats(monkeypatch):
     )
     seen = {}
     monkeypatch.setattr(expression, "available_percentile_cohorts", lambda: ["X"])
+    monkeypatch.setattr(expression.source_matrices, "available_cohorts", lambda: ["X"])
     monkeypatch.setattr(expression, "resolve_cancer_type", lambda code: str(code).upper())
     monkeypatch.setattr(
         expression,

@@ -178,6 +178,18 @@ and `SOURCE_MATRIX_VERSION`. This accessor is the compatibility surface for
 reference-expression reads; expression artifact row-set/value parity is still
 tracked separately in the upstream parity issues.
 
+Use `expression.cancer_reference_expression_availability()` before delegating a
+downstream reference-expression accessor that must distinguish unavailable
+oncoref artifacts from empty gene filters. It returns one row per requested
+code/mode with `requested_code`, expanded `cancer_code`, `request_kind`,
+`available`, `missing_reason`, provenance fields, and the reference-expression
+schema/data versions. `expression.cancer_reference_expression(...,
+on_missing="empty")` returns a schema-stable empty frame and stores the same
+missing rows in `df.attrs["missing_requests"]`; `on_missing="raise"` fails fast
+for required cohorts. `include_request_metadata=True` adds request/availability
+columns to long expression output, which is useful when a requested aggregate
+expands to child expression cohorts.
+
 Representative and percentile artifact readers have explicit downstream-facing
 contracts:
 
