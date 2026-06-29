@@ -139,7 +139,10 @@ antigen_coverage.greedy_antigen_coverage("LUAD", gene_ids={"ENSG00000141510"})
   missing-vs-non-parsing numeric diagnostics, and canonical ENSG aggregation in
   linear expression space. Use these in builders before committing a source
   matrix so unresolved high-expression rows and duplicate canonical IDs are
-  explicit artifacts rather than hidden cleanup.
+  explicit artifacts rather than hidden cleanup. Source audit CSV contracts are
+  versioned by `SOURCE_GENE_MAPPING_AUDIT_SCHEMA_VERSION` and
+  `SOURCE_VALUE_PARSE_DIAGNOSTIC_SCHEMA_VERSION`, and the emitted audit frames
+  include those versions as persisted columns.
 - `oncoref.normalization` — TPM conversion, clean TPM, technical-RNA filtering,
   log transforms, percentile ranks, and housekeeping normalization.
 
