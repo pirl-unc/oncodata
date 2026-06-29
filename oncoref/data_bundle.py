@@ -55,7 +55,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from .version import DATA_VERSION
+from .version import DATA_VERSION, SOURCE_MATRIX_VERSION, __version__
 
 
 def _release_url(repo: str, filename: str) -> str:
@@ -108,6 +108,7 @@ RELEASE_URLS: tuple[str, ...] = tuple(source["url"] for source in RELEASE_SOURCE
 CACHE_COMPLETE_FILENAME = ".oncoref-bundle-complete.json"
 CACHE_MANIFEST_VERSION = 1
 BUNDLE_MANIFEST_VERSION = 1
+BUNDLE_CONTRACT_VERSION = 1
 
 
 class BundleIntegrityError(RuntimeError):
@@ -387,6 +388,42 @@ def find(relative_path: str) -> Path | None:
     return candidate if candidate.exists() else None
 
 
+def bundle_contract() -> dict:
+    """Stable downstream contract for the active expression data bundle.
+
+    This is the single lightweight object a downstream package can inspect to
+    know which package/data/source-matrix versions belong together, which release
+    assets should exist, which cache override variables are honored, and which
+    artifact paths make up a complete bundle.
+    """
+    sources = [
+        {
+            "name": source["name"],
+            "repo": source["repo"],
+            "tarball_filename": source["tarball_filename"],
+            "release_url": source["url"],
+            "manifest_url": source["manifest_url"],
+            "checksum_url": source["checksum_url"],
+            "require_integrity": bool(source["require_integrity"]),
+        }
+        for source in RELEASE_SOURCES
+    ]
+    return {
+        "contract_version": BUNDLE_CONTRACT_VERSION,
+        "package_version": __version__,
+        "data_version": DATA_VERSION,
+        "source_matrix_version": SOURCE_MATRIX_VERSION,
+        "cache_dir_env_var": CACHE_DIR_ENV_VAR,
+        "legacy_cache_dir_env_var": LEGACY_CACHE_DIR_ENV_VAR,
+        "cache_complete_filename": CACHE_COMPLETE_FILENAME,
+        "cache_manifest_version": CACHE_MANIFEST_VERSION,
+        "bundle_manifest_version": BUNDLE_MANIFEST_VERSION,
+        "downloadable_paths": list(DOWNLOADABLE_PATHS),
+        "release_sources": sources,
+        "primary_release_source": sources[0],
+    }
+
+
 def _download_and_extract(
     url: str,
     root: Path,
@@ -539,8 +576,12 @@ def status() -> dict:
     for p, item in items.items():
         item["path"] = str(root / p)
     marker = _read_completion_marker(root)
+    contract = bundle_contract()
     return {
+        "contract_version": contract["contract_version"],
+        "package_version": __version__,
         "data_version": DATA_VERSION,
+        "source_matrix_version": SOURCE_MATRIX_VERSION,
         "cache_dir": str(root),
         "release_url": RELEASE_URL,
         "release_urls": list(RELEASE_URLS),
@@ -555,6 +596,7 @@ def status() -> dict:
         },
         "items": items,
         "all_local": is_local(),
+        "contract": contract,
     }
 
 
@@ -658,6 +700,7 @@ def prune_cache(*, keep_current: bool = True, dry_run: bool = False) -> list[dic
 
 
 __all__ = [
+    "BUNDLE_CONTRACT_VERSION",
     "BUNDLE_MANIFEST_VERSION",
     "CACHE_COMPLETE_FILENAME",
     "CHECKSUM_FILENAME",
@@ -678,6 +721,7 @@ __all__ = [
     "RELEASE_URLS",
     "TARBALL_FILENAME",
     "BundleIntegrityError",
+    "bundle_contract",
     "cache_dir",
     "cache_root",
     "ensure_local",
