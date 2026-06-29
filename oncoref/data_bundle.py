@@ -263,6 +263,27 @@ def _validate_release_manifest(manifest: dict, source: dict, *, manifest_url: st
         raise BundleIntegrityError(
             f"{manifest_url} downloadable_paths do not match this oncoref build"
         )
+    manifest_source_matrix_version = manifest.get("source_matrix_version")
+    if (
+        manifest_source_matrix_version is not None
+        and str(manifest_source_matrix_version) != SOURCE_MATRIX_VERSION
+    ):
+        raise BundleIntegrityError(
+            f"{manifest_url} is for source_matrix_version {manifest_source_matrix_version!r}, "
+            f"expected {SOURCE_MATRIX_VERSION!r}"
+        )
+    inventory = manifest.get("inventory")
+    if inventory is not None:
+        if not isinstance(inventory, dict):
+            raise BundleIntegrityError(f"{manifest_url} inventory must be an object")
+        missing_inventory = [
+            path for path in DOWNLOADABLE_PATHS if not isinstance(inventory.get(path), dict)
+        ]
+        if missing_inventory:
+            raise BundleIntegrityError(
+                f"{manifest_url} inventory lacks required bundle paths: "
+                + ", ".join(missing_inventory)
+            )
     normalized = {
         "manifest_version": manifest.get("manifest_version", BUNDLE_MANIFEST_VERSION),
         "data_version": DATA_VERSION,
@@ -277,6 +298,23 @@ def _validate_release_manifest(manifest: dict, source: dict, *, manifest_url: st
             "downloadable_paths": list(DOWNLOADABLE_PATHS),
         },
     }
+    if isinstance(inventory, dict):
+        normalized["inventory"] = {
+            path: inventory.get(path)
+            for path in DOWNLOADABLE_PATHS
+            if isinstance(inventory.get(path), dict)
+        }
+    for key in (
+        "builder",
+        "builder_commit",
+        "created_at",
+        "source_matrix_version",
+        "sample_qc_policy",
+        "source_matrix_sample_qc",
+        "artifact_build_metadata",
+    ):
+        if key in manifest:
+            normalized[key] = manifest[key]
     return normalized
 
 
@@ -422,6 +460,23 @@ def bundle_contract() -> dict:
         "release_sources": sources,
         "primary_release_source": sources[0],
     }
+
+
+def bundle_release_manifest(source: str = "oncoref") -> dict | None:
+    """Fetch and validate the small release manifest/checksum for ``DATA_VERSION``.
+
+    This is a metadata-only inspection helper for downstream packages that need to
+    decide whether the active data version has a published, checksum-anchored bundle
+    before downloading hundreds of MB. The returned manifest includes the tarball
+    sha256 and any release-side artifact inventory / builder metadata present in
+    the release asset. The transitional ``pirlygenes`` source can return ``None`` if
+    no manifest/checksum exists because it is explicitly not the integrity authority.
+    """
+    source_record = next((s for s in RELEASE_SOURCES if s["name"] == source), None)
+    if source_record is None:
+        supported = ", ".join(s["name"] for s in RELEASE_SOURCES)
+        raise ValueError(f"unknown bundle release source {source!r}; supported: {supported}")
+    return _fetch_release_manifest(source_record)
 
 
 def _download_and_extract(
@@ -722,6 +777,7 @@ __all__ = [
     "TARBALL_FILENAME",
     "BundleIntegrityError",
     "bundle_contract",
+    "bundle_release_manifest",
     "cache_dir",
     "cache_root",
     "ensure_local",

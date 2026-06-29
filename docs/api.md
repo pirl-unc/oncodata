@@ -274,7 +274,11 @@ but it is not the clean-TPM biological denominator.
 - `oncoref.data_bundle` — heavy expression bundle cache. Use
   `data_bundle.bundle_contract()` to inspect the downstream-stable package/data
   version linkage, release asset URLs, cache environment variables, completion
-  marker policy, and expected artifact inventory for the active bundle.
+  marker policy, and expected artifact inventory for the active bundle. Use
+  `data_bundle.bundle_release_manifest()` to fetch and validate only the small
+  release manifest/checksum for the active `DATA_VERSION`, including tarball
+  sha256 plus any artifact inventory, builder commit, source-matrix version, and
+  sample-QC policy metadata published with the release.
 - `oncoref.reference_data` / `oncoref.hpa` — HPA reference-data cache and HPA
   tissue/cell-type accessors.
 

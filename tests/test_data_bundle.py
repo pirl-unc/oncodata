@@ -112,6 +112,13 @@ def _release_manifest(tar_path):
             "sha256": hashlib.sha256(tar_path.read_bytes()).hexdigest(),
             "downloadable_paths": list(data_bundle.DOWNLOADABLE_PATHS),
         },
+        "builder_commit": "abc123",
+        "source_matrix_version": SOURCE_MATRIX_VERSION,
+        "sample_qc_policy": "pass",
+        "inventory": {
+            path: {"path": path, "file_count": 1, "size_bytes": 10}
+            for path in data_bundle.DOWNLOADABLE_PATHS
+        },
     }
 
 
@@ -137,6 +144,71 @@ def test_fetch_release_manifest_accepts_sha256_sidecar(monkeypatch):
     manifest = data_bundle._fetch_release_manifest(data_bundle.RELEASE_SOURCES[0])
     assert manifest["tarball"]["sha256"] == sha
     assert manifest["tarball"]["filename"] == data_bundle.TARBALL_FILENAME
+
+
+def test_bundle_release_manifest_preserves_inventory_and_build_metadata(monkeypatch, tmp_path):
+    src = tmp_path / "src"
+    _write_bundle_fixture(src)
+    tar_path = _bundle_tarball(tmp_path, src)
+    release_manifest = _release_manifest(tar_path)
+
+    def fake_read_url_text(url):
+        if url == data_bundle.RELEASE_MANIFEST_URL:
+            return data_bundle.json.dumps(release_manifest)
+        raise AssertionError(url)
+
+    monkeypatch.setattr(data_bundle, "_read_url_text", fake_read_url_text)
+
+    manifest = data_bundle.bundle_release_manifest()
+
+    assert manifest["source"] == "oncoref"
+    assert manifest["tarball"]["sha256"] == release_manifest["tarball"]["sha256"]
+    assert manifest["builder_commit"] == "abc123"
+    assert manifest["source_matrix_version"] == SOURCE_MATRIX_VERSION
+    assert manifest["sample_qc_policy"] == "pass"
+    assert set(manifest["inventory"]) == set(data_bundle.DOWNLOADABLE_PATHS)
+    assert manifest["inventory"]["pan-cancer-expression.csv"]["file_count"] == 1
+
+
+def test_bundle_release_manifest_source_validation_and_legacy_absence(monkeypatch):
+    with pytest.raises(ValueError, match="unknown bundle release source"):
+        data_bundle.bundle_release_manifest("other")
+
+    def fake_read_url_text(url):
+        raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+
+    monkeypatch.setattr(data_bundle, "_read_url_text", fake_read_url_text)
+
+    assert data_bundle.bundle_release_manifest("pirlygenes") is None
+    with pytest.raises(data_bundle.BundleIntegrityError, match="missing release manifest"):
+        data_bundle.bundle_release_manifest("oncoref")
+
+
+def test_release_manifest_rejects_partial_inventory_and_source_version_mismatch(tmp_path):
+    src = tmp_path / "src"
+    _write_bundle_fixture(src)
+    tar_path = _bundle_tarball(tmp_path, src)
+    manifest = _release_manifest(tar_path)
+
+    partial = dict(manifest)
+    partial["inventory"] = {
+        "pan-cancer-expression.csv": manifest["inventory"]["pan-cancer-expression.csv"]
+    }
+    with pytest.raises(data_bundle.BundleIntegrityError, match="inventory lacks required"):
+        data_bundle._validate_release_manifest(
+            partial,
+            data_bundle.RELEASE_SOURCES[0],
+            manifest_url=data_bundle.RELEASE_MANIFEST_URL,
+        )
+
+    mismatch = dict(manifest)
+    mismatch["source_matrix_version"] = "old"
+    with pytest.raises(data_bundle.BundleIntegrityError, match="source_matrix_version"):
+        data_bundle._validate_release_manifest(
+            mismatch,
+            data_bundle.RELEASE_SOURCES[0],
+            manifest_url=data_bundle.RELEASE_MANIFEST_URL,
+        )
 
 
 def test_is_local_requires_nonempty_dirs(monkeypatch, tmp_path):
