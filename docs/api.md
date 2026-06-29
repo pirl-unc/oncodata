@@ -132,7 +132,10 @@ antigen_coverage.greedy_antigen_coverage("LUAD", gene_ids={"ENSG00000141510"})
   sample-QC policy to derived shards by default (`--sample-qc pass`) and emits
   `source-matrix-sample-qc.csv` plus `expression-artifact-build-metadata.*` in
   the staging directory so bundle releases can record which source samples fed
-  percentiles, representatives, and within-sample summaries.
+  percentiles, representatives, and within-sample summaries. Representative
+  sample selection uses `representative_sample_columns` / `cohort_medoids` on the
+  biological clean-TPM view, then stores the selected samples' full
+  clean_tpm_16_9_75 vectors.
 - `oncoref.expression_engine` — reusable low-level builder primitives for
   expression tables: identity/value column detection, transcript-to-gene
   aggregation, source row ID-type detection, source gene-row mapping audits,
@@ -197,6 +200,9 @@ contracts:
   include_provenance=True)` includes the representative id, source cohort/project,
   source sample id, cohort sample count, deterministic selection rank/method/basis,
   artifact schema version, `DATA_VERSION`, and `SOURCE_MATRIX_VERSION`.
+  Representatives are selected by central-medoid plus farthest-first traversal in
+  log1p biological clean-TPM space, with stable sample-id tie-breaking; the
+  persisted vectors remain full clean_tpm_16_9_75.
 - `expression.cohort_gene_percentiles(..., include_provenance=True)` appends the
   cohort code, normalization, expression unit, percentile basis, artifact schema
   version, `DATA_VERSION`, and `SOURCE_MATRIX_VERSION`.

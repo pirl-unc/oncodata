@@ -280,12 +280,63 @@ def cohort_percentile_vectors(
     return out
 
 
+def representative_sample_columns(
+    selection_df: pd.DataFrame,
+    sample_cols: Iterable[str] | None = None,
+    *,
+    k: int = 5,
+    distance_log1p: bool = True,
+) -> list[str]:
+    """Choose representative sample columns from a selection matrix.
+
+    ``selection_df`` defines only the geometry used for picking samples. For the
+    shipped oncoref representative artifacts this is the biological clean-TPM
+    matrix with ribosomal/technical rows removed, so technical composition cannot
+    choose the medoids. Values can then be copied from a separate full clean-TPM
+    matrix with the same sample columns.
+
+    Ties are resolved by lexicographic sample id order, making the result stable
+    even when an input parquet happens to carry columns in a different order.
+    """
+    cols = list(sample_cols) if sample_cols is not None else sample_columns(selection_df)
+    missing = [c for c in cols if c not in selection_df.columns]
+    if missing:
+        raise ValueError(f"selection matrix is missing sample columns: {missing}")
+    if not cols:
+        raise ValueError("no per-sample columns to choose from")
+
+    ordered = sorted(cols, key=str)
+    if len(ordered) <= k:
+        return ordered
+
+    mat = selection_df[ordered].to_numpy(dtype=float).T  # samples x genes
+    if distance_log1p:
+        mat = np.log1p(mat)
+    mat = np.nan_to_num(mat, nan=0.0)
+
+    # Pairwise squared Euclidean via the ||a-b||^2 = ||a||^2 + ||b||^2 - 2a.b
+    # identity (avoids materializing an n x n x g intermediate).
+    gram = mat @ mat.T
+    sq_norms = np.diag(gram)
+    sq = sq_norms[:, None] + sq_norms[None, :] - 2.0 * gram
+    dist = np.sqrt(np.maximum(sq, 0.0))
+
+    selected = [int(np.argmin(dist.sum(axis=1)))]  # central medoid
+    while len(selected) < k:
+        min_to_selected = dist[:, selected].min(axis=1)
+        min_to_selected[selected] = -np.inf  # never re-pick
+        selected.append(int(np.argmax(min_to_selected)))
+
+    return [ordered[i] for i in selected]
+
+
 def cohort_medoids(
     df: pd.DataFrame,
     sample_cols: Iterable[str] | None = None,
     *,
     k: int = 5,
     distance_log1p: bool = True,
+    selection_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Pick ``k`` representative real per-sample vectors spanning a cohort.
 
@@ -298,37 +349,25 @@ def cohort_medoids(
     within-cohort variation rather than clustering them near the center.
 
     Distance is computed on ``log1p`` TPM (``distance_log1p=True``) so a few
-    very-high-TPM genes don't dominate the geometry, but the returned values are
-    the **original** TPM (the artifact ships clean TPM; the reader optionally
-    ``log1p``-transforms). Cohorts with ``≤ k`` samples keep all of them, in
-    input order. Returns ``Ensembl_Gene_ID``, ``Symbol`` and the ``k`` selected
-    sample columns (original names), medoid first.
+    very-high-TPM genes don't dominate the geometry. If ``selection_df`` is
+    provided, it supplies the geometry while returned values still come from
+    ``df``; this is how the build pipeline selects on biological clean TPM but
+    stores full clean_tpm_16_9_75 vectors. Cohorts with ``≤ k`` samples keep all
+    of them in stable sample id order. Returns ``Ensembl_Gene_ID``, ``Symbol`` and
+    the selected sample columns (original names), medoid first.
     """
     cols = list(sample_cols) if sample_cols is not None else sample_columns(df)
+    missing = [c for c in cols if c not in df.columns]
+    if missing:
+        raise ValueError(f"value matrix is missing sample columns: {missing}")
     if not cols:
         raise ValueError("no per-sample columns to choose from")
     base = ["Ensembl_Gene_ID", "Symbol"]
 
-    if len(cols) <= k:
-        return df[base + cols].reset_index(drop=True)
-
-    mat = df[cols].to_numpy(dtype=float).T  # samples × genes
-    if distance_log1p:
-        mat = np.log1p(mat)
-    mat = np.nan_to_num(mat, nan=0.0)
-
-    # Pairwise squared Euclidean via the ||a-b||^2 = ||a||^2 + ||b||^2 - 2a·b
-    # identity (avoids materializing an n×n×g intermediate).
-    gram = mat @ mat.T
-    sq_norms = np.diag(gram)
-    sq = sq_norms[:, None] + sq_norms[None, :] - 2.0 * gram
-    dist = np.sqrt(np.maximum(sq, 0.0))
-
-    selected = [int(np.argmin(dist.sum(axis=1)))]  # central medoid
-    while len(selected) < k:
-        min_to_selected = dist[:, selected].min(axis=1)
-        min_to_selected[selected] = -np.inf  # never re-pick
-        selected.append(int(np.argmax(min_to_selected)))
-
-    keep = [cols[i] for i in selected]
+    keep = representative_sample_columns(
+        selection_df if selection_df is not None else df,
+        sample_cols=cols,
+        k=k,
+        distance_log1p=distance_log1p,
+    )
     return df[base + keep].reset_index(drop=True)

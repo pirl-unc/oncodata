@@ -109,6 +109,12 @@ def test_medoids_small_cohort_keeps_all():
     assert [c for c in out.columns if c not in ("Ensembl_Gene_ID", "Symbol")] == ["s1", "s2"]
 
 
+def test_medoids_small_cohort_uses_stable_sample_id_order():
+    vals = np.array([[2.0, 1.0]])
+    out = expression_builders.cohort_medoids(_matrix(["A"], ["s2", "s1"], vals), k=5)
+    assert [c for c in out.columns if c not in ("Ensembl_Gene_ID", "Symbol")] == ["s1", "s2"]
+
+
 def test_medoids_central_first_then_outlier():
     # 4 near-identical "typical" samples + 1 far outlier. The medoid (pick 1)
     # must come from the dense cluster; the farthest pick (2) must be the outlier.
@@ -130,6 +136,32 @@ def test_medoids_preserve_original_tpm():
     out = expression_builders.cohort_medoids(_matrix(["A"], ["s1", "s2", "s3"], vals), k=3)
     kept = out[[c for c in out.columns if c not in ("Ensembl_Gene_ID", "Symbol")]].to_numpy()
     assert set(kept.ravel()) == {7.0, 8.0, 9.0}
+
+
+def test_medoids_can_select_on_biological_view_but_return_full_values():
+    full = _matrix(
+        ["BIO", "TECH"],
+        ["s3", "s1", "s2"],
+        np.array(
+            [
+                [10.0, 0.0, 5.0],
+                [1000.0, 1000.0, 0.0],
+            ]
+        ),
+    )
+    biological = full[full["Ensembl_Gene_ID"] == "BIO"].reset_index(drop=True)
+
+    out = expression_builders.cohort_medoids(
+        full,
+        sample_cols=["s3", "s1", "s2"],
+        k=1,
+        selection_df=biological,
+    )
+
+    rep_cols = [c for c in out.columns if c not in ("Ensembl_Gene_ID", "Symbol")]
+    assert rep_cols == ["s2"]
+    assert list(out["Ensembl_Gene_ID"]) == ["BIO", "TECH"]
+    assert out.set_index("Ensembl_Gene_ID").loc["TECH", "s2"] == 0.0
 
 
 def test_medoids_deterministic():
@@ -215,6 +247,37 @@ def test_representatives_generator_writes_shards_and_provenance(tmp_path):
     assert (prov["source_cohort"] == "COHORT_A").all()
 
 
+def test_representatives_generator_selects_on_biological_view(tmp_path, monkeypatch):
+    gen = _load_script("generate_representatives")
+    inp = tmp_path / "in"
+    inp.mkdir()
+    _write_cohort(
+        inp,
+        "COHORT_A",
+        ["BIO", "TECH"],
+        ["sample_a", "sample_b"],
+        np.array([[5.0, 10.0], [1000.0, 0.0]]),
+    )
+    monkeypatch.setattr(gen, "clean_tpm_censored_gene_ids", lambda: {"TECH"})
+    seen = {}
+
+    def fake_medoids(df, sample_cols, *, k, selection_df):
+        seen["value_ids"] = df["Ensembl_Gene_ID"].tolist()
+        seen["selection_ids"] = selection_df["Ensembl_Gene_ID"].tolist()
+        seen["sample_cols"] = list(sample_cols)
+        return df[["Ensembl_Gene_ID", "Symbol", sample_cols[0]]].copy()
+
+    monkeypatch.setattr(gen, "cohort_medoids", fake_medoids)
+
+    gen.build(inp, k=1, out_dir=tmp_path / "out")
+
+    assert seen == {
+        "value_ids": ["BIO", "TECH"],
+        "selection_ids": ["BIO"],
+        "sample_cols": ["sample_a", "sample_b"],
+    }
+
+
 def _write_rebuild_inputs(tmp_path):
     cache = tmp_path / "cache"
     ref = tmp_path / "ref"
@@ -293,6 +356,62 @@ def test_rebuild_expression_artifacts_defaults_to_qc_passing_samples(tmp_path, m
     assert metadata["sample_qc_manifest"] == "source-matrix-sample-qc.csv"
     assert metadata["n_source_samples"] == 3
     assert metadata["n_cohort_samples"] == 1
+
+
+def test_rebuild_expression_artifacts_selects_representatives_on_biological_view(
+    tmp_path, monkeypatch
+):
+    gen = _load_script("rebuild_expression_artifacts")
+    cache = tmp_path / "cache"
+    ref = tmp_path / "ref"
+    source_dir = cache / "TEST_SOURCE" / "derived"
+    source_dir.mkdir(parents=True)
+    ref.mkdir()
+    _matrix(
+        ["BIO", "TECH"],
+        ["sample_a", "sample_b"],
+        np.array([[5.0, 10.0], [1000.0, 0.0]]),
+    ).to_parquet(source_dir / "X_per_sample_tpm.parquet", index=False)
+    _write_cohort(ref, "X", ["BIO"], ["reference"], np.array([[1.0]]))
+
+    monkeypatch.setattr(
+        gen,
+        "source_registry",
+        lambda: pd.DataFrame({"cancer_code": ["X"], "source_cohort": ["TEST_SOURCE"]}),
+    )
+    monkeypatch.setattr(gen, "cohort_source_version", lambda code: "test-source-version")
+    monkeypatch.setattr(
+        gen,
+        "sample_expression_qc_from_matrix",
+        lambda raw, cancer_type: pd.DataFrame(
+            {
+                "cancer_code": [cancer_type, cancer_type],
+                "sample_id": ["sample_a", "sample_b"],
+                "sample_qc_status": ["pass", "pass"],
+                "sample_qc_reasons": ["", ""],
+            }
+        ),
+    )
+    monkeypatch.setattr(gen, "clean_tpm", lambda values, gene_table: values.copy())
+    monkeypatch.setattr(gen, "clean_tpm_censored_gene_ids", lambda: {"TECH"})
+
+    seen = {}
+
+    def fake_medoids(df, sample_cols, *, k, selection_df):
+        seen["value_ids"] = df["Ensembl_Gene_ID"].tolist()
+        seen["selection_ids"] = selection_df["Ensembl_Gene_ID"].tolist()
+        seen["sample_cols"] = list(sample_cols)
+        return df[["Ensembl_Gene_ID", "Symbol", sample_cols[0]]].copy()
+
+    monkeypatch.setattr(gen, "cohort_medoids", fake_medoids)
+
+    gen.rebuild(cache, ref, tmp_path / "out", limit=None, validate=False, sample_qc="pass")
+
+    assert seen == {
+        "value_ids": ["BIO", "TECH"],
+        "selection_ids": ["BIO"],
+        "sample_cols": ["sample_a", "sample_b"],
+    }
 
 
 def test_rebuild_expression_artifacts_keeps_all_samples_when_requested(tmp_path, monkeypatch):
