@@ -5,6 +5,7 @@ on:
 
 jobs:
   build-and-publish:
+    if: ${{ !contains(github.event.release.body, '<!-- oncoref-deploy-pypi-published -->') }}
     runs-on: ubuntu-latest
     environment:
       name: pypi
