@@ -709,14 +709,22 @@ def test_cancer_reference_expression_long_and_wide(monkeypatch):
         "Ensembl_Gene_ID",
         "Symbol",
         "cancer_code",
-        "source_cohort",
         "normalization",
+        "source_cohort",
+        "source_type",
+        "source_unit",
+        "source_scale_class",
+        "linear_tpm_comparable",
+        "reference_method",
+        "data_version",
+        "source_matrix_version",
         "expression",
         "q1",
         "q3",
     ]
     assert long["cancer_code"].tolist() == ["X"]
     assert long["normalization"].tolist() == ["tpm_clean"]
+    assert long["reference_method"].tolist() == ["percentile_shard"]
     assert long["expression"].tolist() == [3.0]
     assert long["q1"].tolist() == [1.0] and long["q3"].tolist() == [5.0]
     assert expression.cancer_reference_expression("x", genes=["E1"], normalize="clean_tpm").equals(
@@ -726,6 +734,84 @@ def test_cancer_reference_expression_long_and_wide(monkeypatch):
     wide = expression.cancer_reference_expression(["x", "y"], format="wide")
     assert {"X_TPM_clean", "Y_TPM_clean"} <= set(wide.columns)
     assert wide.loc[wide["Symbol"] == "A", "X_TPM_clean"].iloc[0] == 3.0
+
+
+def test_cancer_reference_expression_multiple_normalizations(monkeypatch):
+    pct_tpm = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["E1"],
+            "Symbol": ["A"],
+            "p25": [1.0],
+            "p50": [3.0],
+            "p75": [5.0],
+        }
+    )
+    pct_log = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["E1"],
+            "Symbol": ["A"],
+            "p25": [np.log1p(1.0)],
+            "p50": [np.log1p(3.0)],
+            "p75": [np.log1p(5.0)],
+        }
+    )
+
+    def fake_pct(code, *, as_tpm=True, **kwargs):
+        return pct_tpm.copy() if as_tpm else pct_log.copy()
+
+    monkeypatch.setattr(expression, "available_percentile_cohorts", lambda: ["X"])
+    monkeypatch.setattr(expression, "resolve_cancer_type", lambda code: str(code).upper())
+    monkeypatch.setattr(expression, "cohort_gene_percentiles", fake_pct)
+
+    long = expression.cancer_reference_expression("x", normalize=["clean_tpm", "tpm_clean_log1p"])
+    assert long["normalization"].tolist() == ["tpm_clean", "tpm_clean_log1p"]
+    assert long["expression"].tolist() == [3.0, pytest.approx(np.log1p(3.0))]
+
+    wide = expression.cancer_reference_expression(
+        "x", normalize=["tpm_clean", "tpm_clean_log1p"], format="wide"
+    )
+    assert wide.loc[0, "X_TPM_clean"] == 3.0
+    assert wide.loc[0, "X_TPM_clean_log1p"] == pytest.approx(np.log1p(3.0))
+
+
+def test_cancer_reference_expression_raw_tpm_uses_source_stats(monkeypatch):
+    stats = pd.DataFrame(
+        {
+            "Ensembl_Gene_ID": ["E1"],
+            "Symbol": ["A"],
+            "p25": [10.0],
+            "p50": [20.0],
+            "p75": [30.0],
+        }
+    )
+    seen = {}
+    monkeypatch.setattr(expression, "available_percentile_cohorts", lambda: ["X"])
+    monkeypatch.setattr(expression, "resolve_cancer_type", lambda code: str(code).upper())
+    monkeypatch.setattr(
+        expression,
+        "cohort_stats",
+        lambda code, **k: seen.update(k) or stats.copy(),
+    )
+    monkeypatch.setattr(
+        expression,
+        "_selected_expression_source_metadata",
+        lambda code: {
+            "source_cohort": "SRC_X",
+            "source_type": "gdc",
+            "unit": "TPM",
+            "source_scale_class": "linear_rnaseq_tpm",
+            "linear_tpm_comparable": True,
+            "tpm_proxy": False,
+        },
+    )
+
+    long = expression.cancer_reference_expression("x", normalize="tpm", auto_fetch=True)
+    assert seen == {"normalize": "tpm_raw", "auto_fetch": True, "sample_qc": "all"}
+    assert long["normalization"].tolist() == ["tpm_raw"]
+    assert long["source_cohort"].tolist() == ["SRC_X"]
+    assert long["source_type"].tolist() == ["gdc"]
+    assert long["reference_method"].tolist() == ["source_matrix_stats"]
+    assert long["expression"].tolist() == [20.0]
 
 
 def test_cancer_reference_expression_wide_merges_by_gene_id_not_symbol(monkeypatch):
