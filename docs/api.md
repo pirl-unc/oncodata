@@ -229,7 +229,10 @@ but it is not the clean-TPM biological denominator.
 ## Data Management
 
 - `oncoref.catalog` — unified dataset inventory and fetch/status/path operations.
-- `oncoref.data_bundle` — heavy expression bundle cache.
+- `oncoref.data_bundle` — heavy expression bundle cache. Use
+  `data_bundle.bundle_contract()` to inspect the downstream-stable package/data
+  version linkage, release asset URLs, cache environment variables, completion
+  marker policy, and expected artifact inventory for the active bundle.
 - `oncoref.reference_data` / `oncoref.hpa` — HPA reference-data cache and HPA
   tissue/cell-type accessors.
 

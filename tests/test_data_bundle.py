@@ -12,7 +12,7 @@ import urllib.error
 import pytest
 
 from oncoref import data_bundle
-from oncoref.version import DATA_VERSION
+from oncoref.version import DATA_VERSION, SOURCE_MATRIX_VERSION, __version__
 
 
 def test_is_downloadable_distinguishes_bundle_from_wheel():
@@ -45,13 +45,35 @@ def test_new_env_wins_over_legacy(monkeypatch, tmp_path):
 def test_status_reports_missing_without_download(monkeypatch, tmp_path):
     monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
     snap = data_bundle.status()
+    assert snap["contract_version"] == data_bundle.BUNDLE_CONTRACT_VERSION
+    assert snap["package_version"] == __version__
     assert snap["all_local"] is False
+    assert snap["data_version"] == DATA_VERSION
+    assert snap["source_matrix_version"] == SOURCE_MATRIX_VERSION
     assert snap["completion_marker"]["present"] is False
     assert snap["completion_marker"]["valid"] is False
     assert snap["release_manifest_url"] == data_bundle.RELEASE_MANIFEST_URL
     assert snap["release_checksum_url"] == data_bundle.RELEASE_CHECKSUM_URL
     assert set(snap["items"]) == set(data_bundle.DOWNLOADABLE_PATHS)
     assert all(not v["present"] for v in snap["items"].values())
+    assert snap["contract"] == data_bundle.bundle_contract()
+
+
+def test_bundle_contract_links_package_data_release_and_cache_policy():
+    contract = data_bundle.bundle_contract()
+
+    assert contract["contract_version"] == data_bundle.BUNDLE_CONTRACT_VERSION
+    assert contract["package_version"] == __version__
+    assert contract["data_version"] == DATA_VERSION
+    assert contract["source_matrix_version"] == SOURCE_MATRIX_VERSION
+    assert contract["cache_dir_env_var"] == data_bundle.CACHE_DIR_ENV_VAR
+    assert contract["legacy_cache_dir_env_var"] == data_bundle.LEGACY_CACHE_DIR_ENV_VAR
+    assert contract["downloadable_paths"] == list(data_bundle.DOWNLOADABLE_PATHS)
+    assert contract["primary_release_source"]["name"] == "oncoref"
+    assert contract["primary_release_source"]["require_integrity"] is True
+    assert contract["primary_release_source"]["manifest_url"] == data_bundle.RELEASE_MANIFEST_URL
+    assert contract["primary_release_source"]["checksum_url"] == data_bundle.RELEASE_CHECKSUM_URL
+    assert [s["name"] for s in contract["release_sources"]] == ["oncoref", "pirlygenes"]
 
 
 def _write_bundle_fixture(root):
