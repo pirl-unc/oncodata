@@ -329,6 +329,7 @@ def test_representative_provenance_includes_source_sample_and_selection_metadata
 
     df = expression.representative_cohort_samples("PRAD", format="long", include_provenance=True)
 
+    assert df.loc[0, "representative_id"] == "PRAD_rep01"
     assert df.loc[0, "source_sample"] == "TCGA-XX-0001"
     assert df.loc[0, "selection_rank"] == 1
     assert df.loc[0, "selection_method"] == expression.REPRESENTATIVE_SELECTION_METHOD
@@ -336,6 +337,15 @@ def test_representative_provenance_includes_source_sample_and_selection_metadata
     assert df.loc[0, "artifact_schema_version"] == expression.REPRESENTATIVE_ARTIFACT_SCHEMA_VERSION
     assert df.attrs["schema_version"] == expression.REPRESENTATIVE_ARTIFACT_SCHEMA_VERSION
     assert df.attrs["cancer_codes"] == ["PRAD"]
+    assert df.attrs["representative_id_style"] == "pirlygenes"
+
+    internal = expression.representative_cohort_samples(
+        "PRAD",
+        format="long",
+        include_provenance=True,
+        representative_id_style="internal",
+    )
+    assert internal.loc[0, "representative_id"] == "PRAD__rep1"
 
 
 def test_representative_empty_long_schema_includes_requested_provenance(monkeypatch, tmp_path):
@@ -364,6 +374,15 @@ def test_representative_empty_long_schema_includes_requested_provenance(monkeypa
         "source_matrix_version",
     ]
     assert df.attrs["schema_version"] == expression.REPRESENTATIVE_ARTIFACT_SCHEMA_VERSION
+    assert df.attrs["representative_id_style"] == "pirlygenes"
+
+
+def test_representative_id_style_validation(monkeypatch, tmp_path):
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
+    (tmp_path / "cancer-reference-expression-representatives").mkdir(parents=True)
+
+    with pytest.raises(ValueError, match="representative_id_style"):
+        expression.representative_cohort_samples("PRAD", representative_id_style="legacy")
 
 
 def test_representative_wide_does_not_fragment_genes(monkeypatch, tmp_path):
@@ -398,7 +417,12 @@ def test_representative_wide_does_not_fragment_genes(monkeypatch, tmp_path):
     assert len(shared) == 1
     assert shared["Symbol"].iloc[0] != "ENSG234"  # canonical symbol prefers a real alias
     # all three cohorts' values land on that single row
-    assert bool(shared[["A__rep1", "B__rep1", "C__rep1"]].notna().all(axis=1).iloc[0])
+    assert bool(shared[["A_rep01", "B_rep01", "C_rep01"]].notna().all(axis=1).iloc[0])
+
+    internal = expression.representative_cohort_samples(
+        format="wide", representative_id_style="internal"
+    )
+    assert {"A__rep1", "B__rep1", "C__rep1"} <= set(internal.columns)
 
     # the long form carries the same canonical symbol (so a downstream pivot won't fragment)
     lg = expression.representative_cohort_samples(format="long")
@@ -424,7 +448,7 @@ def test_representative_wide_merges_alt_haplotype_aliases(monkeypatch, tmp_path)
     w = expression.representative_cohort_samples(format="wide")
     assert list(w["Ensembl_Gene_ID"]) == [primary]  # one row, the canonical primary
     assert alt not in set(w["Ensembl_Gene_ID"])
-    assert bool(w[["A__rep1", "B__rep1"]].notna().all(axis=1).iloc[0])  # both cohorts on it
+    assert bool(w[["A_rep01", "B_rep01"]].notna().all(axis=1).iloc[0])  # both cohorts on it
 
 
 def test_representative_wide_sums_alt_haplotype_within_cohort(monkeypatch, tmp_path):
@@ -448,7 +472,7 @@ def test_representative_wide_sums_alt_haplotype_within_cohort(monkeypatch, tmp_p
 
     w = expression.representative_cohort_samples(format="wide")
     assert list(w["Ensembl_Gene_ID"]) == [primary]  # collapsed onto the canonical id
-    assert w["A__rep1"].iloc[0] == pytest.approx(13.0)  # 10 + 3 summed, not 10 or 3
+    assert w["A_rep01"].iloc[0] == pytest.approx(13.0)  # 10 + 3 summed, not 10 or 3
 
 
 def test_representative_log1p_sums_in_linear_space(monkeypatch, tmp_path):
@@ -466,8 +490,8 @@ def test_representative_log1p_sums_in_linear_space(monkeypatch, tmp_path):
 
     w = expression.representative_cohort_samples(format="wide", normalize="tpm_clean_log1p")
     assert list(w["Ensembl_Gene_ID"]) == [primary]
-    assert w["A__rep1"].iloc[0] == pytest.approx(np.log1p(13.0))  # log1p(10+3)
-    assert w["A__rep1"].iloc[0] != pytest.approx(np.log1p(10.0) + np.log1p(3.0))  # NOT Σlog1p
+    assert w["A_rep01"].iloc[0] == pytest.approx(np.log1p(13.0))  # log1p(10+3)
+    assert w["A_rep01"].iloc[0] != pytest.approx(np.log1p(10.0) + np.log1p(3.0))  # NOT Σlog1p
 
 
 def _raw_matrix(tmp_path):

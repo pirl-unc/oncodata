@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import warnings
 from collections import Counter, defaultdict
 from collections.abc import Iterable
@@ -292,19 +293,42 @@ _REPRESENTATIVE_PROVENANCE_COLUMNS = [
 ]
 
 
+_INTERNAL_REPRESENTATIVE_ID_RE = re.compile(r"^(?P<code>.+)__rep(?P<rank>\d+)$")
+_PIRLYGENES_REPRESENTATIVE_ID_RE = re.compile(r"^(?P<code>.+)_rep(?P<rank>\d+)$")
+
+
 def _representative_rank(representative_id: object) -> int | None:
     text = str(representative_id)
-    prefix, sep, suffix = text.rpartition("__rep")
-    if not prefix or not sep:
-        return None
-    try:
-        return int(suffix)
-    except ValueError:
-        return None
+    for pattern in (_INTERNAL_REPRESENTATIVE_ID_RE, _PIRLYGENES_REPRESENTATIVE_ID_RE):
+        match = pattern.match(text)
+        if match:
+            return int(match.group("rank"))
+    return None
+
+
+def _representative_id_for_style(representative_id: object, *, style: str) -> str:
+    _validate_representative_id_style(style)
+    text = str(representative_id)
+    if style == "internal":
+        return text
+    match = _INTERNAL_REPRESENTATIVE_ID_RE.match(text)
+    if not match:
+        return text
+    return f"{match.group('code')}_rep{int(match.group('rank')):02d}"
+
+
+def _validate_representative_id_style(style: str) -> None:
+    if style not in {"pirlygenes", "internal"}:
+        raise ValueError("representative_id_style must be 'pirlygenes' or 'internal'")
 
 
 def _representative_attrs(
-    *, codes: Iterable[str], normalize: str, format: str, k: int | None
+    *,
+    codes: Iterable[str],
+    normalize: str,
+    format: str,
+    k: int | None,
+    representative_id_style: str,
 ) -> dict[str, object]:
     return {
         "artifact": "representative_samples",
@@ -315,6 +339,7 @@ def _representative_attrs(
         "normalize": normalize,
         "format": format,
         "k": k,
+        "representative_id_style": representative_id_style,
         "selection_method": REPRESENTATIVE_SELECTION_METHOD,
         "selection_basis": REPRESENTATIVE_SELECTION_BASIS,
     }
@@ -1775,6 +1800,7 @@ def representative_cohort_samples(
     normalize: str = "tpm_clean",
     format: str = "wide",
     include_provenance: bool = False,
+    representative_id_style: str = "pirlygenes",
 ) -> pd.DataFrame:
     """Representative real per-sample expression vectors per cohort.
 
@@ -1785,10 +1811,14 @@ def representative_cohort_samples(
     ``cancer_types`` accepts a code, alias, or iterable; a computed-aggregate
     code expands to its member subtypes; ``None`` returns every cohort that ships
     representatives. ``k`` keeps at most the first ``k`` reps per cohort.
-    ``format`` is ``"wide"`` (genes × reps) or ``"long"``. Long output can attach
-    representative-level provenance: source cohort/project/sample, selection rank,
-    selection method/basis, and package/data schema versions.
+    ``format`` is ``"wide"`` (genes × reps) or ``"long"``. Public representative
+    IDs default to pirlygenes-compatible ``CODE_rep01`` columns/values; pass
+    ``representative_id_style="internal"`` for the shard/provenance IDs
+    (``CODE__rep1``). Long output can attach representative-level provenance:
+    source cohort/project/sample, selection rank, selection method/basis, and
+    package/data schema versions.
     """
+    _validate_representative_id_style(representative_id_style)
     if normalize not in ("tpm_clean", "tpm_clean_log1p"):
         raise ValueError(
             "representative_cohort_samples normalize must be 'tpm_clean' or "
@@ -1838,11 +1868,15 @@ def representative_cohort_samples(
         gid = shard["Ensembl_Gene_ID"].astype(str)
         for g, s in zip(gid, shard["Symbol"].astype(str)):
             symbols[g][s] += 1
-        mat = shard[rep_cols].set_axis(gid.to_numpy(), axis=0)
+        display_cols = [
+            _representative_id_for_style(c, style=representative_id_style) for c in rep_cols
+        ]
+        mat = shard[rep_cols].set_axis(gid.to_numpy(), axis=0).set_axis(display_cols, axis=1)
         if format == "wide":
             wide_parts.append(mat)
         else:
-            melted = mat.reset_index(names="Ensembl_Gene_ID").melt(
+            internal_mat = shard[rep_cols].set_axis(gid.to_numpy(), axis=0)
+            melted = internal_mat.reset_index(names="Ensembl_Gene_ID").melt(
                 id_vars="Ensembl_Gene_ID", var_name="representative_id", value_name="expression"
             )
             melted.insert(1, "cancer_code", code)
@@ -1864,7 +1898,13 @@ def representative_cohort_samples(
         if not wide_parts:
             out = pd.DataFrame(columns=base)
             out.attrs.update(
-                _representative_attrs(codes=codes, normalize=normalize, format=format, k=k)
+                _representative_attrs(
+                    codes=codes,
+                    normalize=normalize,
+                    format=format,
+                    k=k,
+                    representative_id_style=representative_id_style,
+                )
             )
             return out
         combined = pd.concat(wide_parts, axis=1, join="outer").sort_index()
@@ -1873,21 +1913,44 @@ def representative_cohort_samples(
         out = combined.reset_index(names="Ensembl_Gene_ID")
         out.insert(1, "Symbol", out["Ensembl_Gene_ID"].map(_canonical_symbol))
         out.attrs.update(
-            _representative_attrs(codes=codes, normalize=normalize, format=format, k=k)
+            _representative_attrs(
+                codes=codes,
+                normalize=normalize,
+                format=format,
+                k=k,
+                representative_id_style=representative_id_style,
+            )
         )
         return out
 
     if not long_parts:
         out = _representative_empty_frame(include_provenance=include_provenance)
         out.attrs.update(
-            _representative_attrs(codes=codes, normalize=normalize, format=format, k=k)
+            _representative_attrs(
+                codes=codes,
+                normalize=normalize,
+                format=format,
+                k=k,
+                representative_id_style=representative_id_style,
+            )
         )
         return out
     long = pd.concat(long_parts, ignore_index=True)
     long.insert(1, "Symbol", long["Ensembl_Gene_ID"].map(_canonical_symbol))
     if include_provenance:
         long = _attach_representative_provenance(long, root)
-    long.attrs.update(_representative_attrs(codes=codes, normalize=normalize, format=format, k=k))
+    long["representative_id"] = long["representative_id"].map(
+        lambda x: _representative_id_for_style(x, style=representative_id_style)
+    )
+    long.attrs.update(
+        _representative_attrs(
+            codes=codes,
+            normalize=normalize,
+            format=format,
+            k=k,
+            representative_id_style=representative_id_style,
+        )
+    )
     return long
 
 

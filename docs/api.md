@@ -219,6 +219,9 @@ contracts:
   include_provenance=True)` includes the representative id, source cohort/project,
   source sample id, cohort sample count, deterministic selection rank/method/basis,
   artifact schema version, `DATA_VERSION`, and `SOURCE_MATRIX_VERSION`.
+  Public representative ids default to pirlygenes-compatible `CODE_rep01`
+  columns/values. Pass `representative_id_style="internal"` to expose the
+  underlying bundle/provenance ids (`CODE__rep1`).
   Representatives are selected by central-medoid plus farthest-first traversal in
   log1p biological clean-TPM space, with stable sample-id tie-breaking; the
   persisted vectors remain full clean_tpm_16_9_75.
