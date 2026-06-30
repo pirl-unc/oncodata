@@ -127,6 +127,11 @@ antigen_coverage.greedy_antigen_coverage("LUAD", gene_ids={"ENSG00000141510"})
   | "all")` filters sample columns at read time; the raw per-sample accessor
   defaults to `"all"` for forensic access, while live summaries such as
   `cohort_stats` and `pooled_cohort_stats` default to QC-passing samples.
+  `source_matrix_sample_qc_manifest`, `expression_artifact_build_metadata`, and
+  `expression_artifact_build_summary` read the optional QC/build metadata emitted
+  by regenerated expression bundles. Until a regenerated heavy bundle ships those
+  files, they return schema-stable empty metadata by default; use
+  `on_missing="raise"` when a downstream migration requires the manifests.
 - `oncoref.expression_builders` — pure build-time cores used by data-bundle
   generation scripts. `scripts/rebuild_expression_artifacts.py` applies the same
   sample-QC policy to derived shards by default (`--sample-qc pass`) and emits

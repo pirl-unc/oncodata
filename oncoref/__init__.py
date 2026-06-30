@@ -117,8 +117,10 @@ from .cta import (
     cta_unfiltered_gene_names,
 )
 from .expression import (
+    EXPRESSION_ARTIFACT_BUILD_METADATA_SCHEMA_VERSION,
     REFERENCE_EXPRESSION_SCHEMA_VERSION,
     SHARD_DATASETS,
+    SOURCE_MATRIX_SAMPLE_QC_MANIFEST_SCHEMA_VERSION,
     ShardDataset,
     available_percentile_cohorts,
     available_representative_cohorts,
@@ -128,6 +130,8 @@ from .expression import (
     cohort_gene_percentiles,
     cohort_mean_expression,
     cohort_stats,
+    expression_artifact_build_metadata,
+    expression_artifact_build_summary,
     expression_artifact_gene_universe_delta_summary,
     expression_artifact_gene_universe_deltas,
     gene_cohort_mean_expression,
@@ -149,6 +153,7 @@ from .expression import (
     proteoform_within_sample_top_fraction,
     representative_cohort_samples,
     sample_expression_qc,
+    source_matrix_sample_qc_manifest,
     within_sample_top_fraction,
 )
 from .expression_engine import aggregate_transcripts_to_genes, id_columns, sample_columns
@@ -286,6 +291,7 @@ __all__ = [
     # ontology / registry
     "CANCER_TYPE_ALIASES",
     "CANCER_TYPE_NAMES",
+    "EXPRESSION_ARTIFACT_BUILD_METADATA_SCHEMA_VERSION",
     "OTHER_TECHNICAL_FRACTION",
     "PROPORTION_METRICS",
     "REFERENCE_EXPRESSION_SCHEMA_VERSION",
@@ -293,6 +299,7 @@ __all__ = [
     "REGIMEN_LABELS",
     "RIBOSOMAL_PROTEIN_FRACTION",
     "SHARD_DATASETS",
+    "SOURCE_MATRIX_SAMPLE_QC_MANIFEST_SCHEMA_VERSION",
     "TECHNICAL_FRACTION",
     "TECHNICAL_RNA_FAMILIES",
     "TECHNICAL_RNA_GROUPS",
@@ -429,6 +436,8 @@ __all__ = [
     "cta_unfiltered_gene_names",
     "drop_technical_rna",
     "ensembl_id_aliases",
+    "expression_artifact_build_metadata",
+    "expression_artifact_build_summary",
     "expression_artifact_gene_universe_delta_summary",
     "expression_artifact_gene_universe_deltas",
     "expression_level",
@@ -525,6 +534,7 @@ __all__ = [
     "samples_for_cohort",
     "sarcoma_lineage_codes",
     "signature_score",
+    "source_matrix_sample_qc_manifest",
     "sources_for_cancer_code",
     "tissue_of_origin",
     "tpm_to_housekeeping_normalized",

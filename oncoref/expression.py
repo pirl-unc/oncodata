@@ -56,6 +56,7 @@ views over these same shipped artifacts rather than separate data products.
 
 from __future__ import annotations
 
+import json
 import os
 import warnings
 from collections import Counter, defaultdict
@@ -506,6 +507,68 @@ def expression_artifact_gene_universe_delta_summary() -> pd.DataFrame:
 _PER_SAMPLE_NORMALIZE = ("tpm_raw", "tpm_clean", "tpm_clean_log1p", "tpm_clean_hk")
 _SAMPLE_QC_MODES = ("all", "pass", "pass_or_warn")
 SAMPLE_EXPRESSION_QC_POLICY_VERSION = "sample_expression_qc_v1"
+SOURCE_MATRIX_SAMPLE_QC_MANIFEST_SCHEMA_VERSION = "source_matrix_sample_qc_manifest_v1"
+EXPRESSION_ARTIFACT_BUILD_METADATA_SCHEMA_VERSION = "expression_artifact_build_metadata_v1"
+SOURCE_MATRIX_SAMPLE_QC_MANIFEST_PATH = "source-matrix-sample-qc.csv"
+EXPRESSION_ARTIFACT_BUILD_METADATA_PATH = "expression-artifact-build-metadata.csv"
+EXPRESSION_ARTIFACT_BUILD_METADATA_JSON_PATH = "expression-artifact-build-metadata.json"
+
+_SOURCE_MATRIX_SAMPLE_QC_MANIFEST_COLUMNS = [
+    "cancer_code",
+    "sample_qc_policy_version",
+    "source_cohort",
+    "source_type",
+    "unit",
+    "source_scale_class",
+    "linear_tpm_comparable",
+    "sample_id",
+    "n_measured_genes",
+    "n_detected_genes",
+    "n_detected_raw",
+    "n_detected_clean",
+    "n_detected_clean_biological",
+    "detected_gene_fraction",
+    "zero_fraction_raw",
+    "parse_missing_fraction",
+    "total_tpm",
+    "top_gene_id",
+    "top_gene_symbol",
+    "top_gene_tpm",
+    "top_gene_fraction",
+    "top1_fraction_raw",
+    "top10_tpm",
+    "top10_fraction",
+    "top10_fraction_raw",
+    "top1_fraction_clean",
+    "top10_fraction_clean",
+    "housekeeping_genes_present",
+    "housekeeping_genes_detected",
+    "housekeeping_genes_above_30",
+    "housekeeping_zero_fraction",
+    "tpm_proxy",
+    "qc_flags",
+    "qc_status",
+    "qc_reasons",
+    "sample_qc_status",
+    "sample_qc_reasons",
+    "passes_expression_qc",
+    "recommended_for_absolute_tpm_floor",
+    "source_matrix_path",
+]
+
+_EXPRESSION_ARTIFACT_BUILD_METADATA_COLUMNS = [
+    "cancer_code",
+    "source_cohort",
+    "source_version",
+    "source_matrix_path",
+    "sample_qc",
+    "sample_qc_policy_version",
+    "n_source_samples",
+    "n_cohort_samples",
+    "n_qc_pass",
+    "n_qc_warn",
+    "n_qc_fail",
+]
 DEFAULT_MIN_DETECTED_GENES_FOR_QC = 5000
 DEFAULT_MIN_HOUSEKEEPING_GENES_FOR_QC = 10
 DEFAULT_MAX_TOP_GENE_FRACTION_FOR_QC = 0.20
@@ -800,6 +863,187 @@ def sample_expression_qc(
         max_top_gene_fraction=max_top_gene_fraction,
         max_top10_gene_fraction=max_top10_gene_fraction,
     )
+
+
+def _validate_metadata_on_missing(on_missing: str) -> str:
+    mode = str(on_missing).lower()
+    if mode not in {"empty", "raise"}:
+        raise ValueError("on_missing must be 'empty' or 'raise'")
+    return mode
+
+
+def _empty_metadata_frame(columns: list[str], *, schema_version: str, missing_reason: str):
+    out = pd.DataFrame(columns=columns)
+    out.attrs["schema_version"] = schema_version
+    out.attrs["data_version"] = DATA_VERSION
+    out.attrs["source_matrix_version"] = SOURCE_MATRIX_VERSION
+    out.attrs["missing_reason"] = missing_reason
+    return out
+
+
+def _optional_bundle_metadata_path(relative_path: str, *, auto_fetch: bool) -> Path | None:
+    path = data_bundle.find(relative_path)
+    if path is not None:
+        return path
+    if auto_fetch:
+        data_bundle.ensure_local(auto_fetch=True, verbose=False)
+        path = data_bundle.find(relative_path)
+    return path
+
+
+def _requested_cancer_codes(cancer_type) -> set[str] | None:
+    if cancer_type is None:
+        return None
+    if isinstance(cancer_type, str):
+        values = [cancer_type]
+    else:
+        values = list(cancer_type)
+    return {resolve_cancer_type(value, strict=False) or str(value) for value in values}
+
+
+def source_matrix_sample_qc_manifest(
+    cancer_type=None,
+    *,
+    sample_qc: str = "all",
+    auto_fetch: bool = True,
+    on_missing: str = "empty",
+) -> pd.DataFrame:
+    """Read the generated source-matrix sample-QC manifest from the data bundle.
+
+    This is the bundle-level companion to :func:`sample_expression_qc`, which computes
+    QC live from a single source matrix. The rebuild script emits
+    ``source-matrix-sample-qc.csv`` for the exact samples that fed generated
+    expression artifacts. Current released bundles may not yet contain it; by default
+    this returns an empty schema-stable frame rather than synthesizing rows.
+    """
+    mode = _validate_metadata_on_missing(on_missing)
+    path = _optional_bundle_metadata_path(
+        SOURCE_MATRIX_SAMPLE_QC_MANIFEST_PATH, auto_fetch=auto_fetch
+    )
+    if path is None:
+        if mode == "raise":
+            raise FileNotFoundError(
+                f"{SOURCE_MATRIX_SAMPLE_QC_MANIFEST_PATH} is not present in the "
+                f"oncoref data bundle at {data_bundle.cache_dir()}"
+            )
+        return _empty_metadata_frame(
+            _SOURCE_MATRIX_SAMPLE_QC_MANIFEST_COLUMNS,
+            schema_version=SOURCE_MATRIX_SAMPLE_QC_MANIFEST_SCHEMA_VERSION,
+            missing_reason="source-matrix sample QC manifest not present in bundle",
+        )
+
+    out = pd.read_csv(path)
+    for col in _SOURCE_MATRIX_SAMPLE_QC_MANIFEST_COLUMNS:
+        if col not in out.columns:
+            out[col] = pd.NA
+    extra_cols = [
+        col for col in out.columns if col not in _SOURCE_MATRIX_SAMPLE_QC_MANIFEST_COLUMNS
+    ]
+    out = out[[*_SOURCE_MATRIX_SAMPLE_QC_MANIFEST_COLUMNS, *extra_cols]]
+
+    codes = _requested_cancer_codes(cancer_type)
+    if codes is not None:
+        if not codes:
+            out = out.iloc[0:0].copy()
+        else:
+            out = out[out["cancer_code"].astype(str).isin(codes)].copy()
+    qc_mode = _validate_sample_qc(sample_qc)
+    if qc_mode == "pass":
+        out = out[out["sample_qc_status"].astype(str) == "pass"].copy()
+    elif qc_mode == "pass_or_warn":
+        out = out[out["sample_qc_status"].astype(str).isin(["pass", "warn"])].copy()
+
+    out.attrs["schema_version"] = SOURCE_MATRIX_SAMPLE_QC_MANIFEST_SCHEMA_VERSION
+    out.attrs["data_version"] = DATA_VERSION
+    out.attrs["source_matrix_version"] = SOURCE_MATRIX_VERSION
+    out.attrs["path"] = str(path)
+    return out.reset_index(drop=True)
+
+
+def expression_artifact_build_metadata(
+    cancer_type=None,
+    *,
+    auto_fetch: bool = True,
+    on_missing: str = "empty",
+) -> pd.DataFrame:
+    """Read per-cohort build metadata for generated expression artifacts.
+
+    The rows are emitted by ``scripts/rebuild_expression_artifacts.py`` and record the
+    selected source matrix, QC policy, selected sample count, and QC pass/warn/fail
+    counts for each cohort. Missing current-bundle metadata returns a schema-stable
+    empty frame by default.
+    """
+    mode = _validate_metadata_on_missing(on_missing)
+    path = _optional_bundle_metadata_path(
+        EXPRESSION_ARTIFACT_BUILD_METADATA_PATH, auto_fetch=auto_fetch
+    )
+    if path is None:
+        if mode == "raise":
+            raise FileNotFoundError(
+                f"{EXPRESSION_ARTIFACT_BUILD_METADATA_PATH} is not present in the "
+                f"oncoref data bundle at {data_bundle.cache_dir()}"
+            )
+        return _empty_metadata_frame(
+            _EXPRESSION_ARTIFACT_BUILD_METADATA_COLUMNS,
+            schema_version=EXPRESSION_ARTIFACT_BUILD_METADATA_SCHEMA_VERSION,
+            missing_reason="expression artifact build metadata not present in bundle",
+        )
+
+    out = pd.read_csv(path)
+    for col in _EXPRESSION_ARTIFACT_BUILD_METADATA_COLUMNS:
+        if col not in out.columns:
+            out[col] = pd.NA
+    extra_cols = [
+        col for col in out.columns if col not in _EXPRESSION_ARTIFACT_BUILD_METADATA_COLUMNS
+    ]
+    out = out[[*_EXPRESSION_ARTIFACT_BUILD_METADATA_COLUMNS, *extra_cols]]
+    codes = _requested_cancer_codes(cancer_type)
+    if codes is not None:
+        if not codes:
+            out = out.iloc[0:0].copy()
+        else:
+            out = out[out["cancer_code"].astype(str).isin(codes)].copy()
+    out.attrs["schema_version"] = EXPRESSION_ARTIFACT_BUILD_METADATA_SCHEMA_VERSION
+    out.attrs["data_version"] = DATA_VERSION
+    out.attrs["source_matrix_version"] = SOURCE_MATRIX_VERSION
+    out.attrs["path"] = str(path)
+    return out.reset_index(drop=True)
+
+
+def expression_artifact_build_summary(
+    *,
+    auto_fetch: bool = True,
+    on_missing: str = "empty",
+) -> dict:
+    """Read bundle-level expression artifact build metadata.
+
+    Returns the JSON summary emitted beside the per-cohort metadata CSV. The summary
+    remains optional until a regenerated data bundle ships it; callers that require it
+    should pass ``on_missing="raise"``.
+    """
+    mode = _validate_metadata_on_missing(on_missing)
+    path = _optional_bundle_metadata_path(
+        EXPRESSION_ARTIFACT_BUILD_METADATA_JSON_PATH, auto_fetch=auto_fetch
+    )
+    if path is None:
+        if mode == "raise":
+            raise FileNotFoundError(
+                f"{EXPRESSION_ARTIFACT_BUILD_METADATA_JSON_PATH} is not present in the "
+                f"oncoref data bundle at {data_bundle.cache_dir()}"
+            )
+        return {
+            "schema_version": EXPRESSION_ARTIFACT_BUILD_METADATA_SCHEMA_VERSION,
+            "data_version": DATA_VERSION,
+            "source_matrix_version": SOURCE_MATRIX_VERSION,
+            "missing_reason": "expression artifact build summary not present in bundle",
+        }
+    with path.open() as handle:
+        out = json.load(handle)
+    out.setdefault("schema_version", EXPRESSION_ARTIFACT_BUILD_METADATA_SCHEMA_VERSION)
+    out.setdefault("data_version", DATA_VERSION)
+    out.setdefault("source_matrix_version", SOURCE_MATRIX_VERSION)
+    out["path"] = str(path)
+    return out
 
 
 def per_sample_expression(

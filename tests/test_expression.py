@@ -4,6 +4,8 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -708,6 +710,102 @@ def test_per_sample_expression_filters_by_sample_qc(tmp_path, monkeypatch):
 
     all_samples = expression.per_sample_expression("X", normalize="tpm_raw", sample_qc="all")
     assert expression.sample_columns(all_samples) == ["pass_sample", "warn_sample", "fail_sample"]
+
+
+def test_source_matrix_sample_qc_manifest_missing_is_schema_stable(tmp_path, monkeypatch):
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
+
+    out = expression.source_matrix_sample_qc_manifest(auto_fetch=False)
+
+    assert out.empty
+    assert "sample_qc_status" in out.columns
+    assert out.attrs["schema_version"] == expression.SOURCE_MATRIX_SAMPLE_QC_MANIFEST_SCHEMA_VERSION
+    assert out.attrs["data_version"] == expression.DATA_VERSION
+    assert "missing_reason" in out.attrs
+    with pytest.raises(FileNotFoundError, match="source-matrix-sample-qc"):
+        expression.source_matrix_sample_qc_manifest(auto_fetch=False, on_missing="raise")
+
+
+def test_source_matrix_sample_qc_manifest_reads_filters_and_exports(tmp_path, monkeypatch):
+    import oncoref
+
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
+    pd.DataFrame(
+        {
+            "cancer_code": ["PRAD", "PRAD", "BRCA"],
+            "sample_id": ["pass_sample", "warn_sample", "fail_sample"],
+            "sample_qc_status": ["pass", "warn", "fail"],
+            "source_cohort": ["SRC", "SRC", "SRC2"],
+            "custom_future_column": [1, 2, 3],
+        }
+    ).to_csv(tmp_path / expression.SOURCE_MATRIX_SAMPLE_QC_MANIFEST_PATH, index=False)
+
+    out = expression.source_matrix_sample_qc_manifest(
+        "prostate", sample_qc="pass_or_warn", auto_fetch=False
+    )
+
+    assert out["sample_id"].tolist() == ["pass_sample", "warn_sample"]
+    assert out["custom_future_column"].tolist() == [1, 2]
+    assert out.attrs["path"].endswith(expression.SOURCE_MATRIX_SAMPLE_QC_MANIFEST_PATH)
+    assert oncoref.source_matrix_sample_qc_manifest is expression.source_matrix_sample_qc_manifest
+    assert (
+        oncoref.SOURCE_MATRIX_SAMPLE_QC_MANIFEST_SCHEMA_VERSION
+        == expression.SOURCE_MATRIX_SAMPLE_QC_MANIFEST_SCHEMA_VERSION
+    )
+
+
+def test_expression_artifact_build_metadata_and_summary(tmp_path, monkeypatch):
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
+    pd.DataFrame(
+        {
+            "cancer_code": ["PRAD", "BRCA"],
+            "source_cohort": ["SRC_PRAD", "SRC_BRCA"],
+            "sample_qc": ["pass", "all"],
+            "n_source_samples": [5, 7],
+            "n_cohort_samples": [4, 7],
+            "extra_future_column": ["x", "y"],
+        }
+    ).to_csv(tmp_path / expression.EXPRESSION_ARTIFACT_BUILD_METADATA_PATH, index=False)
+    (tmp_path / expression.EXPRESSION_ARTIFACT_BUILD_METADATA_JSON_PATH).write_text(
+        json.dumps(
+            {
+                "artifact": "expression-derived-shards",
+                "sample_qc": "pass",
+                "n_cohorts": 2,
+            }
+        )
+        + "\n"
+    )
+
+    meta = expression.expression_artifact_build_metadata("PRAD", auto_fetch=False)
+    summary = expression.expression_artifact_build_summary(auto_fetch=False)
+
+    assert meta["source_cohort"].tolist() == ["SRC_PRAD"]
+    assert meta["extra_future_column"].tolist() == ["x"]
+    assert "n_qc_pass" in meta.columns
+    assert (
+        meta.attrs["schema_version"] == expression.EXPRESSION_ARTIFACT_BUILD_METADATA_SCHEMA_VERSION
+    )
+    assert summary["artifact"] == "expression-derived-shards"
+    assert summary["schema_version"] == expression.EXPRESSION_ARTIFACT_BUILD_METADATA_SCHEMA_VERSION
+    assert summary["path"].endswith(expression.EXPRESSION_ARTIFACT_BUILD_METADATA_JSON_PATH)
+
+
+def test_expression_artifact_build_metadata_missing_can_raise(tmp_path, monkeypatch):
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
+
+    out = expression.expression_artifact_build_metadata(auto_fetch=False)
+    summary = expression.expression_artifact_build_summary(auto_fetch=False)
+
+    assert out.empty
+    assert (
+        out.attrs["schema_version"] == expression.EXPRESSION_ARTIFACT_BUILD_METADATA_SCHEMA_VERSION
+    )
+    assert summary["missing_reason"]
+    with pytest.raises(FileNotFoundError, match=r"expression-artifact-build-metadata\.csv"):
+        expression.expression_artifact_build_metadata(auto_fetch=False, on_missing="raise")
+    with pytest.raises(FileNotFoundError, match=r"expression-artifact-build-metadata\.json"):
+        expression.expression_artifact_build_summary(auto_fetch=False, on_missing="raise")
 
 
 def test_per_sample_expression_gene_and_proteoform_levels(tmp_path, monkeypatch):
