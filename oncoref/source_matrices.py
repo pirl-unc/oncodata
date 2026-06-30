@@ -145,3 +145,62 @@ def ensure(code: str) -> Path:
     """Local path to a cohort's per-sample matrix, downloading if absent."""
     dest = local_path(code)
     return dest if dest.exists() else fetch(code)
+
+
+def sample_qc(
+    code: str,
+    *,
+    auto_fetch: bool = True,
+    min_detected_genes: int | None = None,
+    min_housekeeping_detected: int | None = None,
+    max_top_gene_fraction: float | None = None,
+    max_top10_gene_fraction: float | None = None,
+) -> pd.DataFrame:
+    """Compute source-matrix sample QC for one cohort.
+
+    This is the ``source_matrices``-side entry point for the shared QC policy used
+    by expression reads and expression-artifact rebuilds. It delegates to
+    :func:`oncoref.expression.sample_expression_qc`, preserving the same columns:
+    detected-gene counts, source-scale class, top-gene concentration,
+    housekeeping-panel detection, ``sample_qc_status``, and reasons.
+
+    Optional threshold arguments default to the expression module's policy values.
+    """
+    from . import expression
+
+    kwargs = {
+        "auto_fetch": auto_fetch,
+    }
+    if min_detected_genes is not None:
+        kwargs["min_detected_genes"] = min_detected_genes
+    if min_housekeeping_detected is not None:
+        kwargs["min_housekeeping_detected"] = min_housekeeping_detected
+    if max_top_gene_fraction is not None:
+        kwargs["max_top_gene_fraction"] = max_top_gene_fraction
+    if max_top10_gene_fraction is not None:
+        kwargs["max_top10_gene_fraction"] = max_top10_gene_fraction
+    return expression.sample_expression_qc(code, **kwargs)
+
+
+def sample_qc_manifest(
+    cancer_type=None,
+    *,
+    sample_qc: str = "all",
+    auto_fetch: bool = True,
+    on_missing: str = "empty",
+) -> pd.DataFrame:
+    """Read the generated source-matrix sample-QC manifest from the data bundle.
+
+    This is a semantic alias for
+    :func:`oncoref.expression.source_matrix_sample_qc_manifest`. It represents the
+    QC rows recorded during expression-artifact generation, not a live recompute
+    from a raw per-sample matrix. Use :func:`sample_qc` for live per-cohort QC.
+    """
+    from . import expression
+
+    return expression.source_matrix_sample_qc_manifest(
+        cancer_type,
+        sample_qc=sample_qc,
+        auto_fetch=auto_fetch,
+        on_missing=on_missing,
+    )

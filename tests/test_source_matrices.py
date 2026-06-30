@@ -8,6 +8,7 @@
 
 import urllib.error
 
+import pandas as pd
 import pytest
 
 from oncoref import catalog
@@ -73,6 +74,50 @@ def test_fetch_download_failure_raises(monkeypatch, tmp_path):
     with pytest.raises(sm.SourceMatrixError, match="failed to download"):
         sm.fetch("BRCA")
     assert not sm.is_cached("BRCA")  # no partial file left
+
+
+def test_sample_qc_facade_uses_shared_expression_policy(monkeypatch):
+    from oncoref import expression
+
+    calls = {}
+
+    def fake_sample_expression_qc(code, **kwargs):
+        calls["code"] = code
+        calls["kwargs"] = kwargs
+        return pd.DataFrame(
+            {
+                "sample_id": ["S1"],
+                "sample_qc_status": ["pass"],
+                "source_scale_class": ["linear_rnaseq_tpm"],
+            }
+        )
+
+    monkeypatch.setattr(expression, "sample_expression_qc", fake_sample_expression_qc)
+
+    out = sm.sample_qc("lung_adeno", auto_fetch=False, min_detected_genes=123)
+
+    assert calls == {
+        "code": "lung_adeno",
+        "kwargs": {"auto_fetch": False, "min_detected_genes": 123},
+    }
+    assert out["sample_qc_status"].tolist() == ["pass"]
+
+
+def test_sample_qc_manifest_semantic_alias(monkeypatch, tmp_path):
+    monkeypatch.setenv("CANCERDATA_BUNDLED_DATA", str(tmp_path))
+    pd.DataFrame(
+        {
+            "cancer_code": ["LUAD", "LUAD", "BRCA"],
+            "sample_id": ["pass_sample", "warn_sample", "fail_sample"],
+            "sample_qc_status": ["pass", "warn", "fail"],
+            "source_cohort": ["SRC", "SRC", "SRC2"],
+        }
+    ).to_csv(tmp_path / "source-matrix-sample-qc.csv", index=False)
+
+    out = sm.sample_qc_manifest("lung_adeno", sample_qc="pass_or_warn", auto_fetch=False)
+
+    assert out["sample_id"].tolist() == ["pass_sample", "warn_sample"]
+    assert out.attrs["path"].endswith("source-matrix-sample-qc.csv")
 
 
 # ---- catalog routing + group fetch ----

@@ -151,6 +151,10 @@ antigen_coverage.greedy_antigen_coverage("LUAD", gene_ids={"ENSG00000141510"})
   versioned by `SOURCE_GENE_MAPPING_AUDIT_SCHEMA_VERSION` and
   `SOURCE_VALUE_PARSE_DIAGNOSTIC_SCHEMA_VERSION`, and the emitted audit frames
   include those versions as persisted columns.
+- `oncoref.source_matrices` — raw per-cohort source-matrix cache/fetch helpers.
+  Use `source_matrices.sample_qc(code)` for the live source-matrix QC audit and
+  `source_matrices.sample_qc_manifest(...)` for the optional generated-bundle QC
+  manifest that records which samples fed derived artifacts.
 - `oncoref.normalization` — TPM conversion, clean TPM, technical-RNA filtering,
   log transforms, percentile ranks, and housekeeping normalization.
 
