@@ -189,6 +189,12 @@ cohort, source type/unit, source scale class, reference method, `DATA_VERSION`,
 and `SOURCE_MATRIX_VERSION`. This accessor is the compatibility surface for
 reference-expression reads; expression artifact row-set/value parity is still
 tracked separately in the upstream parity issues.
+Raw source-matrix summaries default to `sample_qc="pass"` so sparse or
+source-QC-failed samples do not shape newly computed reference rows. Use
+`sample_qc="pass_or_warn"` or `"all"` for forensic audits or exact parity with
+the current unfiltered source matrices. Long-form provenance and availability
+rows report the live QC mode for raw source-matrix summaries and `artifact` for
+existing shard-backed clean-TPM rows.
 
 Use `expression.cancer_reference_expression_availability()` before delegating a
 downstream reference-expression accessor that must distinguish unavailable

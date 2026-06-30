@@ -943,6 +943,7 @@ def test_cancer_reference_expression_long_and_wide(monkeypatch):
         "source_scale_class",
         "linear_tpm_comparable",
         "reference_method",
+        "sample_qc",
         "data_version",
         "source_matrix_version",
         "expression",
@@ -952,6 +953,7 @@ def test_cancer_reference_expression_long_and_wide(monkeypatch):
     assert long["cancer_code"].tolist() == ["X"]
     assert long["normalization"].tolist() == ["tpm_clean"]
     assert long["reference_method"].tolist() == ["percentile_shard"]
+    assert long["sample_qc"].tolist() == ["artifact"]
     assert long["expression"].tolist() == [3.0]
     assert long["q1"].tolist() == [1.0] and long["q3"].tolist() == [5.0]
     assert expression.cancer_reference_expression("x", genes=["E1"], normalize="clean_tpm").equals(
@@ -1023,6 +1025,7 @@ def test_cancer_reference_expression_availability_reports_missing(monkeypatch):
         "source_scale_class",
         "linear_tpm_comparable",
         "reference_method",
+        "sample_qc",
         "artifact_schema_version",
         "data_version",
         "source_matrix_version",
@@ -1030,6 +1033,8 @@ def test_cancer_reference_expression_availability_reports_missing(monkeypatch):
     assert out.attrs["artifact_schema_version"] == expression.REFERENCE_EXPRESSION_SCHEMA_VERSION
     keyed = out.set_index(["cancer_code", "normalization"])
     assert bool(keyed.loc[("X", "tpm_clean"), "available"]) is True
+    assert keyed.loc[("X", "tpm_clean"), "sample_qc"] == "artifact"
+    assert keyed.loc[("X", "tpm_raw"), "sample_qc"] == "pass"
     assert keyed.loc[("X", "tpm_raw"), "missing_reason"] == "no_source_matrix"
     assert keyed.loc[("Z", "tpm_clean"), "missing_reason"] == "no_percentile_artifact"
 
@@ -1052,6 +1057,7 @@ def test_cancer_reference_expression_missing_empty_and_raise(monkeypatch):
         "source_scale_class",
         "linear_tpm_comparable",
         "reference_method",
+        "sample_qc",
         "data_version",
         "source_matrix_version",
         "expression",
@@ -1121,8 +1127,12 @@ def test_cancer_reference_expression_raw_tpm_uses_source_stats(monkeypatch):
     )
 
     long = expression.cancer_reference_expression("x", normalize="tpm", auto_fetch=True)
-    assert seen == {"normalize": "tpm_raw", "auto_fetch": True, "sample_qc": "all"}
+    assert seen == {"normalize": "tpm_raw", "auto_fetch": True, "sample_qc": "pass"}
     assert long["normalization"].tolist() == ["tpm_raw"]
+    assert long["sample_qc"].tolist() == ["pass"]
+
+    expression.cancer_reference_expression("x", normalize="tpm", auto_fetch=True, sample_qc="all")
+    assert seen == {"normalize": "tpm_raw", "auto_fetch": True, "sample_qc": "all"}
     assert long["source_cohort"].tolist() == ["SRC_X"]
     assert long["source_type"].tolist() == ["gdc"]
     assert long["reference_method"].tolist() == ["source_matrix_stats"]

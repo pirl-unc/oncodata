@@ -162,7 +162,7 @@ _WITHIN_SAMPLE = SHARD_DATASETS["within_sample"]
 
 REPRESENTATIVE_ARTIFACT_SCHEMA_VERSION = "representative_expression_v1"
 PERCENTILE_ARTIFACT_SCHEMA_VERSION = "cohort_percentile_expression_v1"
-REFERENCE_EXPRESSION_SCHEMA_VERSION = "cancer_reference_expression_v1"
+REFERENCE_EXPRESSION_SCHEMA_VERSION = "cancer_reference_expression_v2"
 REPRESENTATIVE_SELECTION_METHOD = "central_medoid_then_farthest_first"
 REPRESENTATIVE_SELECTION_BASIS = "biological_clean_tpm_log1p_distance"
 
@@ -1232,6 +1232,7 @@ def cancer_reference_expression(
     include_request_metadata: bool = False,
     on_missing: str = "omit",
     auto_fetch: bool = False,
+    sample_qc: str = "pass",
 ) -> pd.DataFrame:
     """Observed tumor expression references as cohort-level clean TPM summaries.
 
@@ -1248,13 +1249,16 @@ def cancer_reference_expression(
         the source matrix.
 
     Raw-TPM mode needs the per-sample source matrix available; pass
-    ``auto_fetch=True`` to download it. Missing requested cohorts are omitted by
-    default to preserve the historical behavior; pass ``on_missing="empty"`` to
-    preserve a schema-stable empty result with missing-request metadata in
-    ``df.attrs["missing_requests"]`` or ``on_missing="raise"`` to fail when any
-    requested cohort/mode is unavailable.
+    ``auto_fetch=True`` to download it. Raw-TPM summaries default to
+    ``sample_qc="pass"`` so sparse/source-QC-failed samples do not shape new
+    derived summaries; use ``"pass_or_warn"`` or ``"all"`` for audit/parity views.
+    Missing requested cohorts are omitted by default to preserve the historical
+    behavior; pass ``on_missing="empty"`` to preserve a schema-stable empty result
+    with missing-request metadata in ``df.attrs["missing_requests"]`` or
+    ``on_missing="raise"`` to fail when any requested cohort/mode is unavailable.
     """
     modes = _reference_normalize_modes(normalize)
+    sample_qc = _validate_sample_qc(sample_qc)
     if format not in ("long", "wide"):
         raise ValueError("format must be 'long' or 'wide'")
     if on_missing not in ("omit", "empty", "raise"):
@@ -1263,7 +1267,9 @@ def cancer_reference_expression(
         raise ValueError("include_request_metadata=True requires format='long'")
 
     requests = _reference_expression_requests(cancer_types, modes)
-    availability = _reference_expression_availability_for_requests(requests, modes)
+    availability = _reference_expression_availability_for_requests(
+        requests, modes, sample_qc=sample_qc
+    )
     missing = availability.loc[~availability["available"]].reset_index(drop=True)
     if on_missing == "raise" and not missing.empty:
         detail = ", ".join(
@@ -1288,7 +1294,9 @@ def cancer_reference_expression(
             request_key = (request["requested_code"], code, mode)
             if request_key not in available_keys:
                 continue
-            ref, method = _reference_expression_frame(code, mode, auto_fetch=auto_fetch)
+            ref, method = _reference_expression_frame(
+                code, mode, auto_fetch=auto_fetch, sample_qc=sample_qc
+            )
             ref = ref[_gene_filter_mask(ref, genes)].reset_index(drop=True)
             label = _REFERENCE_NORMALIZE_LABELS[mode]
             if format == "long":
@@ -1303,7 +1311,9 @@ def cancer_reference_expression(
                     part["missing_reason"] = str(request_row.missing_reason)
                 part = part.rename(columns={"p50": "expression", "p25": "q1", "p75": "q3"})
                 if include_provenance:
-                    provenance = _reference_expression_provenance(code, mode, method)
+                    provenance = _reference_expression_provenance(
+                        code, mode, method, sample_qc=sample_qc
+                    )
                     for col, value in provenance.items():
                         part[col] = value
                 long_parts.append(
@@ -1336,6 +1346,8 @@ def cancer_reference_expression(
 def cancer_reference_expression_availability(
     cancer_types: str | Iterable[str] | None = None,
     normalize: str | Iterable[str] = "tpm_clean",
+    *,
+    sample_qc: str = "pass",
 ) -> pd.DataFrame:
     """Availability/provenance table for :func:`cancer_reference_expression`.
 
@@ -1345,8 +1357,9 @@ def cancer_reference_expression_availability(
     empty gene filter or an unavailable upstream artifact.
     """
     modes = _reference_normalize_modes(normalize)
+    sample_qc = _validate_sample_qc(sample_qc)
     requests = _reference_expression_requests(cancer_types, modes)
-    return _reference_expression_availability_for_requests(requests, modes)
+    return _reference_expression_availability_for_requests(requests, modes, sample_qc=sample_qc)
 
 
 _REFERENCE_NORMALIZE_ALIASES = {
@@ -1383,6 +1396,7 @@ _REFERENCE_PROVENANCE_COLUMNS = [
     "source_scale_class",
     "linear_tpm_comparable",
     "reference_method",
+    "sample_qc",
     "data_version",
     "source_matrix_version",
 ]
@@ -1434,7 +1448,7 @@ def _reference_available_codes_for_modes(modes: list[str]) -> list[str]:
 
 
 def _reference_expression_availability_for_requests(
-    requests: list[dict[str, str]], modes: list[str]
+    requests: list[dict[str, str]], modes: list[str], *, sample_qc: str
 ) -> pd.DataFrame:
     percentile_available = set(available_percentile_cohorts())
     source_matrix_available = set(source_matrices.available_cohorts())
@@ -1458,7 +1472,7 @@ def _reference_expression_availability_for_requests(
                 "data_version": DATA_VERSION,
                 "source_matrix_version": SOURCE_MATRIX_VERSION,
             }
-            row.update(_reference_expression_provenance(code, mode, method))
+            row.update(_reference_expression_provenance(code, mode, method, sample_qc=sample_qc))
             rows.append(row)
     columns = [
         "requested_code",
@@ -1473,6 +1487,7 @@ def _reference_expression_availability_for_requests(
         "source_scale_class",
         "linear_tpm_comparable",
         "reference_method",
+        "sample_qc",
         "artifact_schema_version",
         "data_version",
         "source_matrix_version",
@@ -1549,7 +1564,7 @@ def _reference_long_columns(include_provenance: bool, include_request_metadata: 
 
 
 def _reference_expression_frame(
-    code: str, mode: str, *, auto_fetch: bool
+    code: str, mode: str, *, auto_fetch: bool, sample_qc: str
 ) -> tuple[pd.DataFrame, str]:
     if mode in {"tpm_clean", "tpm_clean_biological"}:
         return cohort_gene_percentiles(code, as_tpm=True, auto_fetch=auto_fetch), "percentile_shard"
@@ -1560,13 +1575,17 @@ def _reference_expression_frame(
         )
     if mode == "tpm_raw":
         return (
-            cohort_stats(code, normalize="tpm_raw", auto_fetch=auto_fetch, sample_qc="all"),
+            cohort_stats(code, normalize="tpm_raw", auto_fetch=auto_fetch, sample_qc=sample_qc),
             "source_matrix_stats",
         )
     raise AssertionError(f"unhandled reference normalize mode: {mode}")
 
 
-def _reference_expression_provenance(code: str, mode: str, method: str) -> dict:
+def _reference_sample_qc_label(mode: str, sample_qc: str) -> str:
+    return sample_qc if mode == "tpm_raw" else "artifact"
+
+
+def _reference_expression_provenance(code: str, mode: str, method: str, *, sample_qc: str) -> dict:
     meta = _selected_expression_source_metadata(code)
     return {
         "source_cohort": meta["source_cohort"] or code,
@@ -1575,6 +1594,7 @@ def _reference_expression_provenance(code: str, mode: str, method: str) -> dict:
         "source_scale_class": meta["source_scale_class"],
         "linear_tpm_comparable": bool(meta["linear_tpm_comparable"]),
         "reference_method": method,
+        "sample_qc": _reference_sample_qc_label(mode, sample_qc),
         "data_version": DATA_VERSION,
         "source_matrix_version": SOURCE_MATRIX_VERSION,
     }
