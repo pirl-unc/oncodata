@@ -14,7 +14,7 @@
 
 The wheel ships small curated tables directly (cancer-type registry, TMB,
 incidence/mortality — ~60 KB). The much larger per-cohort expression summaries
-and percentile vectors (~340 MB) download on first access from the version-pinned
+and percentile/vector artifacts download on first access from the version-pinned
 GitHub Release.
 
 Cache layout (version-pinned so upgrades trigger a re-fetch):
@@ -22,8 +22,11 @@ Cache layout (version-pinned so upgrades trigger a re-fetch):
   ~/.cache/oncoref/bundled_data/v<DATA_VERSION>/
     cancer-reference-expression/...
     cancer-reference-expression-percentiles/...
+    cancer-reference-expression-percentiles-proteoform-cta/...
     pan-cancer-expression.csv
     hpa-cell-type-expression.csv
+    source-matrix-sample-qc.csv
+    expression-artifact-build-metadata.*
 
 oncoref now owns the bundle: new downloads land under ``~/.cache/oncoref``
 and use the checksum-verified ``pirl-unc/oncoref`` release for the active
@@ -108,7 +111,7 @@ RELEASE_URLS: tuple[str, ...] = tuple(source["url"] for source in RELEASE_SOURCE
 CACHE_COMPLETE_FILENAME = ".oncoref-bundle-complete.json"
 CACHE_MANIFEST_VERSION = 1
 BUNDLE_MANIFEST_VERSION = 1
-BUNDLE_CONTRACT_VERSION = 1
+BUNDLE_CONTRACT_VERSION = 2
 
 
 class BundleIntegrityError(RuntimeError):
@@ -131,6 +134,12 @@ DOWNLOADABLE_PATHS: tuple[str, ...] = (
     "cancer-reference-expression",  # directory of per-source shards
     "cancer-reference-expression-representatives",  # per-cohort medoid parquets
     "cancer-reference-expression-percentiles",  # per-gene percentile vectors
+    "cancer-reference-expression-within-sample-top5",  # within-sample high-rank prevalence
+    "cancer-reference-expression-percentiles-proteoform-cta",  # CTA proteoform percentiles
+    "cancer-reference-expression-within-sample-top5-proteoform-cta",  # CTA proteoform prevalence
+    "source-matrix-sample-qc.csv",  # per-sample QC statuses used by rebuilt artifacts
+    "expression-artifact-build-metadata.csv",  # per-cohort build/QC provenance
+    "expression-artifact-build-metadata.json",  # bundle-level build/QC provenance
     "pan-cancer-expression.csv",
     "hpa-cell-type-expression.csv",
 )
@@ -308,8 +317,10 @@ def _validate_release_manifest(manifest: dict, source: dict, *, manifest_url: st
         "builder",
         "builder_commit",
         "created_at",
+        "package_version",
         "source_matrix_version",
         "sample_qc_policy",
+        "sample_qc_policy_version",
         "source_matrix_sample_qc",
         "artifact_build_metadata",
     ):
@@ -559,7 +570,7 @@ def fetch(*, verbose: bool = True) -> Path:
         if verbose:
             sys.stderr.write(
                 f"oncoref: downloading data bundle for v{DATA_VERSION} "
-                "(~350 MB, one-time)\n"
+                "(large, one-time)\n"
                 f"  from {url}\n"
                 f"  to   {root}\n"
             )
@@ -612,7 +623,7 @@ def ensure_local(*, auto_fetch: bool = True, verbose: bool = True) -> Path:
 
     With ``auto_fetch=False``, raises ``FileNotFoundError`` instead of
     triggering a network call — for read-only inspection paths that shouldn't
-    surprise users with a 340 MB download.
+    surprise users with a large download.
     """
     if is_local():
         return cache_dir()

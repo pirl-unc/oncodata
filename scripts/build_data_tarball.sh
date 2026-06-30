@@ -32,6 +32,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 DATA_VERSION="$(python -c 'from oncoref.version import DATA_VERSION; print(DATA_VERSION)')"
+PACKAGE_VERSION="$(python -c 'from oncoref.version import __version__; print(__version__)')"
+SOURCE_MATRIX_VERSION="$(python -c 'from oncoref.version import SOURCE_MATRIX_VERSION; print(SOURCE_MATRIX_VERSION)')"
+BUILDER_COMMIT="$(git rev-parse HEAD 2>/dev/null || true)"
 read -r -a PATHS <<<"$(python -c 'from oncoref.data_bundle import DOWNLOADABLE_PATHS; print(" ".join(DOWNLOADABLE_PATHS))')"
 OUT="${OUT_DIR%/}/oncoref-data-v${DATA_VERSION}.tar.gz"
 SHA_OUT="${OUT}.sha256"
@@ -48,10 +51,10 @@ if ((${#missing[@]})); then
 fi
 
 echo "packaging ${#PATHS[@]} bundle paths from $SRC -> $OUT"
-tar -czf "$OUT" -C "$SRC" "${PATHS[@]}"
+COPYFILE_DISABLE=1 tar -czf "$OUT" -C "$SRC" "${PATHS[@]}"
 SIZE="$(du -h "$OUT" | cut -f1)"
 echo "wrote $OUT ($SIZE)"
-python - "$OUT" "$SRC" "$MANIFEST_OUT" "$DATA_VERSION" "${PATHS[@]}" <<'PY'
+python - "$OUT" "$SRC" "$MANIFEST_OUT" "$DATA_VERSION" "$PACKAGE_VERSION" "$SOURCE_MATRIX_VERSION" "$BUILDER_COMMIT" "${PATHS[@]}" <<'PY'
 import hashlib
 import json
 import sys
@@ -62,7 +65,10 @@ tarball = Path(sys.argv[1])
 source = Path(sys.argv[2])
 manifest = Path(sys.argv[3])
 data_version = sys.argv[4]
-paths = sys.argv[5:]
+package_version = sys.argv[5]
+source_matrix_version = sys.argv[6]
+builder_commit = sys.argv[7] or None
+paths = sys.argv[8:]
 
 
 def sha256_file(path: Path) -> str:
@@ -86,6 +92,10 @@ def inventory(rel: str) -> dict:
 payload = {
     "manifest_version": 1,
     "data_version": data_version,
+    "package_version": package_version,
+    "source_matrix_version": source_matrix_version,
+    "builder": "scripts/build_data_tarball.sh",
+    "builder_commit": builder_commit,
     "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     "tarball": {
         "filename": tarball.name,
@@ -95,6 +105,26 @@ payload = {
     },
     "inventory": {rel: inventory(rel) for rel in paths},
 }
+
+build_json = source / "expression-artifact-build-metadata.json"
+if build_json.exists():
+    build_metadata = json.loads(build_json.read_text())
+    derived_artifacts = build_metadata.get("derived_artifacts") or []
+    payload["sample_qc_policy"] = build_metadata.get("sample_qc")
+    payload["sample_qc_policy_version"] = build_metadata.get("sample_qc_policy_version")
+    payload["source_matrix_sample_qc"] = build_metadata.get("sample_qc_manifest")
+    payload["artifact_build_metadata"] = {
+        "cohort_metadata": build_metadata.get("cohort_metadata"),
+        "bundle_metadata": build_json.name,
+        "derived_artifacts": derived_artifacts,
+        "released_derived_artifacts": [p for p in derived_artifacts if p in paths],
+        "unreleased_intermediate_artifacts": [p for p in derived_artifacts if p not in paths],
+        "n_cohorts": build_metadata.get("n_cohorts"),
+        "n_source_samples": build_metadata.get("n_source_samples"),
+        "n_cohort_samples": build_metadata.get("n_cohort_samples"),
+        "sample_qc_fallbacks": build_metadata.get("sample_qc_fallbacks"),
+        "n_negative_values_clipped": build_metadata.get("n_negative_values_clipped"),
+    }
 manifest.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 PY
 python - "$OUT" "$SHA_OUT" <<'PY'

@@ -35,6 +35,8 @@ def percentile_cache(monkeypatch, tmp_path):
 
 
 def test_available_percentile_cohorts(percentile_cache):
+    sidecar = percentile_cache / "cancer-reference-expression-percentiles" / "._ACC.parquet"
+    sidecar.write_bytes(b"appledouble sidecar")
     assert expression.available_percentile_cohorts() == ["PRAD"]
 
 
@@ -256,7 +258,12 @@ def test_shard_dataset_registry_is_public_and_scope_aware():
     assert pct.subdir(proteoform=False) == "cancer-reference-expression-percentiles"
     assert pct.subdir(proteoform=True, scope="cta").endswith("-proteoform-cta")
     assert pct.subdir(proteoform=True, scope="genome").endswith("-proteoform-genome")
-    assert pct.fetches(proteoform=False) is True and pct.fetches(proteoform=True) is False
+    assert pct.fetches(proteoform=False) is True
+    assert pct.fetches(proteoform=True, scope="cta") is True
+    assert pct.fetches(proteoform=True, scope="genome") is False
+    assert oncoref.SHARD_DATASETS["within_sample"].fetches(proteoform=False) is True
+    assert oncoref.SHARD_DATASETS["within_sample"].fetches(proteoform=True, scope="cta") is True
+    assert oncoref.SHARD_DATASETS["within_sample"].fetches(proteoform=True, scope="genome") is False
     # an artifact with no proteoform variant rejects the request
     with pytest.raises(ValueError, match="no proteoform variant"):
         oncoref.SHARD_DATASETS["representatives"].subdir(proteoform=True)
@@ -265,8 +272,9 @@ def test_shard_dataset_registry_is_public_and_scope_aware():
 
 
 def test_proteoform_summary_wrappers_thread_scope_and_default_autofetch_true(monkeypatch):
-    # The proteoform percentile/within-sample wrappers always recompute (no shard
-    # ships), so they default auto_fetch=True (vs the gene variant's False) and thread scope.
+    # Proteoform wrappers still default auto_fetch=True and thread scope; if the
+    # active bundle lacks a requested scope-specific shard, they can recompute
+    # from the source matrix through the same path.
     seen = {}
     monkeypatch.setattr(
         expression, "cohort_gene_percentiles", lambda ct, **k: seen.update(k) or pd.DataFrame()

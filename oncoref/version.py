@@ -10,15 +10,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__version__ = "1.8.36"
+__version__ = "1.8.37"
 
 # Version of the downloadable data bundle (the heavy per-cohort percentile +
 # representative shards). Bump when the DERIVED reference artifacts change — it pins
 # the bundle filename, GitHub-release tag, and on-disk cache. Decoupled from
 # __version__ so a code-only release reuses the last uploaded bundle. 5.23.0 made the
-# shards dense in the canonical gene-ID space (oncoref#135 item 6); the raw inputs
-# behind them did not change, so SOURCE_MATRIX_VERSION stayed put.
-DATA_VERSION = "5.23.0"
+# shards dense in the canonical gene-ID space (oncoref#135 item 6). 5.23.3 is the
+# first oncoref-owned QC-policy bundle: derived expression artifacts are rebuilt from
+# source matrices with sample_qc="pass" by default and ship build/QC metadata.
+DATA_VERSION = "5.23.3"
 
 # Version of the per-cohort RAW source matrices (source_matrices.py). Independent of
 # DATA_VERSION: the source matrices are the unchanging raw-TPM inputs, while DATA_VERSION

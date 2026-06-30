@@ -99,7 +99,9 @@ class ShardDataset:
         the artifact has no proteoform variant. The on-disk directory is **scope-suffixed**
         (``f"{proteoform_stem}-{scope}"``) because identical-protein members group
         differently under ``"cta"`` vs ``"genome"``, so each scope is its own shard set.
-      - ``proteoform_fetches`` — whether proteoform shards ship (none do yet).
+      - ``proteoform_fetch_scopes`` — proteoform scopes whose shards ship in the active
+        bundle. Other scopes still recompute on demand from the per-sample matrix
+        because proteoform groups are scope-specific.
       - ``build_attr`` — name of the :mod:`oncoref.expression_builders` core that regenerates a
         missing shard from the per-sample matrix (the same core that produced the shipped
         shards, so on-the-fly and shipped values agree).
@@ -111,7 +113,7 @@ class ShardDataset:
     gene_dir: str
     gene_fetches: bool
     proteoform_stem: str | None = None
-    proteoform_fetches: bool = False
+    proteoform_fetch_scopes: tuple[str, ...] = ()
     build_attr: str | None = None
 
     def subdir(self, *, proteoform: bool, scope: str = "cta") -> str:
@@ -124,17 +126,18 @@ class ShardDataset:
             raise ValueError(f"{self.noun} has no proteoform variant")
         return f"{self.proteoform_stem}-{scope}"
 
-    def fetches(self, *, proteoform: bool) -> bool:
+    def fetches(self, *, proteoform: bool, scope: str = "cta") -> bool:
         """Whether the requested level's shards ship in a released bundle (so a missing
         shard may be auto-fetched rather than only recomputed)."""
-        return self.proteoform_fetches if proteoform else self.gene_fetches
+        if not proteoform:
+            return self.gene_fetches
+        return scope in self.proteoform_fetch_scopes
 
 
-#: The expression summary artifacts, keyed by short name. Proteoform shards aren't shipped
-#: in any bundle yet (``proteoform_fetches=False``), so the proteoform variant is recomputed
-#: on the fly from the per-sample matrix (see ``_read_shard_or_recompute``) until they ship;
-#: when they do, each scope is a distinct ``{stem}-{scope}`` directory (see
-#: :meth:`ShardDataset.subdir`).
+#: The expression summary artifacts, keyed by short name. The QC-policy data bundle ships
+#: gene-level percentiles, representatives, within-sample prevalence, and CTA-scope
+#: proteoform percentile/within-sample shards. Other proteoform scopes still recompute
+#: on demand from the source matrix.
 SHARD_DATASETS: dict[str, ShardDataset] = {
     "representatives": ShardDataset(
         noun="representative-samples shard",
@@ -146,13 +149,15 @@ SHARD_DATASETS: dict[str, ShardDataset] = {
         gene_dir="cancer-reference-expression-percentiles",
         gene_fetches=True,
         proteoform_stem="cancer-reference-expression-percentiles-proteoform",
+        proteoform_fetch_scopes=("cta",),
         build_attr="cohort_percentile_vectors",
     ),
     "within_sample": ShardDataset(
         noun="within-sample top-fraction vector",
         gene_dir="cancer-reference-expression-within-sample-top5",
-        gene_fetches=False,  # not part of a released bundle yet -> never trigger a fetch
+        gene_fetches=True,
         proteoform_stem="cancer-reference-expression-within-sample-top5-proteoform",
+        proteoform_fetch_scopes=("cta",),
         build_attr="within_sample_top_fractions",
     ),
 }
@@ -188,9 +193,8 @@ def _bundle_subdir(name: str, *, auto_fetch: bool = True) -> Path:
     """Locate a bundle shard directory: an in-repo checkout (``oncoref/data/…``)
     wins, else the downloaded bundle cache; the bundle is fetched if absent.
 
-    ``auto_fetch=False`` skips the (potentially 340 MB) download — used for
-    artifacts not yet shipped in any released bundle, where a fetch couldn't
-    provide them anyway; the returned path simply won't exist."""
+    ``auto_fetch=False`` skips the potentially large bundle download; the
+    returned path simply won't exist when the shard is absent locally."""
     in_repo = Path(_BUNDLED_DATA_DIR) / name
     if in_repo.exists():
         return in_repo
@@ -206,7 +210,7 @@ def _available_shard_codes(root: Path) -> list[str]:
     """Sorted cohort codes that ship a parquet shard under ``root``."""
     if not root.exists():
         return []
-    return sorted(p.stem for p in root.glob("*.parquet"))
+    return sorted(p.stem for p in root.glob("*.parquet") if not p.name.startswith("._"))
 
 
 def _shard_dir(dataset: ShardDataset, *, proteoform: bool = False, scope: str = "cta") -> Path:
@@ -216,7 +220,7 @@ def _shard_dir(dataset: ShardDataset, *, proteoform: bool = False, scope: str = 
     record, so it's decided in one place rather than re-stated at each call site."""
     return _bundle_subdir(
         dataset.subdir(proteoform=proteoform, scope=scope),
-        auto_fetch=dataset.fetches(proteoform=proteoform),
+        auto_fetch=dataset.fetches(proteoform=proteoform, scope=scope),
     )
 
 
@@ -1982,12 +1986,11 @@ def cohort_gene_percentiles(
     members summed **before** the percentiles are computed (``scope`` ``"cta"``/``"genome"``,
     ignored when ``proteoform`` is False).
 
-    The shipped percentile **shard** can't be converted to the proteoform view (you
-    can't sum already-computed percentiles), so when no shard is present the vector is
-    **recomputed on the fly** from the per-sample matrix via the same build core — the
-    live path for the proteoform variant until its shard ships. That needs the cohort's
-    per-sample matrix cached (pass ``auto_fetch=True`` to download it); otherwise a
-    clear error.
+    The shipped percentile **shard** can't be converted across proteoform scopes (you
+    can't sum already-computed percentiles), so when no matching shard is present the
+    vector is **recomputed on the fly** from the per-sample matrix via the same build
+    core. That needs the cohort's per-sample matrix cached (pass ``auto_fetch=True`` to
+    download it); otherwise a clear error.
     """
     if on_missing not in ("raise", "empty"):
         raise ValueError("on_missing must be 'raise' or 'empty'")
@@ -2067,9 +2070,8 @@ def within_sample_top_fraction(
     so an ungrouped gene's fraction can shift slightly vs the gene variant.
 
     Reads the shipped shard when present, else **recomputes on the fly** from the
-    per-sample matrix via the same build core (the live path for the proteoform
-    variant until its shard ships) — needs the cohort's per-sample matrix cached (pass
-    ``auto_fetch=True`` to download it), else a clear error.
+    per-sample matrix via the same build core. Recompute needs the cohort's per-sample
+    matrix cached (pass ``auto_fetch=True`` to download it), else a clear error.
     """
     col = _WITHIN_SAMPLE_THRESHOLD_COLS.get(threshold)
     if col is None:

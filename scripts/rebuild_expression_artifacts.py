@@ -108,6 +108,14 @@ def _source_key(name: str) -> str:
     return m.group() if m else re.sub(r"[^A-Z0-9]", "", name.upper())
 
 
+def _parquet_sample_count(path: Path) -> int:
+    """Fast sample-column count from parquet metadata."""
+    import pyarrow.parquet as pq
+
+    names = pq.ParquetFile(path).schema_arrow.names
+    return len([c for c in names if c not in _BASE])
+
+
 def discover(cache: Path, ref: Path) -> dict[str, list[tuple[str, Path]]]:
     """Map each reference cancer code to its candidate ``(cohort_dir, matrix path)``."""
     ref_by_key = {_code_key(p.stem): p.stem for p in ref.glob("*.parquet")}
@@ -126,7 +134,12 @@ def discover(cache: Path, ref: Path) -> dict[str, list[tuple[str, Path]]]:
     return dict(by_code)
 
 
-def _select_source(code: str, candidates: list[tuple[str, Path]], code_to_source: dict) -> Path:
+def _select_source(
+    code: str,
+    candidates: list[tuple[str, Path]],
+    code_to_source: dict,
+    code_to_n_samples: dict | None = None,
+) -> Path:
     """Pick the single source matrix for a code — never pool.
 
     pirlygenes selects exactly one source cohort per code (RNA-seq over microarray
@@ -143,6 +156,26 @@ def _select_source(code: str, candidates: list[tuple[str, Path]], code_to_source
         hits = [p for d, p in candidates if _source_key(d) == want]
         if len(hits) == 1:
             return hits[0]
+        # Some source registry rows name an aggregate release with a year suffix
+        # (e.g. GEO_HEME_2022), while the staged cache directory uses the family
+        # label (geo-heme). Prefer that explicit aggregate directory over
+        # duplicate per-study cache aliases when it is unique.
+        want_without_trailing_digits = want.rstrip("0123456789")
+        if want_without_trailing_digits and want_without_trailing_digits != want:
+            hits = [
+                p for d, p in candidates if _source_key(d) == want_without_trailing_digits
+            ]
+            if len(hits) == 1:
+                return hits[0]
+    if code_to_n_samples:
+        want_n = code_to_n_samples.get(code)
+        if want_n is not None:
+            count_hits = []
+            for _d, p in candidates:
+                if _parquet_sample_count(p) == want_n:
+                    count_hits.append(p)
+            if len(count_hits) == 1:
+                return count_hits[0]
     # Fall back to the most-sampled source so a registry miss still picks one source,
     # never a pool. (Not expected for the shipped registry.)
     print(
@@ -164,6 +197,20 @@ def read_raw(path: Path) -> pd.DataFrame:
     return _canonicalize_gene_rows(raw, sample_cols=sample_columns(raw)).reset_index(drop=True)
 
 
+def _clip_negative_expression(df: pd.DataFrame, sample_cols: list[str]) -> tuple[pd.DataFrame, int]:
+    """TPM-like source matrices should be nonnegative; clip invalid negatives to zero."""
+    if not sample_cols:
+        return df, 0
+    values = df[sample_cols]
+    negative = values < 0
+    n_negative = int(negative.to_numpy().sum())
+    if not n_negative:
+        return df, 0
+    out = df.copy()
+    out.loc[:, sample_cols] = values.clip(lower=0)
+    return out, n_negative
+
+
 def build_clean(raw: pd.DataFrame) -> pd.DataFrame:
     """Clean-TPM matrix for one source's per-sample matrix (genes x samples + ids)."""
     samples = [c for c in raw.columns if c not in _BASE]
@@ -182,18 +229,43 @@ def _drop_technical(df: pd.DataFrame) -> pd.DataFrame:
     return df[~unversioned.isin(censored)].reset_index(drop=True)
 
 
-def _samples_for_qc(samples: list[str], qc: pd.DataFrame, sample_qc: str) -> list[str]:
+def _sample_selection_for_qc(
+    samples: list[str], qc: pd.DataFrame, sample_qc: str
+) -> tuple[list[str], str, str]:
     mode = _validate_sample_qc(sample_qc)
     if mode == "all":
-        return samples
+        return samples, "all", ""
     if qc.empty:
-        return []
+        return [], mode, ""
     status = dict(zip(qc["sample_id"].astype(str), qc["sample_qc_status"].astype(str)))
     if mode == "pass":
         allowed = {"pass"}
     else:
         allowed = {"pass", "warn"}
-    return [s for s in samples if status.get(str(s)) in allowed]
+    selected = [s for s in samples if status.get(str(s)) in allowed]
+    if selected or mode != "pass":
+        return selected, mode, ""
+
+    # Source-aware escape hatch: microarray/TPM-proxy sources are flagged warn
+    # because their absolute scale is not linear RNA-seq TPM, but dropping the
+    # entire cohort would erase a curated reference. Keep warn samples only when
+    # every source sample is warn for the explicit proxy-scale reason.
+    reasons = set()
+    if "sample_qc_reasons" in qc.columns:
+        for value in qc["sample_qc_reasons"].fillna("").astype(str):
+            reasons.update(part for part in value.split(";") if part)
+    scale_classes = set(qc.get("source_scale_class", pd.Series(dtype=str)).fillna("").astype(str))
+    statuses = set(qc["sample_qc_status"].astype(str))
+    if statuses <= {"warn"} and (
+        "tpm_proxy_scale" in reasons or "microarray_tpm_proxy" in scale_classes
+    ):
+        warn_samples = [s for s in samples if status.get(str(s)) == "warn"]
+        return warn_samples, "pass_or_warn", "no_pass_samples_tpm_proxy_source"
+    concentration_only = {"high_top_gene_fraction", "high_top10_gene_fraction"}
+    if statuses <= {"fail"} and reasons and reasons <= concentration_only:
+        fail_samples = [s for s in samples if status.get(str(s)) == "fail"]
+        return fail_samples, "all", "no_pass_samples_high_concentration_source"
+    return [], mode, ""
 
 
 def _qc_counts(qc: pd.DataFrame) -> dict[str, int]:
@@ -214,6 +286,11 @@ def rebuild(
     by_code = discover(cache, ref)
     reg = source_registry()
     code_to_source = dict(zip(reg["cancer_code"].astype(str), reg["source_cohort"].astype(str)))
+    code_to_n_samples = (
+        dict(zip(reg["cancer_code"].astype(str), reg["n_samples"].astype(int)))
+        if "n_samples" in reg.columns
+        else {}
+    )
     codes = sorted(by_code)
     if limit:
         codes = codes[:limit]
@@ -233,14 +310,17 @@ def rebuild(
     build_rows: list[dict] = []
     corrs: list[float] = []
     for code in codes:
-        source_path = _select_source(code, by_code[code], code_to_source)
+        source_path = _select_source(code, by_code[code], code_to_source, code_to_n_samples)
         raw_df = read_raw(source_path)
         source_samples = [c for c in raw_df.columns if c not in _BASE]
+        raw_df, n_negative_values_clipped = _clip_negative_expression(raw_df, source_samples)
         qc = sample_expression_qc_from_matrix(raw_df, cancer_type=code)
         if not qc.empty:
             qc = qc.assign(source_matrix_path=str(source_path))
             qc_manifest.append(qc)
-        samples = _samples_for_qc(source_samples, qc, sample_qc)
+        samples, effective_sample_qc, sample_qc_fallback_reason = _sample_selection_for_qc(
+            source_samples, qc, sample_qc
+        )
         if not samples:
             raise ValueError(f"{code}: sample_qc={sample_qc!r} leaves no source samples")
 
@@ -270,9 +350,12 @@ def rebuild(
             "source_version": source_version,
             "source_matrix_path": str(source_path),
             "sample_qc": sample_qc,
+            "sample_qc_effective": effective_sample_qc,
+            "sample_qc_fallback_reason": sample_qc_fallback_reason,
             "sample_qc_policy_version": SAMPLE_EXPRESSION_QC_POLICY_VERSION,
             "n_source_samples": len(source_samples),
             "n_cohort_samples": len(samples),
+            "n_negative_values_clipped": n_negative_values_clipped,
             **qc_counts,
         }
         build_rows.append(build_row)
@@ -284,9 +367,12 @@ def rebuild(
                     "source_version": source_version,  # harmonized Ensembl release
                     "source_matrix_path": str(source_path),
                     "sample_qc": sample_qc,
+                    "sample_qc_effective": effective_sample_qc,
+                    "sample_qc_fallback_reason": sample_qc_fallback_reason,
                     "sample_qc_policy_version": SAMPLE_EXPRESSION_QC_POLICY_VERSION,
                     "n_source_samples": len(source_samples),
                     "n_cohort_samples": len(samples),
+                    "n_negative_values_clipped": n_negative_values_clipped,
                     **qc_counts,
                 }
             )
@@ -314,8 +400,12 @@ def rebuild(
             if corr is not None:
                 corrs.append(corr)
                 msg += f"  p95-corr={corr:.4f}"
-        if len(samples) != len(source_samples):
-            msg += f"  sample_qc={sample_qc}:{len(samples)}/{len(source_samples)}"
+        if len(samples) != len(source_samples) or sample_qc_fallback_reason:
+            msg += f"  sample_qc={effective_sample_qc}:{len(samples)}/{len(source_samples)}"
+            if sample_qc_fallback_reason:
+                msg += f" ({sample_qc_fallback_reason})"
+        if n_negative_values_clipped:
+            msg += f"  clipped_negative_values={n_negative_values_clipped}"
         print(msg, flush=True)
 
     pd.DataFrame(provenance).to_csv(rep_dir / "_provenance.csv", index=False)
@@ -328,11 +418,17 @@ def rebuild(
         "artifact": "expression-derived-shards",
         "sample_qc": sample_qc,
         "sample_qc_policy_version": SAMPLE_EXPRESSION_QC_POLICY_VERSION,
+        "sample_qc_fallbacks": int(
+            sum(1 for row in build_rows if row.get("sample_qc_fallback_reason"))
+        ),
         "sample_qc_manifest": "source-matrix-sample-qc.csv",
         "cohort_metadata": "expression-artifact-build-metadata.csv",
         "n_cohorts": len(build_rows),
         "n_source_samples": int(sum(row["n_source_samples"] for row in build_rows)),
         "n_cohort_samples": int(sum(row["n_cohort_samples"] for row in build_rows)),
+        "n_negative_values_clipped": int(
+            sum(row["n_negative_values_clipped"] for row in build_rows)
+        ),
         "derived_artifacts": [
             "clean",
             _PCT_DS.gene_dir,

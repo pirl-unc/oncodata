@@ -91,15 +91,51 @@ WHEEL: dict[str, tuple[str, str]] = {
     "cancer-frameshift-burden": ("genomics", "per-type frameshift-indel burden"),
 }
 
-#: {name: (category, description)} — heavy artifacts in the release tarball.
-#: Names match ``data_bundle.DOWNLOADABLE_PATHS`` (sans extension); kept in sync by a test.
-BUNDLE: dict[str, tuple[str, str]] = {
+#: {name: (category, description)} — pirlygenes-originated heavy artifacts in
+#: the release tarball.
+BUNDLE_PIRLYGENES: dict[str, tuple[str, str]] = {
     "cancer-reference-expression": ("expression", "per-cohort RNA-seq summary shards"),
     "cancer-reference-expression-percentiles": ("expression", "per-gene percentile vectors"),
     "cancer-reference-expression-representatives": ("expression", "per-cohort medoid samples"),
     "pan-cancer-expression": ("expression", "pan-cancer HPA-tissue + TCGA matrix"),
     "hpa-cell-type-expression": ("hpa", "HPA cell-type nTPM matrix"),
 }
+
+#: {name: (category, description)} — oncoref-originated bundle artifacts produced
+#: by the rebuilt expression-artifact pipeline. These are not in the frozen
+#: pirlygenes data inventory, but they are part of oncoref's downstream bundle
+#: contract.
+BUNDLE_ORIGINATED: dict[str, tuple[str, str]] = {
+    "cancer-reference-expression-within-sample-top5": (
+        "expression",
+        "within-sample high-expression prevalence by cohort",
+    ),
+    "cancer-reference-expression-percentiles-proteoform-cta": (
+        "expression",
+        "CTA-scope proteoform-summed percentile vectors",
+    ),
+    "cancer-reference-expression-within-sample-top5-proteoform-cta": (
+        "expression",
+        "CTA-scope proteoform-summed within-sample prevalence",
+    ),
+    "source-matrix-sample-qc": (
+        "expression",
+        "per-sample QC manifest for rebuilt expression artifacts",
+    ),
+    "expression-artifact-build-metadata": (
+        "expression",
+        "per-cohort build/QC provenance for rebuilt expression artifacts",
+    ),
+    "expression-artifact-build-metadata.json": (
+        "expression",
+        "bundle-level build/QC provenance for rebuilt expression artifacts",
+    ),
+}
+
+#: {name: (category, description)} — every heavy artifact in the release tarball.
+#: Names match ``data_bundle.DOWNLOADABLE_PATHS`` (sans extension for ``.csv``);
+#: kept in sync by a test.
+BUNDLE: dict[str, tuple[str, str]] = {**BUNDLE_PIRLYGENES, **BUNDLE_ORIGINATED}
 
 #: {name: (category, description)} — HPA tables fetched per-source (not pirlygenes files).
 HPA: dict[str, tuple[str, str]] = {

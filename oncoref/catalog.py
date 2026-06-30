@@ -49,6 +49,22 @@ _BUNDLE_DESCRIPTIONS = {
     "cancer-reference-expression": "per-cohort RNA-seq expression shards",
     "cancer-reference-expression-representatives": "per-cohort medoid/exemplar samples",
     "cancer-reference-expression-percentiles": "per-gene tail-weighted percentile vectors",
+    "cancer-reference-expression-within-sample-top5": (
+        "within-sample high-expression prevalence by cohort"
+    ),
+    "cancer-reference-expression-percentiles-proteoform-cta": (
+        "CTA-scope proteoform-summed percentile vectors"
+    ),
+    "cancer-reference-expression-within-sample-top5-proteoform-cta": (
+        "CTA-scope proteoform-summed within-sample prevalence"
+    ),
+    "source-matrix-sample-qc.csv": "per-sample QC manifest for rebuilt expression artifacts",
+    "expression-artifact-build-metadata.csv": (
+        "per-cohort build/QC provenance for rebuilt expression artifacts"
+    ),
+    "expression-artifact-build-metadata.json": (
+        "bundle-level build/QC provenance for rebuilt expression artifacts"
+    ),
     "pan-cancer-expression.csv": "pan-cancer HPA-tissue + TCGA expression matrix",
     "hpa-cell-type-expression.csv": "HPA cell-type nTPM matrix",
 }

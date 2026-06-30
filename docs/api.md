@@ -136,11 +136,15 @@ antigen_coverage.greedy_antigen_coverage("LUAD", gene_ids={"ENSG00000141510"})
   generation scripts. `scripts/rebuild_expression_artifacts.py` applies the same
   sample-QC policy to derived shards by default (`--sample-qc pass`) and emits
   `source-matrix-sample-qc.csv` plus `expression-artifact-build-metadata.*` in
-  the staging directory so bundle releases can record which source samples fed
-  percentiles, representatives, and within-sample summaries. Representative
+  the staging directory so bundle releases record which source samples fed
+  percentiles, representatives, proteoform summaries, and within-sample
+  summaries. Representative
   sample selection uses `representative_sample_columns` / `cohort_medoids` on the
   biological clean-TPM view, then stores the selected samples' full
-  clean_tpm_16_9_75 vectors.
+  clean_tpm_16_9_75 vectors. Release builds retain curated cohorts that have no
+  strict QC-pass samples only through explicit source-aware fallbacks recorded in
+  the build metadata, and clip invalid negative source expression values to zero
+  with per-cohort counts.
 - `oncoref.expression_engine` — reusable low-level builder primitives for
   expression tables: identity/value column detection, transcript-to-gene
   aggregation, source row ID-type detection, source gene-row mapping audits,
@@ -227,9 +231,12 @@ contracts:
   need to distinguish unavailable upstream data from private downstream fallback
   data.
 
-These APIs expose the artifact contract. They do not by themselves rebuild the
-representative/percentile bundles, so row-set and value parity with pirlygenes is
-still governed by the gene-universe and expression-artifact parity issues.
+The QC-policy expression bundle ships representative, percentile,
+within-sample, CTA-scope proteoform percentile, CTA-scope proteoform
+within-sample, sample-QC, and build-metadata artifacts. Non-shipped proteoform
+scopes can still recompute from cached source matrices. Row-set and value parity
+with pirlygenes is still governed by the gene-universe and expression-artifact
+parity issues.
 
 `expression.expression_artifact_gene_universe_deltas()` exposes the known
 pirlygenes/oncoref row-universe deltas from the current parity audit: canonical
@@ -299,7 +306,10 @@ but it is not the clean-TPM biological denominator.
 - `oncoref.data_bundle` — heavy expression bundle cache. Use
   `data_bundle.bundle_contract()` to inspect the downstream-stable package/data
   version linkage, release asset URLs, cache environment variables, completion
-  marker policy, and expected artifact inventory for the active bundle. Use
+  marker policy, and expected artifact inventory for the active bundle. The
+  inventory includes the generated sample-QC manifest, per-cohort build metadata,
+  within-sample prevalence shards, and CTA-scope proteoform percentile/prevalence
+  shards, not just the legacy pirlygenes expression tables. Use
   `data_bundle.bundle_release_manifest()` to fetch and validate only the small
   release manifest/checksum for the active `DATA_VERSION`, including tarball
   sha256 plus any artifact inventory, builder commit, source-matrix version, and
