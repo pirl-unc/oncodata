@@ -282,7 +282,7 @@ from .samples import (
     samples_for_cancer_code,
     samples_for_cohort,
 )
-from .tmb import cancer_tmb, cancer_tmb_df
+from .tmb import cancer_tmb, cancer_tmb_df, cancer_tmb_record, resolve_tmb_source
 from .version import __version__
 
 __all__ = [
@@ -361,6 +361,7 @@ __all__ = [
     # TMB
     "cancer_tmb",
     "cancer_tmb_df",
+    "cancer_tmb_record",
     "cancer_type_ancestors",
     "cancer_type_codes",
     "cancer_type_descendants",
@@ -522,6 +523,7 @@ __all__ = [
     "resolve_cancer_type",
     "resolve_ensembl_id",
     "resolve_symbol",
+    "resolve_tmb_source",
     "response_signature_direction",
     "response_signature_genes",
     "response_signature_names",

@@ -4,6 +4,8 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
+import pandas as pd
+
 from oncoref import cancer_types, tmb
 
 
@@ -22,6 +24,25 @@ def test_tmb_map_nonempty_floats():
     mapping = tmb.cancer_tmb()
     assert mapping
     assert all(isinstance(v, float) for v in mapping.values())
+
+
+def test_tmb_df_exposes_evidence_schema():
+    df = tmb.cancer_tmb_df()
+    assert {"estimate_type", "source_scope", "missing_reason"} <= set(df.columns)
+
+    crc_msi = df.set_index("cancer_code").loc["CRC_MSI"]
+    assert crc_msi["estimate_type"] == "aggregate_source_scope_estimate"
+    assert crc_msi["source_scope"] == "aggregate_source_scope"
+    assert pd.isna(crc_msi["missing_reason"])
+
+    net_midgut = df.set_index("cancer_code").loc["NET_MIDGUT"]
+    assert net_midgut["estimate_type"] == "proxy_estimate"
+    assert net_midgut["source_scope"] == "pooled_gep_net_proxy"
+
+    missing = df.set_index("cancer_code").loc["PITNET"]
+    assert missing["estimate_type"] == "missing"
+    assert missing["source_scope"] == "none"
+    assert missing["missing_reason"]
 
 
 def test_tmb_resolves_alias():
@@ -56,6 +77,40 @@ def test_crc_msi_tmb_is_single_source_scope_row():
     assert tmb.cancer_tmb("COAD_MSI") == mapping["CRC_MSI"]
     assert tmb.cancer_tmb("READ_MSI") == mapping["CRC_MSI"]
     assert tmb.cancer_tmb("COAD_MSI", inherit=False) is None
+
+
+def test_crc_msi_tmb_record_preserves_source_scope_metadata():
+    record = tmb.cancer_tmb_record("COAD_MSI")
+
+    assert record["requested_cancer_code"] == "COAD_MSI"
+    assert record["resolved_cancer_code"] == "CRC_MSI"
+    assert record["inheritance_kind"] == "source_scope"
+    assert record["is_inherited_evidence"] is True
+    assert record["median_tmb_mut_mb"] == 46.0
+    assert record["source_scope"] == "aggregate_source_scope"
+    assert record["estimate_type"] == "aggregate_source_scope_estimate"
+
+    direct = tmb.resolve_tmb_source("CRC_MSI")
+    assert direct["requested_cancer_code"] == "CRC_MSI"
+    assert direct["resolved_cancer_code"] == "CRC_MSI"
+    assert direct["inheritance_kind"] == "direct"
+    assert direct["is_inherited_evidence"] is False
+    assert direct["missing_reason"] is None
+
+
+def test_tmb_record_missing_and_bulk_direct_rows():
+    assert tmb.cancer_tmb_record("COAD_MSI", inherit=False) is None
+
+    missing = tmb.resolve_tmb_source("COAD_MSI", inherit=False)
+    assert missing["requested_cancer_code"] == "COAD_MSI"
+    assert missing["resolved_cancer_code"] is None
+    assert missing["inheritance_kind"] == "missing"
+    assert missing["has_tmb_source"] is False
+
+    bulk = tmb.cancer_tmb_record()
+    assert "CRC_MSI" in bulk
+    assert "COAD_MSI" not in bulk
+    assert bulk["CRC_MSI"]["inheritance_kind"] == "direct"
 
 
 def test_tmb_unknown_value_returns_none():

@@ -14,8 +14,21 @@
 
 from __future__ import annotations
 
+import pandas as pd
+
 from .cancer_types import cancer_evidence_source_code, cancer_type_registry, resolve_cancer_type
 from .load_dataset import get_data
+
+_TMB_SOURCE_SCOPE_OVERRIDES = {
+    # MSI-H/dMMR colorectal estimates are published at the CRC source scope; anatomical
+    # children such as COAD_MSI/READ_MSI resolve through this row rather than duplicating
+    # the same source estimate.
+    "CRC_MSI": ("aggregate_source_scope", "aggregate_source_scope_estimate"),
+    # The cited GEP-NEN source is not a direct site-specific median for these children.
+    # Keep the numeric value available, but expose that it is a pooled/proxy estimate.
+    "NET_MIDGUT": ("pooled_gep_net_proxy", "proxy_estimate"),
+    "NET_RECTAL": ("pooled_gep_net_proxy", "proxy_estimate"),
+}
 
 
 def cancer_tmb_df():
@@ -29,7 +42,127 @@ def cancer_tmb_df():
     (Lawrence 2013) with panel-based medians (Chalmers 2017) and disease-specific
     studies; see the ``source``/``notes`` columns — panel and WES TMB are not
     strictly comparable in the low-TMB range."""
-    return get_data("cancer-tmb")
+    df = get_data("cancer-tmb").copy()
+    evidence = [_tmb_evidence_fields(row) for _, row in df.iterrows()]
+    for col in ("estimate_type", "source_scope", "missing_reason"):
+        df[col] = [record[col] for record in evidence]
+    return df
+
+
+def _tmb_evidence_fields(row) -> dict[str, object]:
+    code = str(row.get("cancer_code", ""))
+    value = row.get("median_tmb_mut_mb")
+    if pd.isna(value):
+        notes = str(row.get("notes", "") or "").strip()
+        return {
+            "estimate_type": "missing",
+            "source_scope": "none",
+            "missing_reason": notes or "no curated median TMB",
+        }
+    source_scope, estimate_type = _TMB_SOURCE_SCOPE_OVERRIDES.get(
+        code, ("direct", "curated_estimate")
+    )
+    return {
+        "estimate_type": estimate_type,
+        "source_scope": source_scope,
+        "missing_reason": None,
+    }
+
+
+def _tmb_value_map(df=None) -> dict[str, float]:
+    df = cancer_tmb_df() if df is None else df
+    vals = df.dropna(subset=["median_tmb_mut_mb"])
+    return dict(zip(vals["cancer_code"].astype(str), vals["median_tmb_mut_mb"].astype(float)))
+
+
+def _parent_code(code: str, registry) -> str | None:
+    if code not in registry.index:
+        return None
+    parent = registry.loc[code].get("parent_code", "")
+    if pd.isna(parent):
+        return None
+    parent = str(parent).strip()
+    return parent or None
+
+
+def _public_value(value):
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if hasattr(value, "item"):
+        return value.item()
+    return value
+
+
+def _record_from_row(row, *, requested_code: str, resolved_code: str, inheritance_kind: str):
+    record = {key: _public_value(row[key]) for key in row.index}
+    record["requested_cancer_code"] = requested_code
+    record["resolved_cancer_code"] = resolved_code
+    record["inheritance_kind"] = inheritance_kind
+    record["is_inherited_evidence"] = requested_code != resolved_code
+    record["has_tmb_source"] = True
+    return record
+
+
+def _resolve_tmb_row(requested_code: str, *, inherit: bool):
+    df = cancer_tmb_df()
+    values = _tmb_value_map(df)
+    rows = df.set_index("cancer_code", drop=False)
+
+    if requested_code in values:
+        return requested_code, "direct", rows.loc[requested_code]
+    if not inherit:
+        return requested_code, "missing", None
+
+    source_code = cancer_evidence_source_code(requested_code)
+    if source_code != requested_code and source_code in values:
+        return source_code, "source_scope", rows.loc[source_code]
+
+    registry = cancer_type_registry().set_index("code")
+    cur = _parent_code(requested_code, registry)
+    seen = {requested_code}
+    while cur and cur not in seen:
+        seen.add(cur)
+        if cur in values:
+            return cur, "ancestor", rows.loc[cur]
+        cur = _parent_code(cur, registry)
+    return requested_code, "missing", None
+
+
+def resolve_tmb_source(cancer_type, *, inherit=True) -> dict:
+    """Resolve the source row used for a TMB lookup.
+
+    Returns metadata without requiring callers to inspect the raw table:
+
+    - ``requested_cancer_code``: canonical code requested by the caller.
+    - ``resolved_cancer_code``: direct/source-scope/ancestor row used, if any.
+    - ``inheritance_kind``: ``"direct"``, ``"source_scope"``, ``"ancestor"``, or
+      ``"missing"``.
+    - source/provenance fields from the selected row when available.
+
+    This makes aggregate evidence explicit. For example, ``COAD_MSI`` and
+    ``READ_MSI`` resolve through the curated ``CRC_MSI`` TMB row, preserving that the
+    source estimate is CRC-level MSI-H/dMMR evidence rather than a colon- or
+    rectum-specific median.
+    """
+    requested_code = resolve_cancer_type(cancer_type)
+    resolved_code, inheritance_kind, row = _resolve_tmb_row(requested_code, inherit=inherit)
+    if row is None:
+        return {
+            "requested_cancer_code": requested_code,
+            "resolved_cancer_code": None,
+            "inheritance_kind": inheritance_kind,
+            "is_inherited_evidence": False,
+            "has_tmb_source": False,
+        }
+    return _record_from_row(
+        row,
+        requested_code=requested_code,
+        resolved_code=resolved_code,
+        inheritance_kind=inheritance_kind,
+    )
 
 
 def cancer_tmb(cancer_type=None, *, inherit=True):
@@ -44,27 +177,37 @@ def cancer_tmb(cancer_type=None, *, inherit=True):
     without a curated row each. Returns ``None`` if neither the code nor any
     ancestor has a value."""
     df = cancer_tmb_df()
-    vals = df.dropna(subset=["median_tmb_mut_mb"])
-    mapping = dict(zip(vals["cancer_code"].astype(str), vals["median_tmb_mut_mb"].astype(float)))
+    mapping = _tmb_value_map(df)
     if cancer_type is None:
         return mapping
     code = resolve_cancer_type(cancer_type)
-    if code in mapping or not inherit:
-        return mapping.get(code)
-    source_code = cancer_evidence_source_code(code)
-    if source_code != code and source_code in mapping:
-        return mapping[source_code]
-    # walk the registry parent chain to inherit an ancestor's value
-    reg = cancer_type_registry().set_index("code")
-    cur, seen = code, set()
-    while cur and cur not in seen:
-        seen.add(cur)
-        if cur in mapping:
-            return mapping[cur]
-        if cur not in reg.index:
-            break
-        cur = str(reg.loc[cur].get("parent_code", "") or "").strip() or None
-    return None
+    resolved_code, _, row = _resolve_tmb_row(code, inherit=inherit)
+    return mapping.get(resolved_code) if row is not None else None
+
+
+def cancer_tmb_record(cancer_type=None, *, inherit=True):
+    """Metadata-bearing TMB lookup.
+
+    Mirrors :func:`cancer_tmb`, but returns the resolved source row as a dict instead
+    of only the numeric median. The record includes the derived evidence columns from
+    :func:`cancer_tmb_df` plus lookup metadata:
+
+    - ``requested_cancer_code``
+    - ``resolved_cancer_code``
+    - ``inheritance_kind``
+    - ``is_inherited_evidence``
+
+    With ``cancer_type=None`` the returned bulk map contains direct source rows only.
+    Use :func:`resolve_tmb_source` for explicit requested-code resolution metadata.
+    """
+    if cancer_type is None:
+        return {
+            code: record
+            for code in sorted(cancer_tmb())
+            if (record := cancer_tmb_record(code, inherit=False))
+        }
+    record = resolve_tmb_source(cancer_type, inherit=inherit)
+    return record if record.get("has_tmb_source") else None
 
 
 def cancer_frameshift_burden_df():

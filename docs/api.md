@@ -275,6 +275,10 @@ but it is not the clean-TPM biological denominator.
 ## Burden, TMB, Fusions, and Signatures
 
 - `oncoref.tmb` — tumor mutational burden reference values.
+  `tmb.cancer_tmb_df()` includes evidence-schema columns (`estimate_type`,
+  `source_scope`, `missing_reason`), and `tmb.cancer_tmb_record()` /
+  `tmb.resolve_tmb_source()` preserve requested-code metadata for source-scoped
+  lookups such as `COAD_MSI` or `READ_MSI` resolving through `CRC_MSI`.
 - `oncoref.incidence` — incidence/mortality burden and burden categories.
 - `oncoref.fusions` — defining fusions and partner-family lookups.
 - `oncoref.response_signatures` — therapy-response gene signatures and scoring.
