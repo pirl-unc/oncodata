@@ -248,14 +248,16 @@ def rebuild(
         clean_df = clean_df[[*_BASE, *samples]].copy()
         clean_df.to_parquet(clean_dir / f"{code}.parquet", index=False, compression="zstd")
 
-        # Biological view (technical genes dropped) for the percentile + within-sample
-        # artifacts, matching pirlygenes' shipped biology-only artifacts.
+        # Biological view (technical genes dropped) for the percentile, within-sample,
+        # and representative-selection geometry, matching the shared contract:
+        # choose representatives on biological signal but store full clean TPM vectors.
         bio_df = _drop_technical(clean_df)
         pct = cohort_percentile_vectors(bio_df, samples)
         pct.to_parquet(pct_dir / f"{code}.parquet", index=False, compression="zstd")
 
-        # Representatives keep the full gene set (real per-sample vectors).
-        reps = cohort_medoids(clean_df, k=5)
+        # Representatives keep the full gene set (real per-sample vectors), while
+        # the medoid/farthest-first distances are computed on biological genes only.
+        reps = cohort_medoids(clean_df, sample_cols=samples, k=5, selection_df=bio_df)
         rep_cols = [c for c in reps.columns if c not in _BASE]
         rep_ids = [f"{code}__rep{i}" for i in range(1, len(rep_cols) + 1)]
         reps = reps.rename(columns=dict(zip(rep_cols, rep_ids)))

@@ -19,9 +19,10 @@ medoid samples: the cohort medoid (most central tumor) first, then farthest-firs
 picks that span the within-cohort variation (see ``expression_builders.cohort_medoids``).
 
 Computed from the full per-sample matrices, which are never shipped (see
-``source_matrices`` for the per-cohort fetch). The kept columns store the
-**original** clean TPM (the reader optionally ``log1p``-transforms); only the
-medoid *distance* geometry uses log1p so a few high-TPM genes don't dominate.
+``source_matrices`` for the per-cohort fetch). The medoid distance geometry uses
+the biological clean-TPM view with technical/ribosomal rows removed, but the kept
+columns store the **original** full clean TPM vectors (the reader optionally
+``log1p``-transforms).
 
 Input
 -----
@@ -56,12 +57,19 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from oncoref.expression_builders import cohort_medoids, sample_columns
+from oncoref.gene_families import clean_tpm_censored_gene_ids
 
 _DATA_DIR = Path(__file__).resolve().parents[1] / "oncoref" / "data"
 OUT_DIR = _DATA_DIR / "cancer-reference-expression-representatives"
 _BASE = ["Ensembl_Gene_ID", "Symbol"]
 #: Columns representative_cohort_samples(include_provenance=True) merges back in.
 _PROVENANCE_COLUMNS = ["representative_id", "source_cohort", "source_project", "n_cohort_samples"]
+
+
+def _drop_technical(df: pd.DataFrame) -> pd.DataFrame:
+    censored = clean_tpm_censored_gene_ids()
+    unversioned = df["Ensembl_Gene_ID"].astype(str).str.split(".").str[0]
+    return df[~unversioned.isin(censored)].reset_index(drop=True)
 
 
 def _cohort_provenance(code: str) -> tuple[str, str]:
@@ -105,7 +113,9 @@ def build(input_dir: Path, *, k: int = 5, out_dir: Path = OUT_DIR) -> None:
         if n_cohort == 0:
             print(f"  {code}: no sample columns, skipped", flush=True)
             continue
-        reps = cohort_medoids(df, k=k)
+        sample_cols = sample_columns(df)
+        selection_df = _drop_technical(df)
+        reps = cohort_medoids(df, sample_cols=sample_cols, k=k, selection_df=selection_df)
         source_cols = [c for c in reps.columns if c not in _BASE]
         rep_ids = [f"{code}__rep{i}" for i in range(1, len(source_cols) + 1)]
         reps = reps.rename(columns=dict(zip(source_cols, rep_ids)))
