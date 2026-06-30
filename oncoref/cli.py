@@ -115,6 +115,20 @@ def _cmd_data(args: argparse.Namespace) -> int:
             )
         return 0
 
+    if args.action == "contract":
+        print(json.dumps(data_bundle.bundle_contract(), indent=2, sort_keys=True, default=str))
+        return 0
+
+    if args.action == "release-manifest":
+        source = args.name or "oncoref"
+        try:
+            manifest = data_bundle.bundle_release_manifest(source)
+        except (ValueError, data_bundle.BundleIntegrityError, OSError) as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        print(json.dumps(manifest, indent=2, sort_keys=True, default=str))
+        return 0
+
     if args.action == "dir":
         target = args.name or "all"
         dirs = {
@@ -580,10 +594,20 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_data.add_argument(
         "action",
-        choices=["list", "status", "dir", "fetch", "path", "prune"],
+        choices=[
+            "list",
+            "status",
+            "contract",
+            "release-manifest",
+            "dir",
+            "fetch",
+            "path",
+            "prune",
+        ],
         help=(
-            "list (catalog), status (cache state), dir (cache roots), "
-            "fetch (download), path (ensure + print), prune (bundle cache cleanup)"
+            "list (catalog), status (cache state), contract (bundle contract JSON), "
+            "release-manifest (release metadata JSON), dir (cache roots), fetch (download), "
+            "path (ensure + print), prune (bundle cache cleanup)"
         ),
     )
     p_data.add_argument(

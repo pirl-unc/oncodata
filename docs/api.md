@@ -298,6 +298,10 @@ but it is not the clean-TPM biological denominator.
   release manifest/checksum for the active `DATA_VERSION`, including tarball
   sha256 plus any artifact inventory, builder commit, source-matrix version, and
   sample-QC policy metadata published with the release.
+  CLI equivalents are available for CI/notebooks: `oncoref data contract` prints
+  the active bundle contract as JSON, and `oncoref data release-manifest
+  [oncoref|pirlygenes]` prints the validated release manifest/checksum metadata
+  as JSON.
 - `oncoref.reference_data` / `oncoref.hpa` — HPA reference-data cache and HPA
   tissue/cell-type accessors.
 

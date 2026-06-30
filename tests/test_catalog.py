@@ -6,6 +6,8 @@
 
 """Unified data catalog over the bundle + HPA backends (#35, D-cat)."""
 
+import json
+
 import pytest
 
 from oncoref import catalog, cli, data_bundle, reference_data
@@ -158,6 +160,38 @@ def test_cli_data_status_absent(monkeypatch, tmp_path, capsys):
 def test_cli_data_status_unknown_errors(capsys):
     assert cli.main(["data", "status", "nope"]) == 1
     assert "unknown dataset" in capsys.readouterr().err
+
+
+def test_cli_data_contract_json(capsys):
+    assert cli.main(["data", "contract"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["contract_version"] == data_bundle.BUNDLE_CONTRACT_VERSION
+    assert payload["data_version"] == data_bundle.DATA_VERSION
+    assert payload["primary_release_source"]["name"] == "oncoref"
+
+
+def test_cli_data_release_manifest_json(monkeypatch, capsys):
+    monkeypatch.setattr(
+        data_bundle,
+        "bundle_release_manifest",
+        lambda source="oncoref": {"source": source, "data_version": data_bundle.DATA_VERSION},
+    )
+
+    assert cli.main(["data", "release-manifest", "pirlygenes"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload == {"source": "pirlygenes", "data_version": data_bundle.DATA_VERSION}
+
+
+def test_cli_data_release_manifest_errors(monkeypatch, capsys):
+    def boom(source="oncoref"):
+        raise data_bundle.BundleIntegrityError("missing manifest")
+
+    monkeypatch.setattr(data_bundle, "bundle_release_manifest", boom)
+
+    assert cli.main(["data", "release-manifest"]) == 1
+    assert "missing manifest" in capsys.readouterr().err
 
 
 def test_cli_data_path_requires_name(capsys):
