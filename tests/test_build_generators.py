@@ -358,6 +358,176 @@ def test_rebuild_expression_artifacts_defaults_to_qc_passing_samples(tmp_path, m
     assert metadata["n_cohort_samples"] == 1
 
 
+def test_rebuild_expression_artifacts_keeps_warn_proxy_source_when_pass_empty(
+    tmp_path, monkeypatch
+):
+    gen = _load_script("rebuild_expression_artifacts")
+    cache, ref = _write_rebuild_inputs(tmp_path)
+    monkeypatch.setattr(
+        gen,
+        "source_registry",
+        lambda: pd.DataFrame({"cancer_code": ["X"], "source_cohort": ["TEST_SOURCE"]}),
+    )
+    monkeypatch.setattr(gen, "cohort_source_version", lambda code: "test-source-version")
+    monkeypatch.setattr(
+        gen,
+        "sample_expression_qc_from_matrix",
+        lambda raw, cancer_type: pd.DataFrame(
+            {
+                "cancer_code": [cancer_type, cancer_type, cancer_type],
+                "sample_id": ["pass_sample", "warn_sample", "fail_sample"],
+                "sample_qc_status": ["warn", "warn", "warn"],
+                "sample_qc_reasons": ["tpm_proxy_scale", "tpm_proxy_scale", "tpm_proxy_scale"],
+                "source_scale_class": [
+                    "microarray_tpm_proxy",
+                    "microarray_tpm_proxy",
+                    "microarray_tpm_proxy",
+                ],
+            }
+        ),
+    )
+    out = tmp_path / "out"
+
+    gen.rebuild(cache, ref, out, limit=None, validate=False, sample_qc="pass")
+
+    clean = pd.read_parquet(out / "clean" / "X.parquet")
+    assert [c for c in clean.columns if c not in ("Ensembl_Gene_ID", "Symbol")] == [
+        "pass_sample",
+        "warn_sample",
+        "fail_sample",
+    ]
+    build_meta = pd.read_csv(out / "expression-artifact-build-metadata.csv")
+    assert build_meta.loc[0, "sample_qc"] == "pass"
+    assert build_meta.loc[0, "sample_qc_effective"] == "pass_or_warn"
+    assert build_meta.loc[0, "sample_qc_fallback_reason"] == "no_pass_samples_tpm_proxy_source"
+    metadata = json.loads((out / "expression-artifact-build-metadata.json").read_text())
+    assert metadata["sample_qc_fallbacks"] == 1
+
+
+def test_rebuild_expression_artifacts_keeps_concentration_only_source_when_pass_empty(
+    tmp_path, monkeypatch
+):
+    gen = _load_script("rebuild_expression_artifacts")
+    cache, ref = _write_rebuild_inputs(tmp_path)
+    monkeypatch.setattr(
+        gen,
+        "source_registry",
+        lambda: pd.DataFrame({"cancer_code": ["X"], "source_cohort": ["TEST_SOURCE"]}),
+    )
+    monkeypatch.setattr(gen, "cohort_source_version", lambda code: "test-source-version")
+    monkeypatch.setattr(
+        gen,
+        "sample_expression_qc_from_matrix",
+        lambda raw, cancer_type: pd.DataFrame(
+            {
+                "cancer_code": [cancer_type, cancer_type, cancer_type],
+                "sample_id": ["pass_sample", "warn_sample", "fail_sample"],
+                "sample_qc_status": ["fail", "fail", "fail"],
+                "sample_qc_reasons": [
+                    "high_top10_gene_fraction",
+                    "high_top_gene_fraction;high_top10_gene_fraction",
+                    "high_top10_gene_fraction",
+                ],
+            }
+        ),
+    )
+    out = tmp_path / "out"
+
+    gen.rebuild(cache, ref, out, limit=None, validate=False, sample_qc="pass")
+
+    clean = pd.read_parquet(out / "clean" / "X.parquet")
+    assert [c for c in clean.columns if c not in ("Ensembl_Gene_ID", "Symbol")] == [
+        "pass_sample",
+        "warn_sample",
+        "fail_sample",
+    ]
+    build_meta = pd.read_csv(out / "expression-artifact-build-metadata.csv")
+    assert build_meta.loc[0, "sample_qc"] == "pass"
+    assert build_meta.loc[0, "sample_qc_effective"] == "all"
+    assert (
+        build_meta.loc[0, "sample_qc_fallback_reason"]
+        == "no_pass_samples_high_concentration_source"
+    )
+
+
+def test_rebuild_expression_artifacts_clips_negative_source_values():
+    gen = _load_script("rebuild_expression_artifacts")
+    df = _matrix(["G1", "G2"], ["s1", "s2"], np.array([[-2.0, 3.0], [4.0, -0.5]]))
+
+    out, n_negative = gen._clip_negative_expression(df, ["s1", "s2"])
+
+    assert n_negative == 2
+    assert out[["s1", "s2"]].to_numpy().min() == 0.0
+    assert df[["s1", "s2"]].to_numpy().min() < 0.0
+
+
+def test_rebuild_expression_artifacts_disambiguates_source_by_registry_sample_count(
+    tmp_path, monkeypatch
+):
+    gen = _load_script("rebuild_expression_artifacts")
+    cache = tmp_path / "cache"
+    ref = tmp_path / "ref"
+    ref.mkdir()
+    _write_cohort(ref, "X", ["G1", "G2"], ["a", "b"], np.array([[1.0, 2.0], [3.0, 4.0]]))
+    source_a = cache / "source-a" / "derived"
+    source_b = cache / "source-b" / "derived"
+    source_a.mkdir(parents=True)
+    source_b.mkdir(parents=True)
+    _matrix(["G1", "G2"], ["s1"], np.array([[1.0], [2.0]])).to_parquet(
+        source_a / "X_per_sample_tpm.parquet", index=False
+    )
+    _matrix(["G1", "G2"], ["s1", "s2"], np.array([[1.0, 2.0], [2.0, 3.0]])).to_parquet(
+        source_b / "X_per_sample_tpm.parquet", index=False
+    )
+    monkeypatch.setattr(
+        gen,
+        "source_registry",
+        lambda: pd.DataFrame(
+            {"cancer_code": ["X"], "source_cohort": ["AGGREGATE_LABEL"], "n_samples": [2]}
+        ),
+    )
+    monkeypatch.setattr(gen, "cohort_source_version", lambda code: "test-source-version")
+    monkeypatch.setattr(
+        gen,
+        "sample_expression_qc_from_matrix",
+        lambda raw, cancer_type: pd.DataFrame(
+            {
+                "cancer_code": [cancer_type] * (len(raw.columns) - 2),
+                "sample_id": [c for c in raw.columns if c not in ("Ensembl_Gene_ID", "Symbol")],
+                "sample_qc_status": ["pass"] * (len(raw.columns) - 2),
+                "sample_qc_reasons": [""] * (len(raw.columns) - 2),
+            }
+        ),
+    )
+
+    gen.rebuild(cache, ref, tmp_path / "out", limit=None, validate=False, sample_qc="pass")
+
+    build_meta = pd.read_csv(tmp_path / "out" / "expression-artifact-build-metadata.csv")
+    assert build_meta.loc[0, "n_source_samples"] == 2
+    assert build_meta.loc[0, "source_matrix_path"].endswith(
+        "source-b/derived/X_per_sample_tpm.parquet"
+    )
+
+
+def test_rebuild_expression_artifacts_prefers_aggregate_source_directory(tmp_path):
+    gen = _load_script("rebuild_expression_artifacts")
+    preferred = tmp_path / "geo-heme" / "derived" / "X_per_sample_tpm.parquet"
+    duplicate = tmp_path / "gse100026-cml" / "derived" / "X_per_sample_tpm.parquet"
+    preferred.parent.mkdir(parents=True)
+    duplicate.parent.mkdir(parents=True)
+    _matrix(["G1"], ["s1"], np.array([[1.0]])).to_parquet(preferred, index=False)
+    _matrix(["G1"], ["s1"], np.array([[1.0]])).to_parquet(duplicate, index=False)
+
+    selected = gen._select_source(
+        "X",
+        [("gse100026-cml", duplicate), ("geo-heme", preferred)],
+        {"X": "GEO_HEME_2022"},
+        {"X": 1},
+    )
+
+    assert selected == preferred
+
+
 def test_rebuild_expression_artifacts_selects_representatives_on_biological_view(
     tmp_path, monkeypatch
 ):

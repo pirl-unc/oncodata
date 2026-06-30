@@ -131,7 +131,7 @@ oncoref plot cta-curation --out cta_curation_out
 # managed data downloads/cache:
 oncoref data list               # every wheel/bundle/HPA/source dataset
 oncoref data status bundle      # expression-bundle cache state (no download)
-oncoref data fetch bundle       # download the ~340 MB bundle
+oncoref data fetch bundle       # download the large expression bundle
 oncoref data fetch hpa          # download HPA reference data (RNA / IHC / single-cell)
 oncoref data dir bundle         # where the data bundle is cached
 oncoref data prune --yes        # delete stale bundle version caches

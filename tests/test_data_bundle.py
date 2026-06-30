@@ -18,6 +18,8 @@ from oncoref.version import DATA_VERSION, SOURCE_MATRIX_VERSION, __version__
 def test_is_downloadable_distinguishes_bundle_from_wheel():
     assert data_bundle.is_downloadable("cancer-reference-expression")
     assert data_bundle.is_downloadable("cancer-reference-expression-percentiles")
+    assert data_bundle.is_downloadable("cancer-reference-expression-within-sample-top5")
+    assert data_bundle.is_downloadable("source-matrix-sample-qc.csv")
     assert data_bundle.is_downloadable("pan-cancer-expression.csv")
     # Small wheel-bundled tables are NOT downloadable items.
     assert not data_bundle.is_downloadable("cancer-type-registry")
@@ -105,6 +107,16 @@ def _release_manifest(tar_path):
         "source": "oncoref",
         "repo": data_bundle.GITHUB_REPO,
         "manifest_url": data_bundle.RELEASE_MANIFEST_URL,
+        "package_version": __version__,
+        "source_matrix_version": SOURCE_MATRIX_VERSION,
+        "sample_qc_policy": "pass",
+        "sample_qc_policy_version": "sample_expression_qc_v1",
+        "source_matrix_sample_qc": "source-matrix-sample-qc.csv",
+        "artifact_build_metadata": {
+            "cohort_metadata": "expression-artifact-build-metadata.csv",
+            "bundle_metadata": "expression-artifact-build-metadata.json",
+            "n_cohorts": 118,
+        },
         "tarball": {
             "filename": data_bundle.TARBALL_FILENAME,
             "url": data_bundle.RELEASE_URL,
@@ -113,8 +125,6 @@ def _release_manifest(tar_path):
             "downloadable_paths": list(data_bundle.DOWNLOADABLE_PATHS),
         },
         "builder_commit": "abc123",
-        "source_matrix_version": SOURCE_MATRIX_VERSION,
-        "sample_qc_policy": "pass",
         "inventory": {
             path: {"path": path, "file_count": 1, "size_bytes": 10}
             for path in data_bundle.DOWNLOADABLE_PATHS
@@ -164,8 +174,12 @@ def test_bundle_release_manifest_preserves_inventory_and_build_metadata(monkeypa
     assert manifest["source"] == "oncoref"
     assert manifest["tarball"]["sha256"] == release_manifest["tarball"]["sha256"]
     assert manifest["builder_commit"] == "abc123"
+    assert manifest["package_version"] == __version__
     assert manifest["source_matrix_version"] == SOURCE_MATRIX_VERSION
     assert manifest["sample_qc_policy"] == "pass"
+    assert manifest["sample_qc_policy_version"] == "sample_expression_qc_v1"
+    assert manifest["source_matrix_sample_qc"] == "source-matrix-sample-qc.csv"
+    assert manifest["artifact_build_metadata"]["n_cohorts"] == 118
     assert set(manifest["inventory"]) == set(data_bundle.DOWNLOADABLE_PATHS)
     assert manifest["inventory"]["pan-cancer-expression.csv"]["file_count"] == 1
 
