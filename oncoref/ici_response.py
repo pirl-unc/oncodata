@@ -27,6 +27,8 @@ from __future__ import annotations
 from .apd1 import (
     cancer_apd1_response,
     cancer_apd1_response_df,
+    cancer_apd1_response_record,
+    resolve_apd1_response_source,
 )
 from .ici import (
     PROPORTION_METRICS,
@@ -60,6 +62,16 @@ def apd1_response(cancer_type=None, *, inherit: bool = True):
 def apd1_response_df():
     """Curated anti-PD-1 monotherapy ORR anchor table."""
     return cancer_apd1_response_df()
+
+
+def apd1_response_record(cancer_type=None, *, inherit: bool = True):
+    """Anti-PD-1 response with source/evidence metadata."""
+    return cancer_apd1_response_record(cancer_type, inherit=inherit)
+
+
+def apd1_response_source(cancer_type, *, inherit: bool = True):
+    """Direct/proxy/ancestor anti-PD-1 evidence-source resolution."""
+    return resolve_apd1_response_source(cancer_type, inherit=inherit)
 
 
 def ici_response_anchor_df():
@@ -115,10 +127,13 @@ __all__ = [
     "RESPONSE_PROPORTION_METRICS",
     "apd1_response",
     "apd1_response_df",
+    "apd1_response_record",
+    "apd1_response_source",
     "best_available_ici_response",
     "best_available_ici_response_record",
     "cancer_apd1_response",
     "cancer_apd1_response_df",
+    "cancer_apd1_response_record",
     "cancer_ici_regimen",
     "cancer_ici_response",
     "cancer_ici_response_df",
@@ -131,6 +146,7 @@ __all__ = [
     "ici_response_records_by_regimen",
     "ici_response_source",
     "pooled_ici_response",
+    "resolve_apd1_response_source",
     "resolve_ici_response_source",
     "selected_ici_regimen",
 ]

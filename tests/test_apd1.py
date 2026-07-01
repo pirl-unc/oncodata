@@ -4,7 +4,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-from oncoref import apd1
+from oncoref import apd1, ici_response
 
 
 def test_apd1_map_nonempty_floats():
@@ -42,6 +42,53 @@ def test_crc_msi_apd1_is_single_source_scope_row():
     assert apd1.cancer_apd1_response("COAD_MSI") == mapping["CRC_MSI"]
     assert apd1.cancer_apd1_response("READ_MSI") == mapping["CRC_MSI"]
     assert apd1.cancer_apd1_response("READ_MSI", inherit=False) is None
+
+
+def test_crc_msi_apd1_record_preserves_requested_and_source_codes():
+    record = apd1.cancer_apd1_response_record("COAD_MSI")
+
+    assert record["requested_cancer_code"] == "COAD_MSI"
+    assert record["resolved_cancer_code"] == "CRC_MSI"
+    assert record["inheritance_kind"] == "source_scope"
+    assert record["is_inherited_evidence"] is True
+    assert record["selected_regimen"] == "PD-1"
+    assert record["selected_drug_target"] == "PD-1"
+    assert record["apd1_orr_pct"] == 43.8
+    assert record["source_anchor"] == "PMID:33264544"
+
+    source = apd1.resolve_apd1_response_source("READ_MSI")
+    assert source["requested_cancer_code"] == "READ_MSI"
+    assert source["resolved_cancer_code"] == "CRC_MSI"
+    assert source["has_apd1_response_source"] is True
+
+
+def test_apd1_record_inherit_false_and_bulk_direct_rows_only():
+    assert apd1.cancer_apd1_response_record("READ_MSI", inherit=False) is None
+    missing = apd1.resolve_apd1_response_source("READ_MSI", inherit=False)
+    assert missing == {
+        "requested_cancer_code": "READ_MSI",
+        "resolved_cancer_code": None,
+        "inheritance_kind": "missing",
+        "is_inherited_evidence": False,
+        "selected_regimen": None,
+        "selected_drug_target": None,
+        "has_apd1_response_source": False,
+    }
+
+    bulk = apd1.cancer_apd1_response_record()
+    assert "CRC_MSI" in bulk
+    assert "COAD_MSI" not in bulk
+    assert "READ_MSI" not in bulk
+    assert bulk["CRC_MSI"]["inheritance_kind"] == "direct"
+
+
+def test_apd1_record_helpers_are_exported():
+    import oncoref
+
+    assert oncoref.cancer_apd1_response_record is apd1.cancer_apd1_response_record
+    assert oncoref.resolve_apd1_response_source is apd1.resolve_apd1_response_source
+    assert ici_response.apd1_response_record("COAD_MSI")["resolved_cancer_code"] == "CRC_MSI"
+    assert ici_response.apd1_response_source("COAD_MSI")["inheritance_kind"] == "source_scope"
 
 
 def test_btc_apd1_is_single_pan_biliary_source_scope_row():

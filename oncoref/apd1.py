@@ -14,6 +14,8 @@
 
 from __future__ import annotations
 
+import pandas as pd
+
 from .cancer_types import cancer_evidence_source_code, cancer_type_registry, resolve_cancer_type
 from .ici import response_anchor_evidence_df
 from .load_dataset import get_data
@@ -67,3 +69,130 @@ def cancer_apd1_response(cancer_type=None, *, inherit=True):
             break
         cur = str(reg.loc[cur].get("parent_code", "") or "").strip() or None
     return None
+
+
+def _parent_code(code: str, registry) -> str | None:
+    if code not in registry.index:
+        return None
+    parent = registry.loc[code].get("parent_code", "")
+    if pd.isna(parent):
+        return None
+    parent = str(parent).strip()
+    return parent or None
+
+
+def _public_value(value):
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if hasattr(value, "item"):
+        return value.item()
+    return value
+
+
+def _record_from_row(row, *, requested_code: str, resolved_code: str, inheritance_kind: str):
+    record = {key: _public_value(row[key]) for key in row.index}
+    record["requested_cancer_code"] = requested_code
+    record["resolved_cancer_code"] = resolved_code
+    record["selected_regimen"] = record.get("drug_target")
+    record["selected_drug_target"] = record.get("drug_target")
+    record["inheritance_kind"] = inheritance_kind
+    record["is_inherited_evidence"] = requested_code != resolved_code
+    return record
+
+
+def _matching_row(df: pd.DataFrame, code: str):
+    hit = df[df["cancer_code"].astype(str) == code]
+    return None if hit.empty else hit.iloc[0]
+
+
+def _resolve_apd1_response_row(requested_code: str, *, inherit: bool):
+    df = cancer_apd1_response_df().dropna(subset=["apd1_orr_pct"])
+    direct = _matching_row(df, requested_code)
+    if direct is not None or not inherit:
+        return requested_code, "direct" if direct is not None else "missing", direct
+
+    source_code = cancer_evidence_source_code(requested_code)
+    if source_code != requested_code:
+        source = _matching_row(df, source_code)
+        if source is not None:
+            return source_code, "source_scope", source
+
+    registry = cancer_type_registry().set_index("code")
+    cur = _parent_code(requested_code, registry)
+    seen = {requested_code}
+    while cur and cur not in seen:
+        seen.add(cur)
+        inherited = _matching_row(df, cur)
+        if inherited is not None:
+            return cur, "ancestor", inherited
+        cur = _parent_code(cur, registry)
+    return requested_code, "missing", None
+
+
+def resolve_apd1_response_source(cancer_type, *, inherit=True) -> dict:
+    """Resolve the evidence source row used for an anti-PD-1 response lookup.
+
+    Returns lookup metadata without reducing the result to a numeric ORR:
+    ``requested_cancer_code``, ``resolved_cancer_code``, ``inheritance_kind`` and
+    source/provenance fields from :func:`cancer_apd1_response_df` when available.
+    Source-scoped molecular children such as ``COAD_MSI`` and ``READ_MSI`` resolve
+    through the curated ``CRC_MSI`` row while preserving that the evidence is inherited
+    from an aggregate/source-scope estimate.
+    """
+    requested_code = resolve_cancer_type(cancer_type)
+    resolved_code, inheritance_kind, row = _resolve_apd1_response_row(
+        requested_code, inherit=inherit
+    )
+    if row is None:
+        return {
+            "requested_cancer_code": requested_code,
+            "resolved_cancer_code": None,
+            "inheritance_kind": inheritance_kind,
+            "is_inherited_evidence": False,
+            "selected_regimen": None,
+            "selected_drug_target": None,
+            "has_apd1_response_source": False,
+        }
+    record = _record_from_row(
+        row,
+        requested_code=requested_code,
+        resolved_code=resolved_code,
+        inheritance_kind=inheritance_kind,
+    )
+    record["has_apd1_response_source"] = True
+    return record
+
+
+def cancer_apd1_response_record(cancer_type=None, *, inherit=True):
+    """Metadata-bearing anti-PD-1 objective response lookup.
+
+    Mirrors :func:`cancer_apd1_response`, but returns the resolved anchor row as a
+    dict instead of only the ORR value. The record includes joined evidence fields
+    from the audited ICI estimates table plus requested/resolved-code metadata. With
+    ``cancer_type=None`` the returned map contains direct source rows only; child-code
+    inheritance is available through individual lookups or
+    :func:`resolve_apd1_response_source`.
+    """
+    if cancer_type is None:
+        df = cancer_apd1_response_df().dropna(subset=["apd1_orr_pct"])
+        return {
+            str(code): record
+            for code in sorted(df["cancer_code"].astype(str).unique())
+            if (record := cancer_apd1_response_record(code, inherit=False))
+        }
+
+    requested_code = resolve_cancer_type(cancer_type)
+    resolved_code, inheritance_kind, row = _resolve_apd1_response_row(
+        requested_code, inherit=inherit
+    )
+    if row is None:
+        return None
+    return _record_from_row(
+        row,
+        requested_code=requested_code,
+        resolved_code=resolved_code,
+        inheritance_kind=inheritance_kind,
+    )

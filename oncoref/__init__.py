@@ -28,7 +28,12 @@ from . import (
     ici_response,
     source_matrices,
 )
-from .apd1 import cancer_apd1_response, cancer_apd1_response_df
+from .apd1 import (
+    cancer_apd1_response,
+    cancer_apd1_response_df,
+    cancer_apd1_response_record,
+    resolve_apd1_response_source,
+)
 from .cancer_types import (
     CANCER_TYPE_ALIASES,
     CANCER_TYPE_NAMES,
@@ -229,8 +234,10 @@ from .ici import (
     cancer_ici_response,
     cancer_ici_response_df,
     cancer_ici_response_estimates_df,
+    cancer_ici_response_record,
     ici_regimens,
     pooled_ici_response,
+    resolve_ici_response_source,
 )
 from .incidence import (
     burden_category,
@@ -348,6 +355,7 @@ __all__ = [
     # anti-PD-1 response
     "cancer_apd1_response",
     "cancer_apd1_response_df",
+    "cancer_apd1_response_record",
     # incidence / mortality
     "cancer_burden",
     "cancer_burden_df",
@@ -359,6 +367,7 @@ __all__ = [
     "cancer_ici_response",
     "cancer_ici_response_df",
     "cancer_ici_response_estimates_df",
+    "cancer_ici_response_record",
     "cancer_lineage_group",
     "cancer_lineage_group_overrides",
     "cancer_lineage_groups",
@@ -532,8 +541,10 @@ __all__ = [
     "recommended_hpa_housekeeping_panel",
     "renormalize_to_million",
     "representative_cohort_samples",
+    "resolve_apd1_response_source",
     "resolve_cancer_type",
     "resolve_ensembl_id",
+    "resolve_ici_response_source",
     "resolve_symbol",
     "resolve_tmb_source",
     "response_signature_direction",
