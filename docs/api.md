@@ -149,10 +149,13 @@ antigen_coverage.greedy_antigen_coverage("LUAD", gene_ids={"ENSG00000141510"})
   expression tables: identity/value column detection, transcript-to-gene
   aggregation, source row ID-type detection, source gene-row mapping audits,
   missing-vs-non-parsing numeric diagnostics, and canonical ENSG aggregation in
-  linear expression space. Use these in builders before committing a source
-  matrix so unresolved high-expression rows and duplicate canonical IDs are
-  explicit artifacts rather than hidden cleanup. Source audit CSV contracts are
-  versioned by `SOURCE_GENE_MAPPING_AUDIT_SCHEMA_VERSION` and
+  linear expression space. It is an explicit public module, so downstream
+  builders can import `oncoref.expression_engine.map_source_gene_rows`,
+  `canonicalize_source_gene_matrix`, and `coerce_source_expression_values`
+  without reaching into scripts. Use these in builders before committing a
+  source matrix so unresolved high-expression rows and duplicate canonical IDs
+  are explicit artifacts rather than hidden cleanup. Source audit CSV contracts
+  are versioned by `SOURCE_GENE_MAPPING_AUDIT_SCHEMA_VERSION` and
   `SOURCE_VALUE_PARSE_DIAGNOSTIC_SCHEMA_VERSION`, and the emitted audit frames
   include those versions as persisted columns.
 - `oncoref.source_matrices` — raw per-cohort source-matrix cache/fetch helpers.

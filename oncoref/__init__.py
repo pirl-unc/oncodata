@@ -17,7 +17,17 @@ Bottom-of-stack: depends only on pandas/numpy/pyarrow, never on the analysis
 or target-selection libraries that consume it.
 """
 
-from . import antigen_coverage, cancer_ontology, cohorts, cta_coverage, cta_peptides, ici_response
+from . import (
+    antigen_coverage,
+    cancer_ontology,
+    cohorts,
+    cta_coverage,
+    cta_peptides,
+    expression_builders,
+    expression_engine,
+    ici_response,
+    source_matrices,
+)
 from .apd1 import cancer_apd1_response, cancer_apd1_response_df
 from .cancer_types import (
     CANCER_TYPE_ALIASES,
@@ -441,6 +451,8 @@ __all__ = [
     "expression_artifact_build_summary",
     "expression_artifact_gene_universe_delta_summary",
     "expression_artifact_gene_universe_deltas",
+    "expression_builders",
+    "expression_engine",
     "expression_level",
     "expression_source",
     "expression_sources",
@@ -536,6 +548,7 @@ __all__ = [
     "samples_for_cohort",
     "sarcoma_lineage_codes",
     "signature_score",
+    "source_matrices",
     "source_matrix_sample_qc_manifest",
     "sources_for_cancer_code",
     "tissue_of_origin",
