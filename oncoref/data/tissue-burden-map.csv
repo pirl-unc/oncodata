@@ -8,6 +8,7 @@ colorectum,colorectal,solid,
 pancreas,pancreas,solid,
 liver,liver,solid,
 bile_duct,gallbladder_biliary,solid,
+biliary_tract,gallbladder_biliary,solid,pan-biliary source-scope aggregate
 stomach,stomach,solid,
 esophagus,esophagus,solid,
 small_intestine,small_intestine,solid,

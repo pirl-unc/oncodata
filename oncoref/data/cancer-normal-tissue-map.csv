@@ -4,6 +4,7 @@ adrenal_cortex,adrenal_gland,Adrenal gland,adrenal gland,site,HPA adrenal gland 
 adrenal_medulla,adrenal_gland,Adrenal gland,adrenal gland,site,HPA adrenal gland covers cortex and medulla
 anal_canal,rectum,Rectum,rectum,nearest,HPA lacks anal canal; rectum is closest lower-GI mucosa
 bile_duct,gallbladder,Gallbladder,gallbladder,nearest,HPA lacks bile duct; gallbladder is the closest biliary epithelium
+biliary_tract,gallbladder,Gallbladder,gallbladder,nearest,HPA lacks a pan-biliary tissue; gallbladder is the closest shared biliary epithelium
 bladder,urinary_bladder,Urinary bladder,urinary bladder,exact,HPA tissue match
 bone,bone_marrow,Bone marrow,bone marrow,proxy,HPA lacks bone; bone marrow is the skeletal-site proxy
 bone_marrow,bone_marrow,Bone marrow,bone marrow,exact,HPA tissue match

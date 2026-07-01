@@ -42,3 +42,13 @@ def test_crc_msi_apd1_is_single_source_scope_row():
     assert apd1.cancer_apd1_response("COAD_MSI") == mapping["CRC_MSI"]
     assert apd1.cancer_apd1_response("READ_MSI") == mapping["CRC_MSI"]
     assert apd1.cancer_apd1_response("READ_MSI", inherit=False) is None
+
+
+def test_btc_apd1_is_single_pan_biliary_source_scope_row():
+    mapping = apd1.cancer_apd1_response()
+    assert mapping["BTC"] == 5.8
+    assert "CHOL" not in mapping
+    assert "GBC" not in mapping
+    assert apd1.cancer_apd1_response("CHOL") == mapping["BTC"]
+    assert apd1.cancer_apd1_response("GBC") == mapping["BTC"]
+    assert apd1.cancer_apd1_response("GBC", inherit=False) is None

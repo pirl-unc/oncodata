@@ -280,6 +280,21 @@ def test_cancer_type_records_include_evidence_expression_and_normal_tissue():
     assert bool(records.loc["CRC_MSI", "has_expression_matrix"]) is False
 
 
+def test_btc_records_source_scope_chol_and_gbc():
+    records = cancer_types.cancer_type_records(["BTC", "CHOL", "GBC"]).set_index("code")
+    assert records.loc["BTC", "evidence_source_code"] == "BTC"
+    assert records.loc["BTC", "evidence_source_kind"] == "direct"
+    assert records.loc["BTC", "children"] == ("CHOL", "GBC")
+    assert records.loc["BTC", "normal_tissue_code"] == "gallbladder"
+
+    assert records.loc["CHOL", "parent_code"] == "BTC"
+    assert records.loc["CHOL", "evidence_source_code"] == "BTC"
+    assert records.loc["CHOL", "evidence_source_kind"] == "source_scope"
+    assert records.loc["GBC", "parent_code"] == "BTC"
+    assert records.loc["GBC", "evidence_source_code"] == "BTC"
+    assert records.loc["GBC", "evidence_source_kind"] == "source_scope"
+
+
 def test_normal_tissue_map_uses_hpa_rna_v23_tissue_names():
     tissue_map = cancer_types.cancer_normal_tissue_map().set_index("primary_tissue")
     used = {
@@ -290,6 +305,7 @@ def test_normal_tissue_map_uses_hpa_rna_v23_tissue_names():
     assert tissue_map.loc["soft_tissue", "match_confidence"] == "unresolved"
     assert tissue_map.loc["oral_cavity", "hpa_tissues"] == ("tongue",)
     assert tissue_map.loc["pharynx", "hpa_tissues"] == ("tonsil",)
+    assert tissue_map.loc["biliary_tract", "hpa_tissues"] == ("gallbladder",)
 
 
 def test_cancer_type_reference_data_joins_scalar_oncoref_metrics():
