@@ -271,6 +271,41 @@ def test_extrapulmonary_g3_nen_estimates_are_not_lung_lcnec_primary_rows():
     assert int(dcr["responders"]) == 7
 
 
+def test_dlbc_estimates_do_not_include_pmbcl_keynote170_rows():
+    est = ici.cancer_ici_response_estimates_df()
+
+    dlbc = est[(est["cancer_code"] == "DLBC") & (est["regimen"] == "PD-1")]
+    assert set(dlbc["trial_name"]) == {"CheckMate 139"}
+    assert not dlbc["setting"].str.contains("PMBCL|mediastinal", case=False, regex=True).any()
+
+    pmbcl_primary = est[
+        (est["cancer_code"] == "PMBCL")
+        & (est["trial_name"] == "KEYNOTE-170")
+        & (est["role"] == "primary")
+    ]
+    assert {"ORR", "CRR", "PR", "DOR", "PFS", "PFS_RATE", "OS", "OS_RATE"} <= set(
+        pmbcl_primary["metric"].str.upper()
+    )
+
+    primary_analysis = est[
+        (est["cancer_code"] == "PMBCL")
+        & (est["trial_name"] == "KEYNOTE-170 (2019 primary analysis)")
+        & (est["role"] == "alternate")
+    ]
+    by_metric = {str(r["metric"]).upper(): r for _, r in primary_analysis.iterrows()}
+    assert set(by_metric) == {"ORR", "CRR"}
+
+    orr = by_metric["ORR"]
+    assert str(orr["ref"]) == "PMID:31609651"
+    assert float(orr["value"]) == 45.0
+    assert int(orr["metric_n"]) == 53
+    assert int(orr["responders"]) == 24
+
+    crr = by_metric["CRR"]
+    assert float(crr["value"]) == 13.0
+    assert int(crr["responders"]) == 7
+
+
 def test_lusc_checkmate017_orr_and_crr_match_table2():
     est = ici.cancer_ici_response_estimates_df()
     rows = est[
