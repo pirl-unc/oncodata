@@ -11,10 +11,31 @@ def test_semantic_modules_are_top_level_facades():
         "cohorts",
         "cta_coverage",
         "cta_peptides",
+        "expression_builders",
+        "expression_engine",
         "ici_response",
+        "source_matrices",
     ):
         assert hasattr(oncoref, name)
         assert name in oncoref.__all__
+
+
+def test_expression_engine_builder_audit_surface_is_public():
+    assert callable(oncoref.expression_engine.detect_source_row_id_type)
+    assert callable(oncoref.expression_engine.map_source_gene_rows)
+    assert callable(oncoref.expression_engine.canonicalize_source_gene_matrix)
+    assert callable(oncoref.expression_engine.coerce_source_expression_values)
+    assert callable(oncoref.expression_engine.source_gene_mapping_stats)
+    assert (
+        "source_gene_mapping_schema_version"
+        in oncoref.expression_engine.SOURCE_GENE_MAPPING_AUDIT_COLUMNS
+    )
+    assert (
+        "source_value_parse_schema_version"
+        in oncoref.expression_engine.SOURCE_VALUE_PARSE_DIAGNOSTIC_COLUMNS
+    )
+    assert oncoref.expression_engine.SOURCE_GENE_MAPPING_AUDIT_SCHEMA_VERSION
+    assert oncoref.expression_engine.SOURCE_VALUE_PARSE_DIAGNOSTIC_SCHEMA_VERSION
 
 
 def test_clearer_names_stay_in_semantic_modules_not_flat_namespace():
