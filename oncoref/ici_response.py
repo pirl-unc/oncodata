@@ -54,9 +54,9 @@ RESPONSE_PROPORTION_METRICS = PROPORTION_METRICS
 """Response metrics that can be responder-weighted pooled."""
 
 
-def apd1_response(cancer_type=None, *, inherit: bool = True):
+def apd1_response(cancer_type=None, *, inherit: bool = True, include_inherited: bool = False):
     """Anti-PD-1 monotherapy ORR (%) for one cancer type, or the full code map."""
-    return cancer_apd1_response(cancer_type, inherit=inherit)
+    return cancer_apd1_response(cancer_type, inherit=inherit, include_inherited=include_inherited)
 
 
 def apd1_response_df():
@@ -64,9 +64,13 @@ def apd1_response_df():
     return cancer_apd1_response_df()
 
 
-def apd1_response_record(cancer_type=None, *, inherit: bool = True):
+def apd1_response_record(
+    cancer_type=None, *, inherit: bool = True, include_inherited: bool = False
+):
     """Anti-PD-1 response with source/evidence metadata."""
-    return cancer_apd1_response_record(cancer_type, inherit=inherit)
+    return cancer_apd1_response_record(
+        cancer_type, inherit=inherit, include_inherited=include_inherited
+    )
 
 
 def apd1_response_source(cancer_type, *, inherit: bool = True):
@@ -84,29 +88,49 @@ def ici_response_estimates_df():
     return cancer_ici_response_estimates_df()
 
 
-def best_available_ici_response(cancer_type=None, *, inherit: bool = True):
+def best_available_ici_response(
+    cancer_type=None, *, inherit: bool = True, include_inherited: bool = False
+):
     """Best-available ICI ORR (%) using ``DEFAULT_ICI_REGIMEN_PRIORITY``.
 
     This is a clearer name for ``cancer_ici_response(..., regimen=None,
     fallback=True)``. It chooses anti-PD-1 monotherapy when present, then anti-PD-L1,
     then anti-PD-1 + anti-CTLA-4.
     """
-    return cancer_ici_response(cancer_type, inherit=inherit)
+    return cancer_ici_response(cancer_type, inherit=inherit, include_inherited=include_inherited)
 
 
-def best_available_ici_response_record(cancer_type=None, *, inherit: bool = True):
+def best_available_ici_response_record(
+    cancer_type=None, *, inherit: bool = True, include_inherited: bool = False
+):
     """Best-available ICI response with source/evidence metadata."""
-    return cancer_ici_response_record(cancer_type, inherit=inherit)
+    return cancer_ici_response_record(
+        cancer_type, inherit=inherit, include_inherited=include_inherited
+    )
 
 
-def ici_response_by_regimen(cancer_type=None, *, inherit: bool = True):
+def ici_response_by_regimen(
+    cancer_type=None, *, inherit: bool = True, include_inherited: bool = False
+):
     """ICI ORR values grouped by regimen instead of using regimen priority."""
-    return cancer_ici_response(cancer_type, fallback=False, inherit=inherit)
+    return cancer_ici_response(
+        cancer_type,
+        fallback=False,
+        inherit=inherit,
+        include_inherited=include_inherited,
+    )
 
 
-def ici_response_records_by_regimen(cancer_type=None, *, inherit: bool = True):
+def ici_response_records_by_regimen(
+    cancer_type=None, *, inherit: bool = True, include_inherited: bool = False
+):
     """ICI response records grouped by regimen instead of using regimen priority."""
-    return cancer_ici_response_record(cancer_type, fallback=False, inherit=inherit)
+    return cancer_ici_response_record(
+        cancer_type,
+        fallback=False,
+        inherit=inherit,
+        include_inherited=include_inherited,
+    )
 
 
 def ici_response_source(cancer_type, *, regimen=None, fallback: bool = True, inherit: bool = True):

@@ -43,6 +43,11 @@ def test_crc_msi_apd1_is_single_source_scope_row():
     assert apd1.cancer_apd1_response("READ_MSI") == mapping["CRC_MSI"]
     assert apd1.cancer_apd1_response("READ_MSI", inherit=False) is None
 
+    inherited = apd1.cancer_apd1_response(include_inherited=True)
+    assert inherited["COAD_MSI"] == mapping["CRC_MSI"]
+    assert inherited["READ_MSI"] == mapping["CRC_MSI"]
+    assert "READ_MSI" not in apd1.cancer_apd1_response(include_inherited=True, inherit=False)
+
 
 def test_crc_msi_apd1_record_preserves_requested_and_source_codes():
     record = apd1.cancer_apd1_response_record("COAD_MSI")
@@ -80,6 +85,12 @@ def test_apd1_record_inherit_false_and_bulk_direct_rows_only():
     assert "COAD_MSI" not in bulk
     assert "READ_MSI" not in bulk
     assert bulk["CRC_MSI"]["inheritance_kind"] == "direct"
+
+    inherited = apd1.cancer_apd1_response_record(include_inherited=True)
+    assert inherited["COAD_MSI"]["requested_cancer_code"] == "COAD_MSI"
+    assert inherited["COAD_MSI"]["resolved_cancer_code"] == "CRC_MSI"
+    assert inherited["COAD_MSI"]["inheritance_kind"] == "source_scope"
+    assert inherited["COAD_MSI"]["is_inherited_evidence"] is True
 
 
 def test_apd1_record_helpers_are_exported():

@@ -41,17 +41,31 @@ def cancer_apd1_response_df():
     )
 
 
-def cancer_apd1_response(cancer_type=None, *, inherit=True):
+def cancer_apd1_response(cancer_type=None, *, inherit=True, include_inherited=False):
     """Anti-PD-1 monotherapy ORR (%) for one cancer type, or the whole
     ``{code: orr_pct}`` map. ``cancer_type`` is resolved through
     :func:`resolve_cancer_type`; with ``inherit`` (default) a code with no
     curated row of its own inherits its nearest ancestor's value via the registry
     ``parent_code`` chain. Returns ``None`` if neither the code nor any ancestor
-    has a value. Mirrors :func:`oncoref.cancer_tmb`."""
+    has a value. Mirrors :func:`oncoref.cancer_tmb`.
+
+    With ``cancer_type=None`` the default map contains direct source rows only. Pass
+    ``include_inherited=True`` to expand across registry codes with the same resolver
+    used for individual lookups, so source-scoped children such as ``COAD_MSI`` and
+    ``READ_MSI`` are included with inherited values.
+    """
     df = cancer_apd1_response_df()
     vals = df.dropna(subset=["apd1_orr_pct"])
     mapping = dict(zip(vals["cancer_code"].astype(str), vals["apd1_orr_pct"].astype(float)))
     if cancer_type is None:
+        if include_inherited:
+            out = {}
+            codes = sorted(set(cancer_type_registry()["code"].astype(str)) | set(mapping))
+            for code in codes:
+                value = cancer_apd1_response(code, inherit=inherit)
+                if value is not None:
+                    out[code] = value
+            return out
         return mapping
     code = resolve_cancer_type(cancer_type)
     if code in mapping or not inherit:
@@ -166,22 +180,29 @@ def resolve_apd1_response_source(cancer_type, *, inherit=True) -> dict:
     return record
 
 
-def cancer_apd1_response_record(cancer_type=None, *, inherit=True):
+def cancer_apd1_response_record(cancer_type=None, *, inherit=True, include_inherited=False):
     """Metadata-bearing anti-PD-1 objective response lookup.
 
     Mirrors :func:`cancer_apd1_response`, but returns the resolved anchor row as a
     dict instead of only the ORR value. The record includes joined evidence fields
     from the audited ICI estimates table plus requested/resolved-code metadata. With
-    ``cancer_type=None`` the returned map contains direct source rows only; child-code
-    inheritance is available through individual lookups or
-    :func:`resolve_apd1_response_source`.
+    ``cancer_type=None`` the returned map contains direct source rows only by default;
+    pass ``include_inherited=True`` to expand across registry codes with inherited
+    source metadata.
     """
     if cancer_type is None:
         df = cancer_apd1_response_df().dropna(subset=["apd1_orr_pct"])
+        direct_codes = set(df["cancer_code"].astype(str).unique())
+        codes = (
+            sorted(set(cancer_type_registry()["code"].astype(str)) | direct_codes)
+            if include_inherited
+            else sorted(direct_codes)
+        )
+        record_inherit = inherit if include_inherited else False
         return {
             str(code): record
-            for code in sorted(df["cancer_code"].astype(str).unique())
-            if (record := cancer_apd1_response_record(code, inherit=False))
+            for code in codes
+            if (record := cancer_apd1_response_record(code, inherit=record_inherit))
         }
 
     requested_code = resolve_cancer_type(cancer_type)

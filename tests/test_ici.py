@@ -135,6 +135,14 @@ def test_crc_msi_ici_is_single_source_scope_row():
     assert ici.cancer_ici_response("READ_MSI", inherit=False) is None
     assert ici.cancer_ici_regimen("READ_MSI") == "PD-1"
 
+    inherited = ici.cancer_ici_response(include_inherited=True)
+    inherited_per = ici.cancer_ici_response(fallback=False, include_inherited=True)
+    assert inherited["COAD_MSI"] == full["CRC_MSI"]
+    assert inherited["READ_MSI"] == full["CRC_MSI"]
+    assert inherited_per["COAD_MSI"] == per["CRC_MSI"]
+    assert inherited_per["READ_MSI"] == per["CRC_MSI"]
+    assert "READ_MSI" not in ici.cancer_ici_response(include_inherited=True, inherit=False)
+
 
 def test_impower110_nsclc_pdl1_is_not_direct_luad_or_lusc():
     pdl1 = ici.cancer_ici_response(regimen="PD-L1")
@@ -171,6 +179,10 @@ def test_btc_ici_is_single_pan_biliary_source_scope_row():
     assert ici.cancer_ici_response("GBC") == full["BTC"]
     assert ici.cancer_ici_response("GBC", regimen="PD-L1") == 4.8
     assert ici.cancer_ici_response("GBC", inherit=False) is None
+
+    inherited_pdl1 = ici.cancer_ici_response(regimen="PD-L1", include_inherited=True)
+    assert inherited_pdl1["GBC"] == 4.8
+    assert inherited_pdl1["CHOL"] == 4.8
 
 
 def test_sgc_ici_is_single_pan_salivary_source_scope_row():
@@ -239,6 +251,16 @@ def test_crc_msi_ici_record_preserves_inheritance_metadata():
 
     assert ici.cancer_ici_response_record("READ_MSI", inherit=False) is None
     assert ici.cancer_ici_response_record("READ_MSI", fallback=False, inherit=False) == {}
+
+    bulk = ici.cancer_ici_response_record(include_inherited=True)
+    assert bulk["COAD_MSI"]["requested_cancer_code"] == "COAD_MSI"
+    assert bulk["COAD_MSI"]["resolved_cancer_code"] == "CRC_MSI"
+    assert bulk["COAD_MSI"]["inheritance_kind"] == "source_scope"
+    assert bulk["COAD_MSI"]["is_inherited_evidence"] is True
+
+    bulk_per_regimen = ici.cancer_ici_response_record(fallback=False, include_inherited=True)
+    assert set(bulk_per_regimen["READ_MSI"]) == {"PD-1", "PD-1+CTLA-4"}
+    assert bulk_per_regimen["READ_MSI"]["PD-1"]["resolved_cancer_code"] == "CRC_MSI"
 
 
 def test_btc_ici_record_preserves_inheritance_metadata():
