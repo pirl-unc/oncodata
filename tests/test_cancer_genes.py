@@ -34,6 +34,68 @@ def test_key_genes_roles():
     assert (targets["role"].astype(str) == "target").all()
 
 
+def test_key_gene_known_wrong_pmids_are_replaced():
+    key = cg.cancer_key_genes_df()
+
+    expected_sources = {
+        ("PRAD", "AR", "biomarker", ""): "PMID:22894553",
+        ("PRAD", "KLK3", "biomarker", ""): "PMID:25153393",
+        ("PRAD", "KLK2", "biomarker", ""): "PMID:25153393",
+        ("PRAD", "NKX3-1", "biomarker", ""): "PMID:35265947",
+        ("PRAD", "DLL3", "target", "tarlatamab"): "PMID:40689871",
+        ("PRAD", "KLK2", "target", "pasritamig"): "PMID:40450573",
+        ("PRAD", "PSCA", "biomarker", ""): "PMID:15342669",
+        ("BRCA", "ERBB2", "biomarker", ""): "PMID:11248153",
+        ("LUAD", "RET", "biomarker", ""): "PMID:32846060",
+        ("LUAD", "MET", "biomarker", ""): "PMID:32877583",
+        ("LUAD", "EGFR", "target", "osimertinib"): "PMID:29151359",
+        ("COAD", "BRAF", "biomarker", ""): "PMID:31566309",
+        ("COAD", "CEACAM5", "biomarker", ""): "PMID:17060676",
+        ("DLBC", "MS4A1", "biomarker", ""): "PMID:11807147",
+        ("DLBC", "MS4A1", "target", "rituximab"): "PMID:11807147",
+        ("DLBC", "CD19", "target", "axicabtagene ciloleucel"): "PMID:29226797",
+        ("LAML", "CD33", "biomarker", ""): "PMID:22482940",
+        ("LAML", "CD33", "target", "gemtuzumab ozogamicin"): "PMID:30076173",
+        ("LAML", "FLT3", "target", "gilteritinib"): "PMID:31665578",
+        ("THCA", "RET", "biomarker", ""): "PMID:32846061",
+    }
+    for (code, symbol, role, agent), expected in expected_sources.items():
+        mask = (
+            (key["cancer_code"] == code)
+            & (key["symbol"] == symbol)
+            & (key["role"] == role)
+            & (key["agent"].fillna("") == agent)
+        )
+        rows = key[mask]
+        assert len(rows) == 1, (code, symbol, role, agent)
+        assert rows.iloc[0]["source"] == expected
+
+    bad_pmids = {
+        "PMID:23332746",
+        "PMID:17538631",
+        "PMID:36417474",
+        "PMID:38110199",
+        "PMID:9653118",
+        "PMID:17544441",
+        "PMID:32273263",
+        "PMID:31950082",
+        "PMID:31733398",
+        "PMID:24637364",
+        "PMID:15767599",
+        "PMID:9562152",
+        "PMID:29091450",
+        "PMID:21233305",
+        "PMID:31634902",
+        "PMID:12075054",
+        "PMID:15178638",
+    }
+    audited_codes = {code for code, _, _, _ in expected_sources}
+    audited_refs = set().union(
+        *(_split_refs(v) for v in key[key["cancer_code"].isin(audited_codes)]["source"])
+    )
+    assert bad_pmids.isdisjoint(audited_refs)
+
+
 def test_type_gene_sets():
     sets = cg.cancer_type_gene_sets("PRAD")
     assert sets  # non-empty role->{ensembl:symbol}

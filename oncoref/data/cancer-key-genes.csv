@@ -1,8 +1,8 @@
 cancer_code,subtype,symbol,role,agent,agent_class,phase,treatment_path_tier,line_of_therapy,eligibility_note,indication,rationale,source
-PRAD,,AR,biomarker,,,,,,,,Androgen receptor — lineage confirmation; retained expression with collapsed transactivation targets indicates castrate-resistant disease,PMID:23332746
-PRAD,,KLK3,biomarker,,,,,,,,PSA — transactivated target of AR; collapse with retained AR indicates CRPC,PMID:23332746
-PRAD,,KLK2,biomarker,,,,,,,,Kallikrein 2 — AR-transactivated; parallels KLK3 in CRPC de-differentiation,PMID:23332746
-PRAD,,NKX3-1,biomarker,,,,,,,,Prostate lineage transcription factor; lost in NEPC / de-differentiated disease,PMID:17538631
+PRAD,,AR,biomarker,,,,,,,,Androgen receptor — lineage confirmation; retained expression with collapsed transactivation targets indicates castrate-resistant disease,PMID:22894553
+PRAD,,KLK3,biomarker,,,,,,,,PSA — transactivated target of AR; collapse with retained AR indicates CRPC,PMID:25153393
+PRAD,,KLK2,biomarker,,,,,,,,Kallikrein 2 — AR-transactivated; parallels KLK3 in CRPC de-differentiation,PMID:25153393
+PRAD,,NKX3-1,biomarker,,,,,,,,Prostate lineage transcription factor; lost in NEPC / de-differentiated disease,PMID:35265947
 PRAD,,HOXB13,biomarker,,,,,,,,Prostate lineage; combined with NKX3-1 loss signals de-differentiation,PMID:28069311
 PRAD,,TMPRSS2,biomarker,,,,,,,,AR-target gene; part of TMPRSS2-ERG fusion landscape,PMID:16254181
 PRAD,,ENO2,biomarker,,,,,,,,Neuron-specific enolase — core NE-differentiation marker; elevation with AR-target collapse warrants NEPC workup,PMID:27322743
@@ -14,12 +14,12 @@ PRAD,,FOLH1,target,177Lu-PSMA-617,radioligand,approved,approved_later_line,later
 PRAD,,FOLH1,target,225Ac-PSMA-617,radioligand,phase_3,late_clinical,late_clinical,late-clinical follow-up; confirm trial or local availability,mCRPC,PSMA alpha-emitter in late-stage trials for PSMA-PET positive mCRPC,PMID:35930720
 PRAD,,STEAP1,target,AMG-509 (xaluritamig),TCE,phase_2,trial_follow_up,clinical_trial,clinical-trial follow-up; not default standard,mCRPC,STEAP1×CD3 bispecific T-cell engager in mCRPC; encouraging phase 1 responses,PMID:37812792
 PRAD,,STEAP2,target,,ADC,preclinical,preclinical,preclinical,preclinical follow-up; not a clinical recommendation,mCRPC,STEAP2 ADCs in discovery; coexpressed with STEAP1,PMID:37966111
-PRAD,,DLL3,target,tarlatamab,TCE,phase_2,trial_follow_up,clinical_trial,clinical-trial follow-up; not default standard,NEPC,DLL3×CD3 BiTE initially approved for SCLC; active trials in NEPC where DLL3 is retained,PMID:36417474
-PRAD,,KLK2,target,JNJ-69086420,bispecific,phase_1,trial_follow_up,clinical_trial,clinical-trial follow-up; not default standard,mCRPC,KLK2-targeting bispecific in early-phase trials,PMID:38110199
+PRAD,,DLL3,target,tarlatamab,TCE,phase_2,trial_follow_up,clinical_trial,clinical-trial follow-up; not default standard,NEPC,DLL3×CD3 BiTE initially approved for SCLC; active trials in NEPC where DLL3 is retained,PMID:40689871
+PRAD,,KLK2,target,pasritamig,bispecific,phase_1,trial_follow_up,clinical_trial,clinical-trial follow-up; not default standard,mCRPC,KLK2-targeting bispecific in early-phase trials,PMID:40450573
 PRAD,,TACSTD2,target,sacituzumab govitecan,ADC,phase_2,trial_follow_up,clinical_trial,clinical-trial follow-up; not default standard,mCRPC,Trop-2 ADC trials in CRPC following breast and urothelial approvals,PMID:38895886
 PRAD,,AR,target,enzalutamide,small_molecule,approved,approved_standard,standard_or_frontline,confirm indication and line of therapy,mCRPC,Second-generation AR antagonist; standard of care in CRPC,PMID:22894553
 PRAD,,AR,target,apalutamide,small_molecule,approved,approved_indication_matched,approved_biomarker_matched,confirm biomarker/indication-specific eligibility,nmCRPC,Approved for non-metastatic CRPC and mHSPC,PMID:29420164
-PRAD,,PSCA,biomarker,,,,,,,,Prostate stem cell antigen — PRAD-adenocarcinoma-enriched lineage marker; co-expressed with PSMA / STEAP1 / TROP-2 in AR-retained disease,PMID:9653118
+PRAD,,PSCA,biomarker,,,,,,,,Prostate stem cell antigen — PRAD-adenocarcinoma-enriched lineage marker; co-expressed with PSMA / STEAP1 / TROP-2 in AR-retained disease,PMID:15342669
 PRAD,,PSCA,target,BPX-601,CAR-T,phase_1,trial_follow_up,clinical_trial,clinical-trial follow-up; not default standard,mCRPC,PSCA-directed autologous CAR-T with rimiducid (GoCAR-T) — early-phase PRAD trial,PMID:32961293
 PRAD,,PSCA,target,PSMA-PSCA bispecific,bispecific,preclinical,preclinical,preclinical,preclinical follow-up; not a clinical recommendation,mCRPC,PSMA×PSCA dual-targeting bispecifics in preclinical / early trials — leverage co-expression to narrow on-target / off-tumor toxicity,PMID:28971496
 PRAD,,CD276,biomarker,,,,,,,,B7-H3 — surface protein positively correlated with AR expression in PRAD; overexpressed in AR-retained mCRPC and a subset of NEPC,PMID:35839033
@@ -34,7 +34,7 @@ PRAD,,FAP,target,[68Ga]FAPI-46,radioligand,phase_2,trial_follow_up,clinical_tria
 PRAD,,FAP,target,[177Lu]FAPI-46,radioligand,phase_1,trial_follow_up,clinical_trial,clinical-trial follow-up; not default standard,mCRPC,FAP-directed radioligand therapy — early-phase trials for PSMA-low or PSMA-refractory mCRPC,PMID:36898755
 BRCA,,ESR1,biomarker,,,,,,,,Estrogen receptor — drives endocrine therapy indication; loss / mutation marks endocrine resistance,PMID:27532823
 BRCA,,PGR,biomarker,,,,,,,,Progesterone receptor — luminal marker; retained PR favors endocrine sensitivity,PMID:17438091
-BRCA,,ERBB2,biomarker,,,,,,,,HER2 — gating biomarker for HER2-targeted agents; IHC/ISH 3+ or FISH-amplified eligible,PMID:17544441
+BRCA,,ERBB2,biomarker,,,,,,,,HER2 — gating biomarker for HER2-targeted agents; IHC/ISH 3+ or FISH-amplified eligible,PMID:11248153
 BRCA,,MKI67,biomarker,,,,,,,,Ki-67 proliferation index; prognostic and guides chemo decisions in ER+ disease,PMID:21965299
 BRCA,,GATA3,biomarker,,,,,,,,Luminal transcription factor; diagnostic for mammary origin,PMID:16730215
 BRCA,,FOXA1,biomarker,,,,,,,,Pioneer factor cooperating with ER; luminal identity,PMID:20378679
@@ -54,14 +54,14 @@ LUAD,,KRAS,biomarker,,,,,,,,G12C targetable; other alleles remain a negative pre
 LUAD,,ALK,biomarker,,,,,,,,EML4-ALK fusion — alectinib-eligible,PMID:17625570
 LUAD,,ROS1,biomarker,,,,,,,,ROS1 fusion — crizotinib / entrectinib eligible,PMID:22215748
 LUAD,,BRAF,biomarker,,,,,,,,V600E mutation — dabrafenib+trametinib eligible,PMID:27283860
-LUAD,,RET,biomarker,,,,,,,,RET fusion — selpercatinib / pralsetinib eligible,PMID:32273263
-LUAD,,MET,biomarker,,,,,,,,Exon 14 skipping — capmatinib / tepotinib eligible,PMID:31950082
+LUAD,,RET,biomarker,,,,,,,,RET fusion — selpercatinib / pralsetinib eligible,PMID:32846060
+LUAD,,MET,biomarker,,,,,,,,Exon 14 skipping — capmatinib / tepotinib eligible,PMID:32877583
 LUAD,,NTRK1,biomarker,,,,,,,,NTRK fusion — larotrectinib / entrectinib eligible (basket),PMID:29466156
 LUAD,,CD274,biomarker,,,,,,,,PD-L1 expression gates first-line pembrolizumab monotherapy,PMID:27718847
 LUAD,,KEAP1,biomarker,,,,,,,,Co-mutation with STK11 predicts immunotherapy resistance,PMID:30275273
 LUAD,,STK11,biomarker,,,,,,,,Loss predicts immunotherapy resistance in KRAS-mutant LUAD,DOI:10.1158/2159-8290.CD-18-0099
 LUAD,,NKX2-1,biomarker,,,,,,,,TTF-1 — adenocarcinoma lineage confirmation,PMID:20686206
-LUAD,,EGFR,target,osimertinib,small_molecule,approved,approved_standard,standard_or_frontline,confirm indication and line of therapy,EGFR-mut LUAD,Third-generation EGFR TKI — frontline and resistance setting,PMID:31733398
+LUAD,,EGFR,target,osimertinib,small_molecule,approved,approved_standard,standard_or_frontline,confirm indication and line of therapy,EGFR-mut LUAD,Third-generation EGFR TKI — frontline and resistance setting,PMID:29151359
 LUAD,,ALK,target,alectinib,small_molecule,approved,approved_standard,standard_or_frontline,confirm indication and line of therapy,ALK-rearranged LUAD,Second-generation ALK TKI — frontline standard,PMID:28586279
 LUAD,,KRAS,target,sotorasib,small_molecule,approved,approved_indication_matched,approved_biomarker_matched,confirm biomarker/indication-specific eligibility,KRAS G12C LUAD,First KRAS G12C inhibitor approved,PMID:34252278
 LUAD,,KRAS,target,adagrasib,small_molecule,approved,approved_indication_matched,approved_biomarker_matched,confirm biomarker/indication-specific eligibility,KRAS G12C LUAD,Second KRAS G12C inhibitor,PMID:35658005
@@ -73,13 +73,13 @@ LUAD,,CEACAM5,target,tusamitamab ravtansine,ADC,phase_3,late_clinical,late_clini
 LUAD,,TROP2,target,datopotamab deruxtecan,ADC,approved,approved_indication_matched,approved_biomarker_matched,confirm biomarker/indication-specific eligibility,NSCLC,Dato-DXd approved in advanced/metastatic nsqNSCLC,PMID:39250535
 COAD,,KRAS,biomarker,,,,,,,,KRAS wild-type required for EGFR antibody (cetuximab / panitumumab) response,PMID:18316791
 COAD,,NRAS,biomarker,,,,,,,,Must be wild-type for EGFR-antibody response; pan-RAS testing standard,PMID:20921462
-COAD,,BRAF,biomarker,,,,,,,,V600E — poor prognosis; triple combo encorafenib+cetuximab+MEK eligible,PMID:24637364
+COAD,,BRAF,biomarker,,,,,,,,V600E — poor prognosis; triple combo encorafenib+cetuximab+MEK eligible,PMID:31566309
 COAD,,MLH1,biomarker,,,,,,,,MMR gene — loss indicates MSI-H / dMMR; gates checkpoint IO,PMID:11932474
 COAD,,MSH2,biomarker,,,,,,,,MMR gene — loss indicates MSI-H / dMMR; Lynch syndrome relevance,PMID:11932474
 COAD,,MSH6,biomarker,,,,,,,,MMR gene — loss indicates MSI-H / dMMR; Lynch syndrome relevance,PMID:11932474
 COAD,,PMS2,biomarker,,,,,,,,MMR gene — loss indicates MSI-H / dMMR,PMID:11932474
 COAD,,CDX2,biomarker,,,,,,,,Intestinal lineage transcription factor — diagnostic of GI adenocarcinoma,PMID:18818409
-COAD,,CEACAM5,biomarker,,,,,,,,CEA — serum / tissue biomarker for colorectal adenocarcinoma,PMID:15767599
+COAD,,CEACAM5,biomarker,,,,,,,,CEA — serum / tissue biomarker for colorectal adenocarcinoma,PMID:17060676
 COAD,,ERBB2,biomarker,,,,,,,,HER2 amplification — approved indication for trastuzumab combos in RAS WT,PMID:27108243
 COAD,,TP53,biomarker,,,,,,,,Prognostic / predictive; mutation common and linked to chemo response,PMID:27496642
 COAD,,APC,biomarker,,,,,,,,Gatekeeper driver of adenoma-carcinoma sequence; Wnt pathway activation,PMID:20180050
@@ -120,7 +120,7 @@ HNSC,,FADD,biomarker,,,,,,,,Amplified in HPV-negative HNSC; linked to resistance
 HNSC,,EGFR,target,cetuximab,antibody,approved,approved_standard,standard_or_frontline,confirm indication and line of therapy,recurrent/metastatic HNSC,Anti-EGFR — combined with chemo or RT,PMID:18784101
 HNSC,,CD274,target,pembrolizumab,antibody,approved,approved_standard,standard_or_frontline,confirm indication and line of therapy,recurrent/metastatic HNSC,Frontline IO per CPS (KEYNOTE-048),PMID:31679945
 HNSC,,CD274,target,nivolumab,antibody,approved,approved_later_line,later_line_approved,confirm prior therapies and indication-specific eligibility,recurrent/metastatic HNSC,Anti-PD-1 post-platinum (CheckMate 141),PMID:27718847
-DLBC,,MS4A1,biomarker,,,,,,,,CD20 — lineage for B-cell lymphoma; gates rituximab,PMID:9562152
+DLBC,,MS4A1,biomarker,,,,,,,,CD20 — lineage for B-cell lymphoma; gates rituximab,PMID:11807147
 DLBC,,CD19,biomarker,,,,,,,,B-cell lineage; gates CD19 CAR-T,PMID:29466159
 DLBC,,CD79A,biomarker,,,,,,,,BCR complex component; helps confirm B-cell lineage,PMID:21893720
 DLBC,,CD79B,biomarker,,,,,,,,BCR complex component; polatuzumab target and ABC-subtype marker,PMID:31091374
@@ -129,8 +129,8 @@ DLBC,,MME,biomarker,,,,,,,,CD10 — GCB marker per Hans algorithm,PMID:14504078
 DLBC,,IRF4,biomarker,,,,,,,,MUM1 — ABC marker per Hans algorithm,PMID:14504078
 DLBC,,MYC,biomarker,,,,,,,,Rearrangement / co-expression marker — double/triple-hit lymphoma,PMID:19917594
 DLBC,,BCL2,biomarker,,,,,,,,Rearrangement / high expression — double/triple-hit; BCL2 inhibitor eligibility,PMID:19917594
-DLBC,,MS4A1,target,rituximab,antibody,approved,approved_standard,standard_or_frontline,confirm indication and line of therapy,DLBCL,Anti-CD20 — backbone of R-CHOP,PMID:12075054
-DLBC,,CD19,target,axicabtagene ciloleucel,CAR-T,approved,approved_later_line,later_line_approved,confirm prior therapies and indication-specific eligibility,R/R DLBCL,Anti-CD19 CAR-T (Yescarta),PMID:29091450
+DLBC,,MS4A1,target,rituximab,antibody,approved,approved_standard,standard_or_frontline,confirm indication and line of therapy,DLBCL,Anti-CD20 — backbone of R-CHOP,PMID:11807147
+DLBC,,CD19,target,axicabtagene ciloleucel,CAR-T,approved,approved_later_line,later_line_approved,confirm prior therapies and indication-specific eligibility,R/R DLBCL,Anti-CD19 CAR-T (Yescarta),PMID:29226797
 DLBC,,CD19,target,tisagenlecleucel,CAR-T,approved,approved_later_line,later_line_approved,confirm prior therapies and indication-specific eligibility,R/R DLBCL,Anti-CD19 CAR-T (Kymriah),PMID:30501490
 DLBC,,CD19,target,lisocabtagene maraleucel,CAR-T,approved,approved_later_line,later_line_approved,confirm prior therapies and indication-specific eligibility,R/R DLBCL,Anti-CD19 CAR-T (Breyanzi),PMID:33301694
 DLBC,,CD19,target,loncastuximab tesirine,ADC,approved,approved_later_line,later_line_approved,confirm prior therapies and indication-specific eligibility,R/R DLBCL,Anti-CD19 ADC (Zynlonta),PMID:34123378
@@ -140,7 +140,7 @@ DLBC,,CD22,target,inotuzumab ozogamicin,ADC,phase_2,trial_follow_up,clinical_tri
 DLBC,,CD20,target,glofitamab,TCE,approved,approved_later_line,later_line_approved,confirm prior therapies and indication-specific eligibility,R/R DLBCL,CD20×CD3 bispecific (Columvi),PMID:36542511
 DLBC,,CD20,target,epcoritamab,TCE,approved,approved_later_line,later_line_approved,confirm prior therapies and indication-specific eligibility,R/R DLBCL,CD20×CD3 bispecific (Epkinly),PMID:37093768
 DLBC,,BCL2,target,venetoclax,small_molecule,phase_2,trial_follow_up,clinical_trial,clinical-trial follow-up; not default standard,DLBCL,Active trials in double-hit and ABC DLBCL subtypes,PMID:29523570
-LAML,,CD33,biomarker,,,,,,,,Myeloid lineage — gates gemtuzumab ozogamicin,PMID:21233305
+LAML,,CD33,biomarker,,,,,,,,Myeloid lineage — gates gemtuzumab ozogamicin,PMID:22482940
 LAML,,KIT,biomarker,,,,,,,,CD117 — myeloid progenitor marker; D816V mutation in core-binding-factor AML,PMID:16293591
 LAML,,FLT3,biomarker,,,,,,,,ITD / TKD mutations — midostaurin / gilteritinib eligibility,PMID:28644114
 LAML,,NPM1,biomarker,,,,,,,,Exon 12 mutation — favorable prognosis in CN-AML; menin-inhibitor sensitive,PMID:15659725
@@ -152,9 +152,9 @@ LAML,,TP53,biomarker,,,,,,,,Mutation — adverse prognosis; APR-246 trials,PMID:
 LAML,,DNMT3A,biomarker,,,,,,,,Mutation — adverse prognosis,PMID:21067377
 LAML,,KMT2A,biomarker,,,,,,,,Rearrangement — menin-inhibitor eligibility; adverse prognosis,PMID:37018480
 LAML,,MPO,biomarker,,,,,,,,Myeloid granulocytic lineage confirmation (cytochemistry / IHC),PMID:35716019
-LAML,,CD33,target,gemtuzumab ozogamicin,ADC,approved,approved_standard,standard_or_frontline,confirm indication and line of therapy,CD33+ AML,First ADC approved; combined with chemo in newly diagnosed AML,PMID:15178638
+LAML,,CD33,target,gemtuzumab ozogamicin,ADC,approved,approved_standard,standard_or_frontline,confirm indication and line of therapy,CD33+ AML,First ADC approved; combined with chemo in newly diagnosed AML,PMID:30076173
 LAML,,FLT3,target,midostaurin,small_molecule,approved,approved_standard,standard_or_frontline,confirm indication and line of therapy,FLT3-mut AML,Type I FLT3 inhibitor — newly diagnosed FLT3-mut AML,PMID:28644114
-LAML,,FLT3,target,gilteritinib,small_molecule,approved,approved_later_line,later_line_approved,confirm prior therapies and indication-specific eligibility,R/R FLT3-mut AML,Type I FLT3 inhibitor — relapsed/refractory setting,PMID:31634902
+LAML,,FLT3,target,gilteritinib,small_molecule,approved,approved_later_line,later_line_approved,confirm prior therapies and indication-specific eligibility,R/R FLT3-mut AML,Type I FLT3 inhibitor — relapsed/refractory setting,PMID:31665578
 LAML,,IDH1,target,ivosidenib,small_molecule,approved,approved_standard,standard_or_frontline,confirm indication and line of therapy,R/R IDH1-mut AML,IDH1 inhibitor; combined with azacitidine in newly diagnosed unfit patients,PMID:29860938
 LAML,,IDH2,target,enasidenib,small_molecule,approved,approved_later_line,later_line_approved,confirm prior therapies and indication-specific eligibility,R/R IDH2-mut AML,IDH2 inhibitor,PMID:28588020
 LAML,,BCL2,target,venetoclax,small_molecule,approved,approved_standard,standard_or_frontline,confirm indication and line of therapy,AML (unfit),Venetoclax+azacitidine/decitabine standard for unfit newly diagnosed AML,PMID:32786187
@@ -358,7 +358,7 @@ SARC,ewing_sarcoma,PRAME,target,IMA203,TCR-T,phase_2,trial_follow_up,clinical_tr
 SARC,kinase_driven_sarcoma,EGFR,biomarker,,,,,,,,EGFR kinase-domain duplication / activating alteration — kinase-driver evidence; confirm with DNA/RNA structural-variant assay,PMID:26286086; PMID:39863531
 SARC,kinase_driven_sarcoma,EGFR,target,EGFR TKI (afatinib / osimertinib),small_molecule,off_label,off_label,clinical_trial,off-label/trial follow-up; confirm EGFR KDD or activating EGFR alteration and trial availability,EGFR KDD / activating EGFR alteration in kinase-driven sarcoma,EGFR KDD is an oncogenic driver with TKI response precedent strongest outside sarcoma; rare sarcoma-like tumors with EGFR KDD are reported,PMID:26286086; PMID:30255937; PMID:39863531
 THCA,,BRAF,biomarker,,,,,,,,V600E — most common mutation in papillary thyroid carcinoma (~50%); drives RAI resistance,PMID:24557579
-THCA,,RET,biomarker,,,,,,,,RET fusions (CCDC6-RET etc.) in PTC — selpercatinib / pralsetinib eligibility,PMID:32273263
+THCA,,RET,biomarker,,,,,,,,RET fusions (CCDC6-RET etc.) in PTC — selpercatinib / pralsetinib eligibility,PMID:32846061
 THCA,,HRAS,biomarker,,,,,,,,RAS-family mutation (H/N/KRAS Q61) — prevalent in follicular thyroid cancer,PMID:24557579
 THCA,,NRAS,biomarker,,,,,,,,Most common RAS mutation in FTC; defines follicular subtype,PMID:24557579
 THCA,,NTRK1,biomarker,,,,,,,,NTRK fusion — rare; larotrectinib / entrectinib eligibility,PMID:29466156
