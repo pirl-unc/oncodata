@@ -163,6 +163,21 @@ def test_sgc_ici_is_single_pan_salivary_source_scope_row():
     assert ici.cancer_ici_response("ADCC", regimen="PD-1", inherit=False) is None
 
 
+def test_net_nonpancreatic_ici_is_single_source_scope_row():
+    full = ici.cancer_ici_response()
+    per = ici.cancer_ici_response(fallback=False)
+    assert full["NET_NONPANCREATIC"] == 0.0
+    assert per["NET_NONPANCREATIC"] == {"PD-1+CTLA-4": 0.0}
+    assert "NET_LUNG" not in full
+    assert "NET_MIDGUT" not in full
+    assert "NET_RECTAL" not in full
+    assert ici.cancer_ici_response("NET_LUNG") == full["NET_NONPANCREATIC"]
+    assert ici.cancer_ici_response("NET_MIDGUT") == full["NET_NONPANCREATIC"]
+    assert ici.cancer_ici_response("NET_RECTAL") == full["NET_NONPANCREATIC"]
+    assert ici.cancer_ici_response("NET_LUNG", inherit=False) is None
+    assert ici.cancer_ici_response("NET_PANCREAS") == 11.0
+
+
 def test_crc_msi_ici_record_preserves_inheritance_metadata():
     record = ici.cancer_ici_response_record("COAD_MSI")
     assert record["requested_cancer_code"] == "COAD_MSI"
@@ -231,6 +246,29 @@ def test_sgc_ici_record_preserves_inheritance_metadata():
     adcc_pd1 = ici.cancer_ici_response_record("ADCC", regimen="PD-1")
     assert adcc_pd1["resolved_cancer_code"] == "SGC"
     assert adcc_pd1["inheritance_kind"] == "source_scope"
+
+
+def test_net_nonpancreatic_ici_record_preserves_inheritance_metadata():
+    record = ici.cancer_ici_response_record("NET_LUNG")
+    assert record["requested_cancer_code"] == "NET_LUNG"
+    assert record["resolved_cancer_code"] == "NET_NONPANCREATIC"
+    assert record["inheritance_kind"] == "source_scope"
+    assert record["is_inherited_evidence"] is True
+    assert record["regimen"] == "PD-1+CTLA-4"
+    assert record["orr_pct"] == 0.0
+    assert record["response_numerator"] == 0
+    assert record["response_denominator"] == 14
+    assert record["response_ci_low"] == 0
+    assert record["response_ci_high"] == 23
+    assert record["source_scope"] == "aggregate_source"
+    assert (
+        record["endpoint_population"]
+        == "low/intermediate-grade nonpancreatic NET (pooled; not site-isolated)"
+    )
+
+    midgut = ici.cancer_ici_response_record("NET_MIDGUT")
+    assert midgut["resolved_cancer_code"] == "NET_NONPANCREATIC"
+    assert midgut["inheritance_kind"] == "source_scope"
 
 
 def test_resolve_ici_response_source_reports_direct_proxy_and_missing():

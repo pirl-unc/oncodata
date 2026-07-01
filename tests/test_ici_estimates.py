@@ -198,6 +198,46 @@ def test_crc_msi_estimates_are_source_scoped_and_detailed():
     assert pooled["responders_total"] == 67
 
 
+def test_net_nonpancreatic_estimates_are_source_scoped_and_detailed():
+    est = ici.cancer_ici_response_estimates_df()
+    assert not est["cancer_code"].isin(["NET_LUNG", "NET_MIDGUT", "NET_RECTAL"]).any()
+
+    primary = est[
+        (est["cancer_code"] == "NET_NONPANCREATIC")
+        & (est["regimen"] == "PD-1+CTLA-4")
+        & (est["role"] == "primary")
+    ]
+    by_metric = {str(r["metric"]).upper(): r for _, r in primary.iterrows()}
+    assert set(by_metric) >= {"ORR", "PFS_RATE"}
+    assert float(by_metric["ORR"]["value"]) == 0.0
+    assert float(by_metric["ORR"]["ci_low"]) == 0.0
+    assert float(by_metric["ORR"]["ci_high"]) == 23.0
+    assert int(by_metric["ORR"]["metric_n"]) == 14
+    assert int(by_metric["ORR"]["responders"]) == 0
+
+    alternate = est[
+        (est["cancer_code"] == "NET_NONPANCREATIC")
+        & (est["regimen"] == "PD-1+CTLA-4")
+        & (est["role"] == "alternate")
+    ]
+    assert {"ORR", "DCR", "PFS", "PFS_RATE", "OS"} <= set(
+        alternate["metric"].astype(str).str.upper()
+    )
+    assert alternate["setting"].astype(str).str.contains("high-grade").any()
+
+    pooled = ici.pooled_ici_response(
+        "NET_LUNG",
+        regimen="PD-1+CTLA-4",
+        metric="ORR",
+        include_alternates=False,
+    )
+    assert pooled["requested_cancer_code"] == "NET_LUNG"
+    assert pooled["cancer_code"] == "NET_NONPANCREATIC"
+    assert pooled["pooled_pct"] == 0.0
+    assert pooled["n_total"] == 14
+    assert pooled["responders_total"] == 0
+
+
 def test_lusc_checkmate017_orr_and_crr_match_table2():
     est = ici.cancer_ici_response_estimates_df()
     rows = est[

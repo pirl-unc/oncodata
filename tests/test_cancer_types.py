@@ -312,6 +312,25 @@ def test_sgc_records_source_scope_salivary_children():
     assert records.loc["ADCC", "evidence_source_kind"] == "source_scope"
 
 
+def test_net_nonpancreatic_records_source_scope_site_codes():
+    assert cancer_types.resolve_cancer_type("nonpancreatic NET") == "NET_NONPANCREATIC"
+    records = cancer_types.cancer_type_records(
+        ["NET_NONPANCREATIC", "NET_LUNG", "NET_MIDGUT", "NET_RECTAL", "NET_PANCREAS"]
+    ).set_index("code")
+    assert records.loc["NET_NONPANCREATIC", "parent_code"] == "NET"
+    assert records.loc["NET_NONPANCREATIC", "evidence_source_code"] == "NET_NONPANCREATIC"
+    assert records.loc["NET_NONPANCREATIC", "evidence_source_kind"] == "direct"
+    assert records.loc["NET_NONPANCREATIC", "normal_tissue_code"] == "neuroendocrine"
+
+    for code in ("NET_LUNG", "NET_MIDGUT", "NET_RECTAL"):
+        assert records.loc[code, "parent_code"] == "NET"
+        assert records.loc[code, "evidence_source_code"] == "NET_NONPANCREATIC"
+        assert records.loc[code, "evidence_source_kind"] == "source_scope"
+
+    assert records.loc["NET_PANCREAS", "evidence_source_code"] == "NET_PANCREAS"
+    assert records.loc["NET_PANCREAS", "evidence_source_kind"] == "direct"
+
+
 def test_normal_tissue_map_uses_hpa_rna_v23_tissue_names():
     tissue_map = cancer_types.cancer_normal_tissue_map().set_index("primary_tissue")
     used = {

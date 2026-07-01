@@ -92,6 +92,8 @@ CANCER_TYPE_ALIASES = {
     "low_grade_glioma": "LGG",
     "lgg": "LGG",
     "glioma": "LGG",
+    "net_nonpancreatic": "NET_NONPANCREATIC",
+    "nonpancreatic_net": "NET_NONPANCREATIC",
     "mesothelioma": "MESO",
     "pheochromocytoma": "PCPG",
     "paraganglioma": "PCPG",
@@ -327,6 +329,11 @@ _EVIDENCE_SOURCE_CODE = {
     # acinic-cell- or adenoid-cystic-specific anti-PD-1 monotherapy estimates.
     "ACINIC": "SGC",
     "ADCC": "SGC",
+    # DART/SWOG S1609 reports low/intermediate-grade nonpancreatic NET as a
+    # pooled grade-defined subgroup, not lung-, midgut-, or rectum-specific ORR.
+    "NET_LUNG": "NET_NONPANCREATIC",
+    "NET_MIDGUT": "NET_NONPANCREATIC",
+    "NET_RECTAL": "NET_NONPANCREATIC",
 }
 
 
@@ -340,7 +347,10 @@ def cancer_evidence_source_code(cancer_type, *, strict=True):
     ``CHOL`` and ``GBC`` inherit ICI source rows from ``BTC`` when the trial reports
     pan-biliary cohorts rather than site-isolated estimates. ``ACINIC`` and
     ``ADCC`` similarly resolve anti-PD-1 source rows through the pan-salivary
-    ``SGC`` aggregate when no histology-specific row is available.
+    ``SGC`` aggregate when no histology-specific row is available. Site-specific
+    well-differentiated nonpancreatic NET codes resolve dual-checkpoint evidence
+    through ``NET_NONPANCREATIC`` because the DART source stratifies by grade, not
+    by organ site.
     """
     code = resolve_cancer_type(cancer_type, strict=strict)
     if code is None:

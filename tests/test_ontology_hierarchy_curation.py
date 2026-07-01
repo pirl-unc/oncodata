@@ -19,11 +19,13 @@ from oncoref import (
 def test_net_umbrella_navigation():
     # The headline example: NET -> NET_PANCREAS ("NET_PAN").
     assert cancer_type_lineage("NET_PANCREAS") == ["NET", "NET_PANCREAS"]
+    assert cancer_type_lineage("NET_NONPANCREATIC") == ["NET", "NET_NONPANCREATIC"]
     assert set(cancer_type_descendants("NET")) == {
         "NET_PANCREAS",
         "NET_MIDGUT",
         "NET_RECTAL",
         "NET_LUNG",
+        "NET_NONPANCREATIC",
     }
 
 

@@ -62,3 +62,16 @@ def test_sgc_apd1_is_single_pan_salivary_source_scope_row():
     assert apd1.cancer_apd1_response("ACINIC", inherit=False) is None
     # ADCC still has a direct dual-checkpoint anchor in the compact fallback table.
     assert mapping["ADCC"] == 6.0
+
+
+def test_net_nonpancreatic_apd1_is_single_source_scope_row():
+    mapping = apd1.cancer_apd1_response()
+    assert mapping["NET_NONPANCREATIC"] == 0.0
+    assert "NET_LUNG" not in mapping
+    assert "NET_MIDGUT" not in mapping
+    assert "NET_RECTAL" not in mapping
+    assert apd1.cancer_apd1_response("NET_LUNG") == mapping["NET_NONPANCREATIC"]
+    assert apd1.cancer_apd1_response("NET_MIDGUT") == mapping["NET_NONPANCREATIC"]
+    assert apd1.cancer_apd1_response("NET_RECTAL") == mapping["NET_NONPANCREATIC"]
+    assert apd1.cancer_apd1_response("NET_LUNG", inherit=False) is None
+    assert mapping["NET_PANCREAS"] == 11.0
