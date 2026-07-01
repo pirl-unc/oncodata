@@ -74,8 +74,12 @@ CANCER_TYPE_ALIASES = {
     "sarcoma": "SARC",
     "adrenocortical": "ACC",
     "adrenal": "ACC",
+    "biliary": "BTC",
+    "biliary_tract": "BTC",
+    "btc": "BTC",
     "cholangiocarcinoma": "CHOL",
     "bile_duct": "CHOL",
+    "gallbladder": "GBC",
     "dlbcl": "DLBC",
     "lymphoma": "DLBC",
     "esophageal": "ESCA",
@@ -312,6 +316,10 @@ _EVIDENCE_SOURCE_CODE = {
     # not separate colon- and rectum-specific TMB/ICI estimates.
     "COAD_MSI": "CRC_MSI",
     "READ_MSI": "CRC_MSI",
+    # KEYNOTE-158/028 and durvalumab monotherapy report biliary-tract-cancer
+    # cohorts, not cholangiocarcinoma- or gallbladder-specific ICI estimates.
+    "CHOL": "BTC",
+    "GBC": "BTC",
 }
 
 
@@ -321,7 +329,9 @@ def cancer_evidence_source_code(cancer_type, *, strict=True):
     Most curated TMB / ICI rows are keyed directly by cancer type. A few molecular
     subtype rows are intentionally source-scoped instead: ``COAD_MSI`` and
     ``READ_MSI`` inherit biomarker-selected colorectal MSI-H/dMMR estimates from
-    ``CRC_MSI`` because the published sources report mCRC-level cohorts.
+    ``CRC_MSI`` because the published sources report mCRC-level cohorts. Similarly,
+    ``CHOL`` and ``GBC`` inherit ICI source rows from ``BTC`` when the trial reports
+    pan-biliary cohorts rather than site-isolated estimates.
     """
     code = resolve_cancer_type(cancer_type, strict=strict)
     if code is None:

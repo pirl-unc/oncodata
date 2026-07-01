@@ -11,8 +11,8 @@ BRCA_Basal,PD-1,5.0,pembrolizumab,KEYNOTE-086,MK-3475-086,NCT02447003,pretreated
 BRCA_Basal,PD-L1,10.0,atezolizumab,PCD4989g,,NCT01375842,metastatic TNBC all-comers (1L ~24%),PMID:30242306,high,phase 1; 1L subset 24% (n=21)
 CESC,PD-1,15.0,pembrolizumab,KEYNOTE-158,MK-3475-158,NCT02628067,pretreated; PD-L1+ (CPS>=1) selected,PMID:30943124,high,All responders were PD-L1+; all-comer ~12%
 CESC,PD-L1,15.6,atezolizumab,SKYSCRAPER-04,,NCT04300647,2L/3L PD-L1+ R/M,PMID:38858106,medium,reference arm of a combo trial
-CHOL,PD-1,6.0,pembrolizumab,KEYNOTE-158,MK-3475-158,NCT02628067,advanced biliary,PMID:32359091,medium,biliary ORR 5.8% (6/104)
-CHOL,PD-L1,4.8,durvalumab,"durvalumab biliary tract cancer phase 1, Asian dose-expansion",,NCT01938612,advanced BTC mono,PMID:35611499,low,BTC monotherapy data thin (2/42)
+BTC,PD-1,5.8,pembrolizumab,KEYNOTE-158,MK-3475-158,NCT02628067,advanced biliary tract cancer (pan-biliary),PMID:32359091,medium,pan-biliary ORR 5.8% (6/104); source-scope row for CHOL/GBC lookups
+BTC,PD-L1,4.8,durvalumab,"durvalumab biliary tract cancer phase 1, Asian dose-expansion",,NCT01938612,advanced biliary tract cancer monotherapy,PMID:35611499,low,BTC monotherapy data thin (2/42); source-scope row for CHOL/GBC lookups
 CLL,PD-1,0.0,pembrolizumab,Mayo Clinic phase 2 pembrolizumab CLL/Richter trial,MC1485,NCT02332980,relapsed CLL,DOI:10.1182/blood-2017-02-765685,high,0/16 in CLL proper; Richter transformation responds (~44%) but is DLBCL-like
 COAD,PD-1,5.0,pembrolizumab,KEYNOTE-177,MK-3475-177,NCT02563002,all-comers (response is MSI-dependent),PMID:33264544,medium,All-comer ~5%; only the ~13% MSI-H/dMMR respond (MSI-H ~45%; MSS ~0%)
 CRC_MSI,PD-1,43.8,pembrolizumab,KEYNOTE-177,MK-3475-177,NCT02563002,first-line MSI-H/dMMR mCRC,PMID:33264544,high,MSI-H/dMMR metastatic colorectal; source-level KEYNOTE-177 estimate for COAD_MSI/READ_MSI lookups
@@ -25,7 +25,6 @@ EPN,PD-1,4.5,nivolumab +/- ipilimumab,CheckMate 908,CA209-908,NCT03130959,relaps
 ESCA,PD-1,18.0,nivolumab,ATTRACTION-3,ONO-4538-24,NCT02569242,pretreated; esophageal SCC,PMID:31582355,medium,nivo ~19%; KEYNOTE-181 ESCC subgroup ~17%
 ESCA,PD-1+CTLA-4,28,nivolumab+ipilimumab,CheckMate 648,CA209-648,NCT03143153,1L advanced ESCC; all-comers,PMID:35108470,high,"nivo+ipi all-comers ORR 28% (PD-L1>=1% 35%), CheckMate-648 (Doki 2022); 27% was the chemo control arm"
 FL,PD-1,4.0,nivolumab,CheckMate 140,,NCT02038946,relapsed/refractory follicular,DOI:10.1182/blood.2019004753,high,ORR 4% (4/92); checkpoint monotherapy largely inactive
-GBC,PD-1,5.8,pembrolizumab,KEYNOTE-158,MK-3475-158,NCT02628067,advanced biliary (pan-biliary),DOI:10.1002/ijc.33013,medium,pan-biliary cohort ORR 5.8% (6/104); not gallbladder-isolated; MSI-H biliary ~41%
 GBM,PD-1,8.0,nivolumab,CheckMate 143,CA209-143,NCT02017717,recurrent; all-comers,PMID:32437507,high,Near-zero anchor; vs bevacizumab 23%
 HL,PD-1,71.0,nivolumab,CheckMate 205,CA209-205,NCT02181738,relapsed/refractory post-ASCT,PMID:29584546,high,Very high responder; KEYNOTE-087 pembro ~69%
 HNSC,PD-1,19.0,pembrolizumab,KEYNOTE-048,MK-3475-048,NCT02358031,first-line R/M; CPS>=1; monotherapy arm,PMID:31679945,high,CPS>=20 ~23%; total population ~17%; HPV+/HPV- differential not cleanly established in KN-048

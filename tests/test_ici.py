@@ -136,6 +136,19 @@ def test_crc_msi_ici_is_single_source_scope_row():
     assert ici.cancer_ici_regimen("READ_MSI") == "PD-1"
 
 
+def test_btc_ici_is_single_pan_biliary_source_scope_row():
+    full = ici.cancer_ici_response()
+    per = ici.cancer_ici_response(fallback=False)
+    assert full["BTC"] == 5.8
+    assert per["BTC"] == {"PD-1": 5.8, "PD-L1": 4.8}
+    assert "CHOL" not in full
+    assert "GBC" not in full
+    assert ici.cancer_ici_response("CHOL") == full["BTC"]
+    assert ici.cancer_ici_response("GBC") == full["BTC"]
+    assert ici.cancer_ici_response("GBC", regimen="PD-L1") == 4.8
+    assert ici.cancer_ici_response("GBC", inherit=False) is None
+
+
 def test_crc_msi_ici_record_preserves_inheritance_metadata():
     record = ici.cancer_ici_response_record("COAD_MSI")
     assert record["requested_cancer_code"] == "COAD_MSI"
@@ -164,6 +177,23 @@ def test_crc_msi_ici_record_preserves_inheritance_metadata():
 
     assert ici.cancer_ici_response_record("READ_MSI", inherit=False) is None
     assert ici.cancer_ici_response_record("READ_MSI", fallback=False, inherit=False) == {}
+
+
+def test_btc_ici_record_preserves_inheritance_metadata():
+    record = ici.cancer_ici_response_record("GBC")
+    assert record["requested_cancer_code"] == "GBC"
+    assert record["resolved_cancer_code"] == "BTC"
+    assert record["inheritance_kind"] == "source_scope"
+    assert record["is_inherited_evidence"] is True
+    assert record["regimen"] == "PD-1"
+    assert record["orr_pct"] == 5.8
+    assert record["response_numerator"] == 6
+    assert record["response_denominator"] == 104
+    assert record["source_scope"] == "aggregate_source"
+    assert (
+        record["endpoint_population"]
+        == "advanced biliary tract cancer, prior-treated pan-biliary cohort"
+    )
 
 
 def test_resolve_ici_response_source_reports_direct_proxy_and_missing():
