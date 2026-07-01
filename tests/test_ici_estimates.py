@@ -198,6 +198,30 @@ def test_crc_msi_estimates_are_source_scoped_and_detailed():
     assert pooled["responders_total"] == 67
 
 
+def test_lusc_checkmate017_orr_and_crr_match_table2():
+    est = ici.cancer_ici_response_estimates_df()
+    rows = est[
+        (est["cancer_code"] == "LUSC")
+        & (est["trial_name"] == "CheckMate 017")
+        & (est["regimen"] == "PD-1")
+        & (est["role"] == "primary")
+    ]
+    by_metric = {str(r["metric"]).upper(): r for _, r in rows.iterrows()}
+
+    orr = by_metric["ORR"]
+    assert float(orr["value"]) == 20.0
+    assert int(orr["metric_n"]) == 135
+    assert int(orr["responders"]) == 27
+    assert float(orr["ci_low"]) == 14.0
+    assert float(orr["ci_high"]) == 28.0
+
+    crr = by_metric["CRR"]
+    assert int(crr["metric_n"]) == 135
+    assert int(crr["responders"]) == 1
+    assert float(crr["value"]) == 100 / 135
+    assert crr["source_verified"] is True
+
+
 def test_trial_columns_split_and_clean():
     import re
 
