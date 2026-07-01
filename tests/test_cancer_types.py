@@ -331,6 +331,17 @@ def test_net_nonpancreatic_records_source_scope_site_codes():
     assert records.loc["NET_PANCREAS", "evidence_source_kind"] == "direct"
 
 
+def test_extrapulmonary_g3_nen_is_context_aggregate_not_lung_lcnec():
+    assert cancer_types.resolve_cancer_type("extrapulmonary G3 NEN") == "NEN_G3_EXTRAPULMONARY"
+    records = cancer_types.cancer_type_records(
+        ["NEN_G3_EXTRAPULMONARY", "NEC_LUNG_LARGECELL"]
+    ).set_index("code")
+    assert cancer_types.is_mixture_cohort("NEN_G3_EXTRAPULMONARY") is True
+    assert records.loc["NEN_G3_EXTRAPULMONARY", "primary_tissue"] == "neuroendocrine"
+    assert records.loc["NEN_G3_EXTRAPULMONARY", "evidence_source_code"] == ("NEN_G3_EXTRAPULMONARY")
+    assert records.loc["NEC_LUNG_LARGECELL", "evidence_source_code"] == ("NEC_LUNG_LARGECELL")
+
+
 def test_normal_tissue_map_uses_hpa_rna_v23_tissue_names():
     tissue_map = cancer_types.cancer_normal_tissue_map().set_index("primary_tissue")
     used = {

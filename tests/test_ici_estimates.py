@@ -238,6 +238,39 @@ def test_net_nonpancreatic_estimates_are_source_scoped_and_detailed():
     assert pooled["responders_total"] == 0
 
 
+def test_extrapulmonary_g3_nen_estimates_are_not_lung_lcnec_primary_rows():
+    est = ici.cancer_ici_response_estimates_df()
+    lung_primary = est[
+        (est["cancer_code"] == "NEC_LUNG_LARGECELL")
+        & (est["regimen"] == "PD-1")
+        & (est["role"] == "primary")
+    ]
+    assert set(lung_primary["trial_name"]) == {"nivolumab pulmonary LCNEC series"}
+    assert set(lung_primary["metric"].str.upper()) == {"ORR"}
+    assert not lung_primary["setting"].str.contains("extrapulmonary", case=False).any()
+
+    g3 = est[
+        (est["cancer_code"] == "NEN_G3_EXTRAPULMONARY")
+        & (est["regimen"] == "PD-1")
+        & (est["role"] == "primary")
+    ]
+    by_metric = {str(r["metric"]).upper(): r for _, r in g3.iterrows()}
+    assert {"ORR", "CRR", "DCR", "DOR", "PFS", "OS"} <= set(by_metric)
+
+    orr = by_metric["ORR"]
+    assert float(orr["value"]) == 3.4
+    assert float(orr["ci_low"]) == 0.1
+    assert float(orr["ci_high"]) == 17.8
+    assert int(orr["metric_n"]) == 29
+    assert int(orr["responders"]) == 1
+
+    dcr = by_metric["DCR"]
+    assert float(dcr["value"]) == 24.1
+    assert float(dcr["ci_low"]) == 7.9
+    assert float(dcr["ci_high"]) == 39.7
+    assert int(dcr["responders"]) == 7
+
+
 def test_lusc_checkmate017_orr_and_crr_match_table2():
     est = ici.cancer_ici_response_estimates_df()
     rows = est[

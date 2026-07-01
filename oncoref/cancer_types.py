@@ -94,6 +94,8 @@ CANCER_TYPE_ALIASES = {
     "glioma": "LGG",
     "net_nonpancreatic": "NET_NONPANCREATIC",
     "nonpancreatic_net": "NET_NONPANCREATIC",
+    "extrapulmonary_g3_nen": "NEN_G3_EXTRAPULMONARY",
+    "g3_extrapulmonary_nen": "NEN_G3_EXTRAPULMONARY",
     "mesothelioma": "MESO",
     "pheochromocytoma": "PCPG",
     "paraganglioma": "PCPG",
@@ -1351,7 +1353,7 @@ def mixture_cohort_codes():
     df = cancer_type_registry()
     if "mixture_cohort" not in df.columns:
         return []
-    flag = df["mixture_cohort"].fillna(False).astype(bool)
+    flag = df["mixture_cohort"].astype(str).str.strip().str.lower().isin({"true", "1", "yes"})
     return df.loc[flag, "code"].tolist()
 
 
