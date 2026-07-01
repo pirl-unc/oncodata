@@ -96,6 +96,58 @@ def test_key_gene_known_wrong_pmids_are_replaced():
     assert bad_pmids.isdisjoint(audited_refs)
 
 
+def test_key_gene_nonexistent_pmids_are_replaced():
+    key = cg.cancer_key_genes_df()
+
+    bad_pmids = {"PMID:34428009", "PMID:35379757", "PMID:37173835"}
+    all_refs = set().union(*(_split_refs(v) for v in key["source"]))
+    assert bad_pmids.isdisjoint(all_refs)
+
+    expected_refs = {
+        ("SKCM", "", "PRAME", "biomarker", ""): {"PMID:38338862"},
+        ("SKCM", "", "PRAME", "target", "IMA203"): {"PMID:40205198"},
+        ("SARC", "myxoid_liposarcoma", "PRAME", "biomarker", ""): {"PMID:27499900"},
+        ("SARC", "synovial_sarcoma", "PRAME", "biomarker", ""): {"PMID:30524904"},
+        ("SARC", "ewing_sarcoma", "PRAME", "biomarker", ""): {"PMID:24973179"},
+        ("SARC", "ewing_sarcoma", "PRAME", "target", "IMA203"): {"PMID:40205198"},
+        ("SARC", "dsrct", "WT1", "target", ""): {"PMID:35069874", "PMID:39139449"},
+        ("SARC", "MPNST", "NF1", "biomarker", ""): {"PMID:36598417"},
+        ("SARC", "MPNST", "CDKN2A", "biomarker", ""): {"PMID:36598417"},
+        ("SARC", "MPNST", "CDKN2B", "biomarker", ""): {"PMID:14519636"},
+        ("SARC", "MPNST", "TP53", "biomarker", ""): {"PMID:36598417"},
+        ("SARC", "MPNST", "SOX10", "biomarker", ""): {"PMID:28551330"},
+        ("SARC", "MPNST", "S100B", "biomarker", ""): {"PMID:28551330"},
+        ("SARC", "MPNST", "MEK1", "target", "trametinib"): {
+            "PMID:33032988",
+            "PMID:33203698",
+        },
+        ("SARC", "MPNST", "PTPN11", "target", "SHP2 inhibitors (trials)"): {
+            "PMID:33032988",
+            "PMID:39793045",
+        },
+    }
+    for (code, subtype, symbol, role, agent), expected in expected_refs.items():
+        mask = (
+            (key["cancer_code"] == code)
+            & (key["subtype"].fillna("") == subtype)
+            & (key["symbol"] == symbol)
+            & (key["role"] == role)
+            & (key["agent"].fillna("") == agent)
+        )
+        rows = key[mask]
+        assert len(rows) == 1, (code, subtype, symbol, role, agent)
+        assert _split_refs(rows.iloc[0]["source"]) == expected
+
+    wt1 = key[
+        (key["cancer_code"] == "SARC")
+        & (key["subtype"] == "dsrct")
+        & (key["symbol"] == "WT1")
+        & (key["role"] == "target")
+    ].iloc[0]
+    assert wt1["agent_class"] == "vaccine"
+    assert "TCR-T" not in str(wt1["rationale"])
+
+
 def test_type_gene_sets():
     sets = cg.cancer_type_gene_sets("PRAD")
     assert sets  # non-empty role->{ensembl:symbol}
