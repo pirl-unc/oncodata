@@ -49,7 +49,7 @@ def test_expression_artifact_gene_universe_deltas_expose_known_remaps():
     ]
     assert not paxx.empty
     assert set(paxx["symbol"]) == {"PAXX"}
-    assert df.attrs["comparison"] == "pirlygenes_5.23.2_vs_oncoref_5.23.0"
+    assert df.attrs["comparison"] == "pirlygenes_5.23.2_vs_oncoref_5.23.3"
 
 
 def test_expression_artifact_gene_universe_deltas_filter_by_product_and_code():
@@ -59,9 +59,29 @@ def test_expression_artifact_gene_universe_deltas_filter_by_product_and_code():
         delta_kind="pirlygenes_only",
     )
 
-    assert len(cll) == 11
-    assert set(cll["status"]) == {"canonical_replacement_absent_from_output"}
+    assert len(cll) == 17
+    assert set(cll["status"]) == {
+        "canonical_replacement_absent_from_output",
+        "remapped_to_oncoref",
+    }
     assert "ENSG00000225489" in set(cll["legacy_ensembl_gene_id"])
+
+
+def test_expression_artifact_gene_universe_deltas_expose_full_representative_extras():
+    prad = expression.expression_artifact_gene_universe_deltas(
+        product="representative_cohort_samples",
+        cancer_type="PRAD",
+        delta_kind="oncoref_only",
+    )
+
+    assert len(prad) == 249
+    assert "ENSG00000131548" in set(prad["oncoref_ensembl_gene_id"])
+    assert {
+        "technical_or_noncoding_extra",
+        "y_linked_extra",
+        "intentional_canonicalization",
+        "unresolved_oncoref_extra",
+    } <= set(prad["status"])
 
 
 def test_expression_artifact_gene_universe_delta_summary():
@@ -73,7 +93,14 @@ def test_expression_artifact_gene_universe_delta_summary():
         & (summary["delta_kind"] == "pirlygenes_only")
         & (summary["status"] == "canonical_replacement_absent_from_output")
     ]
-    assert hit["n"].iloc[0] == 11
+    assert hit["n"].iloc[0] == 14
+
+    representative = summary[
+        (summary["product"] == "representative_cohort_samples")
+        & (summary["cancer_code"] == "PRAD")
+        & (summary["delta_kind"] == "oncoref_only")
+    ]
+    assert representative["n"].sum() == 249
 
 
 def test_cohort_gene_percentiles_as_tpm(percentile_cache):

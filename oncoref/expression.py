@@ -492,7 +492,7 @@ def expression_artifact_gene_universe_deltas(
 
     This is a provenance/audit table, not a value-transforming compatibility shim. It
     records the known remapped, missing, and extra rows from the pirlygenes 5.23.2 vs
-    oncoref 5.23.0 parity run tracked in #191/#193 so downstream migration code can
+    oncoref 5.23.3 parity run tracked in #191/#193 so downstream migration code can
     distinguish intentional canonicalization from unresolved artifact differences.
 
     Optional filters are exact for ``product``, ``delta_kind``, and ``status``.
@@ -515,7 +515,7 @@ def expression_artifact_gene_universe_deltas(
 
         df = df[df["cancer_code"].map(_matches)]
     df = df.reset_index(drop=True)
-    df.attrs["comparison"] = "pirlygenes_5.23.2_vs_oncoref_5.23.0"
+    df.attrs["comparison"] = "pirlygenes_5.23.2_vs_oncoref_5.23.3"
     df.attrs["issues"] = ["#191", "#193"]
     return df
 

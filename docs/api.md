@@ -245,7 +245,8 @@ parity issues.
 pirlygenes/oncoref row-universe deltas from the current parity audit: canonical
 remaps such as legacy `PAXX` to its oncoref ENSG, CLL percentile replacement rows
 that are known but absent from the current output, representative-sample rows
-missing from oncoref, and examples of oncoref-only technical/noncoding rows.
+missing from oncoref, and the full current set of oncoref-only representative
+technical/noncoding, immune-receptor, Y-linked, and unresolved extra rows.
 Use `expression.expression_artifact_gene_universe_delta_summary()` for counts by
 product/cohort/status. This table is intentionally provenance: it makes
 differences explicit for migration code, but does not synthesize missing
