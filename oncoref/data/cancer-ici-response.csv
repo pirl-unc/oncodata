@@ -31,11 +31,13 @@ HNSC,PD-1,19.0,pembrolizumab,KEYNOTE-048,MK-3475-048,NCT02358031,first-line R/M;
 HNSC,PD-L1,16.2,durvalumab,HAWK,,NCT02207530,2L+ R/M PD-L1-high,DOI:10.1016/j.ejca.2018.11.015,high,PD-L1-high selected; CONDOR low/neg arm 9.2% (PMID:30383184)
 HNSC_HPVneg,PD-1,16,pembrolizumab,KEYNOTE-012,MK-3475-012,NCT01848834,R/M HNSCC HPV-,PMID:29955135,medium,"HPV- ORR 15.9% (KEYNOTE-012 pooled long-term FU, Mehra 2018)"
 HNSC_HPVpos,PD-1,22,pembrolizumab,KEYNOTE-012,MK-3475-012,NCT01848834,R/M HNSCC HPV+,PMID:29955135,medium,"HPV+ ORR 21.9% (KEYNOTE-012 pooled long-term FU, Mehra 2018, Br J Cancer)"
-KICH,PD-1,10.0,pembrolizumab,KEYNOTE-427,MK-3475-427,NCT02853344,chromophobe RCC 1L,PMID:33529058,low,chromophobe ORR 9.5% (small n)
+KICH,PD-1,9.5,pembrolizumab,KEYNOTE-427,MK-3475-427,NCT02853344,chromophobe RCC 1L,PMID:33529058,low,chromophobe ORR 9.5% (2/21; 95% CI 1.2-30.4)
+RCC_NCC,PD-1,26.7,pembrolizumab,KEYNOTE-427 cohort B,MK-3475-427,NCT02853344,overall non-clear-cell RCC 1L,PMID:33529058,medium,"overall nccRCC final-analysis ORR 26.7% (44/165); source-scope mixture of papillary, chromophobe, and unclassified RCC"
+RCC_NCC_UNCLASSIFIED,PD-1,30.8,pembrolizumab,KEYNOTE-427 cohort B,MK-3475-427,NCT02853344,unclassified non-clear-cell RCC 1L,PMID:33529058,low,unclassified nccRCC final-analysis ORR 30.8% (8/26)
 KIRC,PD-1,25.0,nivolumab,CheckMate 025,CA209-025,NCT01668784,pretreated (post-VEGF TKI); all-comers,PMID:26406148,high,vs everolimus 5%
 KIRC,PD-1+CTLA-4,42.0,nivolumab+ipilimumab,CheckMate 214,CA209-214,NCT02231749,1L IMDC intermediate/poor-risk,PMID:29562145,high,Motzer 2018; intermediate/poor-risk co-primary (not ITT); CR 9%
 KIRC,PD-L1,25.0,atezolizumab,IMmotion150,WO29074,NCT01984242,1L metastatic mono arm,PMID:29867230,high,mono missed PFS vs sunitinib; combo arm 32%
-KIRP,PD-1,25.0,pembrolizumab,KEYNOTE-427 cohort B,MK-3475-427,NCT02853344,papillary RCC 1L,PMID:33529058,medium,papillary nccRCC ORR 25.4%
+KIRP,PD-1,28.8,pembrolizumab,KEYNOTE-427 cohort B,MK-3475-427,NCT02853344,papillary RCC 1L,PMID:33529058,medium,papillary nccRCC final-analysis ORR 28.8% (34/118)
 LIHC,PD-1,20.0,nivolumab,CheckMate 040,CA209-040,NCT01658878,sorafenib-naive & -experienced dose-expansion cohort,PMID:28434648,high,CheckMate 040 dose-expansion ORR 20% (42/214; 95% CI 15-26); dose-escalation cohort 15% is an alternate estimate
 LIHC,PD-1+CTLA-4,32.0,nivolumab+ipilimumab,CheckMate 040,CA209-040,NCT01658878,sorafenib-experienced,PMID:33001135,high,Yau 2020; arm A approved dose
 LIHC,PD-L1,17.0,durvalumab,HIMALAYA,D419CC00002,NCT03298451,1L unresectable mono arm,DOI:10.1056/EVIDoa2100070,medium,mono OS non-inferior to sorafenib; STRIDE combo 20.1%

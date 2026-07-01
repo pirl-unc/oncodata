@@ -30,8 +30,10 @@ UCEC_CNH,7,pembrolizumab,KEYNOTE-158,MK-3475-158,NCT02628067,pMMR/MSS p53-abnorm
 OV,8.0,pembrolizumab,KEYNOTE-100,MK-3475-100,NCT02674061,recurrent ovarian (all-comers),PMID:31046082,medium,pembro monotherapy ORR 8.0%,PD-1
 HNSC_HPVpos,22,pembrolizumab,KEYNOTE-012,MK-3475-012,NCT01848834,R/M HNSCC HPV+,PMID:29955135,medium,"HPV+ ORR 21.9% (KEYNOTE-012 pooled long-term FU, Mehra 2018, Br J Cancer)",PD-1
 HNSC_HPVneg,16,pembrolizumab,KEYNOTE-012,MK-3475-012,NCT01848834,R/M HNSCC HPV-,PMID:29955135,medium,"HPV- ORR 15.9% (KEYNOTE-012 pooled long-term FU, Mehra 2018)",PD-1
-KIRP,25.0,pembrolizumab,KEYNOTE-427 cohort B,MK-3475-427,NCT02853344,papillary RCC 1L,PMID:33529058,medium,papillary nccRCC ORR 25.4%,PD-1
-KICH,10.0,pembrolizumab,KEYNOTE-427,MK-3475-427,NCT02853344,chromophobe RCC 1L,PMID:33529058,low,chromophobe ORR 9.5% (small n),PD-1
+KIRP,28.8,pembrolizumab,KEYNOTE-427 cohort B,MK-3475-427,NCT02853344,papillary RCC 1L,PMID:33529058,medium,papillary nccRCC final-analysis ORR 28.8% (34/118),PD-1
+KICH,9.5,pembrolizumab,KEYNOTE-427,MK-3475-427,NCT02853344,chromophobe RCC 1L,PMID:33529058,low,chromophobe ORR 9.5% (2/21; 95% CI 1.2-30.4),PD-1
+RCC_NCC,26.7,pembrolizumab,KEYNOTE-427 cohort B,MK-3475-427,NCT02853344,overall non-clear-cell RCC 1L,PMID:33529058,medium,"overall nccRCC final-analysis ORR 26.7% (44/165); source-scope mixture of papillary, chromophobe, and unclassified RCC",PD-1
+RCC_NCC_UNCLASSIFIED,30.8,pembrolizumab,KEYNOTE-427 cohort B,MK-3475-427,NCT02853344,unclassified non-clear-cell RCC 1L,PMID:33529058,low,unclassified nccRCC final-analysis ORR 30.8% (8/26),PD-1
 BTC,5.8,pembrolizumab,KEYNOTE-158,MK-3475-158,NCT02628067,advanced biliary tract cancer (pan-biliary),PMID:32359091,medium,pan-biliary ORR 5.8% (6/104); source-scope row for CHOL/GBC lookups,PD-1
 UVM,4.0,nivolumab,pooled uveal series,,,metastatic uveal melanoma,PMID:27533448,low,uveal anti-PD-1 monotherapy ORR ~3-6% (checkpoint-refractory),PD-1
 SARC_UPS,23,pembrolizumab,SARC028,,NCT02301039,advanced/metastatic 2L+,DOI:10.1200/JCO.2019.37.15_suppl.11015,medium,"UPS, SARC028 expansion cohort n=40 ORR 23% (Burgess 2019); initial n=10 cohort was 40%; most ICI-responsive STS",PD-1

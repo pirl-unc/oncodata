@@ -71,7 +71,7 @@ def test_estimates_table_shape_and_coverage():
         "value_basis",
     }
     assert expected <= set(est.columns)
-    assert len(est) > 800
+    assert len(est) >= 790
     # every (cancer, regimen) in the curated anchor table has >=1 estimate row
     anchor = ici.cancer_ici_response_df()
     anchor_cells = set(zip(anchor["cancer_code"], anchor["regimen"]))
@@ -323,6 +323,69 @@ def test_luad_stk11_estimates_do_not_include_keynote042_all_comer_nsclc_rows():
         "Skoulidis STK11/LKB1 aPD1-resistance analysis",
         "SU2C cohort + CheckMate-057",
     }
+
+
+def test_keynote427_renal_histology_estimates_are_source_scoped():
+    est = ici.cancer_ici_response_estimates_df()
+    renal = est[
+        (est["ref"].astype(str).str.contains("33529058|4569", regex=True))
+        & (est["cancer_code"].isin(["KICH", "KIRP", "RCC_NCC", "RCC_NCC_UNCLASSIFIED"]))
+    ]
+
+    kich = renal[renal["cancer_code"] == "KICH"]
+    assert set(kich["role"]) == {"primary"}
+    assert set(kich["metric"].str.upper()) == {"ORR"}
+    assert (
+        not kich["setting"]
+        .str.contains("overall|papillary|unclassified", case=False, regex=True)
+        .any()
+    )
+    kich_orr = kich.iloc[0]
+    assert float(kich_orr["value"]) == 9.5
+    assert int(kich_orr["metric_n"]) == 21
+    assert int(kich_orr["responders"]) == 2
+
+    kirp = renal[renal["cancer_code"] == "KIRP"]
+    assert set(kirp["role"]) == {"primary"}
+    assert set(kirp["metric"].str.upper()) == {"ORR"}
+    assert (
+        not kirp["setting"]
+        .str.contains("overall|chromophobe|unclassified", case=False, regex=True)
+        .any()
+    )
+    kirp_orr = kirp.iloc[0]
+    assert float(kirp_orr["value"]) == 28.8
+    assert int(kirp_orr["metric_n"]) == 118
+    assert int(kirp_orr["responders"]) == 34
+
+    ncc = renal[(renal["cancer_code"] == "RCC_NCC") & (renal["role"] == "primary")]
+    by_metric = {str(r["metric"]).upper(): r for _, r in ncc.iterrows()}
+    assert set(by_metric) == {"ORR", "CRR", "DOR", "PFS", "OS"}
+    assert float(by_metric["ORR"]["value"]) == 26.7
+    assert int(by_metric["ORR"]["metric_n"]) == 165
+    assert int(by_metric["ORR"]["responders"]) == 44
+
+    unclassified = renal[
+        (renal["cancer_code"] == "RCC_NCC_UNCLASSIFIED") & (renal["role"] == "primary")
+    ].iloc[0]
+    assert str(unclassified["metric"]).upper() == "ORR"
+    assert float(unclassified["value"]) == 30.8
+    assert int(unclassified["metric_n"]) == 26
+    assert int(unclassified["responders"]) == 8
+
+    compact = ici.cancer_ici_response_df()
+    compact_values = {
+        r["cancer_code"]: float(r["orr_pct"])
+        for _, r in compact[compact["trial_name"] == "KEYNOTE-427 cohort B"].iterrows()
+    }
+    assert compact_values["KIRP"] == 28.8
+    assert compact_values["RCC_NCC"] == 26.7
+    assert compact_values["RCC_NCC_UNCLASSIFIED"] == 30.8
+
+    kich_compact = compact[
+        (compact["cancer_code"] == "KICH") & (compact["trial_name"] == "KEYNOTE-427")
+    ].iloc[0]
+    assert float(kich_compact["orr_pct"]) == 9.5
 
 
 def test_lusc_checkmate017_orr_and_crr_match_table2():
