@@ -91,3 +91,56 @@ def test_every_fusion_code_is_a_registry_code():
     codes = set(cancer_type_registry()["code"])
     missing = sorted(fusion_codes - codes)
     assert not missing, f"fusion cancer_codes not in the registry: {missing}"
+
+
+def test_known_wrong_fusion_pmids_are_replaced():
+    """Issue #160 examples: real PMIDs that resolved to unrelated papers."""
+
+    fusions_df = cancer_fusions_df()
+    known_bad_pmids = {
+        "PMID:7951326",
+        "PMID:7954420",
+        "PMID:9590769",
+        "PMID:21885844",
+        "PMID:9537325",
+        "PMID:16462738",
+        "PMID:9192848",
+        "PMID:11427703",
+        "PMID:8316832",
+        "PMID:1565502",
+        "PMID:6304885",
+        "PMID:3929080",
+        "PMID:6262918",
+        "PMID:9596662",
+        "PMID:10866930",
+    }
+    observed_pmids = set(fusions_df["pmid"].dropna())
+    assert known_bad_pmids.isdisjoint(observed_pmids)
+
+    expected_pmids = {
+        ("SARC_SYN", "SS18-SSX", "SSX1"): "PMID:7951320",
+        ("SARC_SYN", "SS18-SSX", "SSX2"): "PMID:7951320",
+        ("SARC_SYN", "SS18-SSX", "SSX4"): "PMID:11368913",
+        ("SARC_DSRCT", "EWSR1-WT1", "WT1"): "PMID:7862627",
+        ("SARC_IFS", "ETV6-NTRK3", "NTRK3"): "PMID:9462753",
+        ("SARC_EHE", "WWTR1-CAMTA1", "CAMTA1"): "PMID:21885404",
+        ("SARC_EMC", "EWSR1-NR4A3", "NR4A3"): "PMID:18855877",
+        ("SARC_IMT", "RANBP2-ALK", "ALK"): "PMID:24034896",
+        ("SARC_DFSP", "COL1A1-PDGFB", "PDGFB"): "PMID:31949795",
+        ("SARC_ESS_LG", "JAZF1-SUZ12", "SUZ12"): "PMID:16049311",
+        ("LAML", "CBFB-MYH11", "MYH11"): "PMID:8142642",
+        ("LAML", "DEK-NUP214", "NUP214"): "PMID:32526729",
+        ("CML", "BCR-ABL1", "ABL1"): "PMID:40360311",
+        ("FL", "BCL2-IGH", "BCL2"): "PMID:18684042",
+        ("BL", "MYC-IGH", "MYC"): "PMID:23673335",
+        ("MM", "CCND1-IGH", "CCND1"): "PMID:35982976",
+        ("THCA", "PAX8-PPARG", "PPARG"): "PMID:25069464",
+    }
+    for (cancer_code, fusion_family, gene_3prime), expected_pmid in expected_pmids.items():
+        row = fusions_df[
+            (fusions_df["cancer_code"] == cancer_code)
+            & (fusions_df["fusion_family"] == fusion_family)
+            & (fusions_df["gene_3prime"] == gene_3prime)
+        ]
+        assert len(row) == 1
+        assert row.iloc[0]["pmid"] == expected_pmid
