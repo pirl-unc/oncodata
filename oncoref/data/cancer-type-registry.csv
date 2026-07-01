@@ -31,11 +31,12 @@ LAML_ELNint,AML ELN2017 Intermediate,heme-myeloid,bone_marrow,heme_marrow,LAML,,
 LAML_ELNadv,AML ELN2017 Adverse,heme-myeloid,bone_marrow,heme_marrow,LAML,,BEATAML,BEATAML_OHSU_2022,PMID:36109543,TP53/complex karyo; transplant-first,False,False,,none,,none,
 LGG,Lower Grade Glioma,cns-glial,cerebrum,solid_primary,,,TCGA,TREEHOUSE_POLYA_25_01_TCGA_SUBSET,PMID:24071852,IDH-mutant (per 2021 WHO); vorasidenib-eligible,False,False,,none,,subtype,KIAA1549-BRAF
 LIHC,Liver Hepatocellular Carcinoma,carcinoma-gi,liver,solid_primary,,,TCGA,TREEHOUSE_POLYA_25_01_TCGA_SUBSET,PMID:24071852,HBV/HCV/NASH etiologies,False,False,,subset,HBV;HCV,subtype,DNAJB1-PRKACA
-LUAD,Lung Adenocarcinoma,carcinoma-lung,lung,solid_primary,,,TCGA,TREEHOUSE_POLYA_25_01_TCGA_SUBSET,PMID:24071852,EGFR / KRAS / STK11-KEAP1 axes — therapy-gating,False,False,,none,,subtype,EML4-ALK; CD74-ROS1; EZR-ROS1; SLC34A2-ROS1; KIF5B-RET; CCDC6-RET; CD74-NRG1; SLC3A2-NRG1
+NSCLC,Non-Small Cell Lung Cancer,carcinoma-lung,lung,solid_primary,,,computed,,PMID:32997907,Source-scope aggregate for non-small-cell lung cancer trial cohorts that report mixed squamous and non-squamous NSCLC outcomes rather than histology-specific LUAD/LUSC estimates.,True,False,,none,,none,
+LUAD,Lung Adenocarcinoma,carcinoma-lung,lung,solid_primary,NSCLC,,TCGA,TREEHOUSE_POLYA_25_01_TCGA_SUBSET,PMID:24071852,EGFR / KRAS / STK11-KEAP1 axes — therapy-gating,False,False,,none,,subtype,EML4-ALK; CD74-ROS1; EZR-ROS1; SLC34A2-ROS1; KIF5B-RET; CCDC6-RET; CD74-NRG1; SLC3A2-NRG1
 LUAD_EGFR,EGFR-mutant LUAD,carcinoma-lung,lung,solid_primary,LUAD,,TCGA/mut,TREEHOUSE_POLYA_25_01_TCGA_LUAD_MUT,PMID:25079552,Osimertinib-first; often never-smoker,False,False,,none,,none,
 LUAD_KRAS,KRAS-mutant LUAD,carcinoma-lung,lung,solid_primary,LUAD,,TCGA/mut,TREEHOUSE_POLYA_25_01_TCGA_LUAD_MUT,PMID:25079552,Sotorasib (G12C); smoker-associated,False,False,,none,,none,
 LUAD_STK11,STK11/KEAP1 LUAD,carcinoma-lung,lung,solid_primary,LUAD,,TCGA/mut,TREEHOUSE_POLYA_25_01_TCGA_LUAD_MUT,PMID:25079552,Cold-immune; IO-refractory axis,False,False,,none,,none,
-LUSC,Lung Squamous Cell Carcinoma,carcinoma-lung,lung,solid_primary,,,TCGA,TREEHOUSE_POLYA_25_01_TCGA_SUBSET,PMID:24071852,,False,False,,none,,none,
+LUSC,Lung Squamous Cell Carcinoma,carcinoma-lung,lung,solid_primary,NSCLC,,TCGA,TREEHOUSE_POLYA_25_01_TCGA_SUBSET,PMID:24071852,,False,False,,none,,none,
 MESO,Mesothelioma,carcinoma-mesothelial,pleura,solid_primary,,,TCGA,TREEHOUSE_POLYA_25_01_TCGA_SUBSET,PMID:24071852,Pleural + peritoneal; BAP1/NF2,False,False,,none,,none,
 OV,Ovarian Serous Cystadenocarcinoma,carcinoma-gu,ovary,solid_primary,,,TCGA,TREEHOUSE_POLYA_25_01_TCGA_SUBSET,PMID:24071852,HGSOC-dominant; BRCA/HRD + PARP,False,False,,none,,none,
 PAAD,Pancreatic Adenocarcinoma,carcinoma-gi,pancreas,solid_primary,,,TCGA,TREEHOUSE_POLYA_25_01_TCGA_SUBSET,PMID:24071852,Adenocarcinoma only; panNET/acinar separate,False,False,,none,,none,

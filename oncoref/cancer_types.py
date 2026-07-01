@@ -41,6 +41,8 @@ _ENSEMBL_RELEASE_RE = re.compile(r"Ensembl\s+release\s+(\d{2,3})", re.I)
 CANCER_TYPE_ALIASES = {
     "prostate": "PRAD",
     "breast": "BRCA",
+    "nsclc": "NSCLC",
+    "non_small_cell_lung_cancer": "NSCLC",
     "lung_adeno": "LUAD",
     "lung_squamous": "LUSC",
     "melanoma": "SKCM",

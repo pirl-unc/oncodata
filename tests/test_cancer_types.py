@@ -186,6 +186,27 @@ def test_lineage_group_resolution():
     assert cancer_types.cancer_lineage_group("not_a_real_cancer") is None
 
 
+def test_nsclc_is_lung_histology_parent():
+    assert cancer_types.resolve_cancer_type("nsclc") == "NSCLC"
+    assert cancer_types.resolve_cancer_type("non small cell lung cancer") == "NSCLC"
+    assert cancer_types.cancer_type_subtypes_of("NSCLC") == ["LUAD", "LUSC"]
+    assert cancer_types.cancer_type_ancestors("LUAD") == ["NSCLC"]
+    assert cancer_types.cancer_type_ancestors("LUSC") == ["NSCLC"]
+    assert cancer_types.cancer_type_ancestors("LUAD_EGFR") == ["LUAD", "NSCLC"]
+
+    records = cancer_types.cancer_type_records(under="NSCLC")
+    assert records["code"].tolist() == [
+        "NSCLC",
+        "LUAD",
+        "LUAD_EGFR",
+        "LUAD_KRAS",
+        "LUAD_STK11",
+        "LUSC",
+    ]
+    registry = cancer_types.cancer_type_registry().set_index("code")
+    assert bool(registry.loc["NSCLC", "mixture_cohort"]) is True
+
+
 def test_astb_registry_row_for_trufflepig_parity():
     assert cancer_types.resolve_cancer_type("ASTB") == "ASTB"
     assert cancer_types.resolve_cancer_type("astroblastoma (mn1-altered)") == "ASTB"

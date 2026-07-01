@@ -477,6 +477,41 @@ def test_lusc_checkmate017_orr_and_crr_match_table2():
     assert crr["source_verified"] is True
 
 
+def test_impower110_estimates_are_nsclc_source_scoped_not_luad_lusc():
+    est = ici.cancer_ici_response_estimates_df()
+    rows = est[est["trial_name"] == "IMpower110"]
+    assert set(rows["cancer_code"]) == {"NSCLC"}
+    assert set(rows["metric"].str.upper()) == {"ORR", "DOR", "PFS", "OS"}
+
+    by_metric = {str(r["metric"]).upper(): r for _, r in rows.iterrows()}
+    orr = by_metric["ORR"]
+    assert float(orr["value"]) == 38.3
+    assert int(orr["source_n"]) == 205
+    assert int(orr["metric_n"]) == 107
+    assert int(orr["responders"]) == 41
+    assert "not LUAD- or LUSC-specific" in orr["note"]
+
+    pfs = by_metric["PFS"]
+    assert float(pfs["value"]) == 8.1
+    assert float(pfs["ci_low"]) == 6.8
+    assert float(pfs["ci_high"]) == 11.0
+    assert int(pfs["metric_n"]) == 107
+
+    os = by_metric["OS"]
+    assert float(os["value"]) == 20.2
+    assert float(os["ci_low"]) == 16.5
+    assert int(os["metric_n"]) == 107
+
+    compact = ici.cancer_ici_response_df()
+    compact_im110 = compact[compact["trial_name"] == "IMpower110"]
+    assert compact_im110["cancer_code"].tolist() == ["NSCLC"]
+    row = compact_im110.iloc[0]
+    assert row["response_denominator"] == 107
+    assert row["response_numerator"] == 41
+    assert row["histology_match"] == "direct"
+    assert row["source_scope"] == "aggregate_source"
+
+
 def test_trial_columns_split_and_clean():
     import re
 

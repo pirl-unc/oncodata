@@ -136,6 +136,30 @@ def test_crc_msi_ici_is_single_source_scope_row():
     assert ici.cancer_ici_regimen("READ_MSI") == "PD-1"
 
 
+def test_impower110_nsclc_pdl1_is_not_direct_luad_or_lusc():
+    pdl1 = ici.cancer_ici_response(regimen="PD-L1")
+    assert pdl1["NSCLC"] == 38.3
+    assert "LUAD" not in pdl1
+    assert "LUSC" not in pdl1
+
+    assert ici.cancer_ici_response("LUAD", regimen="PD-L1", inherit=False) is None
+    assert ici.cancer_ici_response("LUSC", regimen="PD-L1", inherit=False) is None
+    assert ici.cancer_ici_response("LUAD", regimen="PD-L1") == 38.3
+    assert ici.cancer_ici_response("LUSC", regimen="PD-L1") == 38.3
+    assert ici.cancer_ici_response("LUAD") == 19.0
+    assert ici.cancer_ici_response("LUSC") == 20.0
+
+    record = ici.cancer_ici_response_record("LUSC", regimen="PD-L1")
+    assert record["requested_cancer_code"] == "LUSC"
+    assert record["resolved_cancer_code"] == "NSCLC"
+    assert record["inheritance_kind"] == "ancestor"
+    assert record["is_inherited_evidence"] is True
+    assert record["response_denominator"] == 107
+    assert record["response_numerator"] == 41
+    assert record["source_scope"] == "aggregate_source"
+    assert "all histologies" in record["endpoint_population"]
+
+
 def test_btc_ici_is_single_pan_biliary_source_scope_row():
     full = ici.cancer_ici_response()
     per = ici.cancer_ici_response(fallback=False)
