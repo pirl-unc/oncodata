@@ -28,8 +28,8 @@ UCEC_MSI,48,pembrolizumab,KEYNOTE-158,MK-3475-158,NCT02628067,dMMR/MSI-H advance
 UCEC_CNL,7,pembrolizumab,KEYNOTE-158,MK-3475-158,NCT02628067,pMMR/MSS NSMP,PMID:39847999,medium,"non-MSI-H/pMMR ORR 7% (95% CI 3-14), KEYNOTE-158; MSS NSMP arm",PD-1
 UCEC_CNH,7,pembrolizumab,KEYNOTE-158,MK-3475-158,NCT02628067,pMMR/MSS p53-abnormal,PMID:39847999,medium,"non-MSI-H/pMMR ORR 7% (95% CI 3-14), KEYNOTE-158; p53-abnormal most immune-cold",PD-1
 OV,8.0,pembrolizumab,KEYNOTE-100,MK-3475-100,NCT02674061,recurrent ovarian (all-comers),PMID:31046082,medium,pembro monotherapy ORR 8.0%,PD-1
-HNSC_HPVpos,22,pembrolizumab,KEYNOTE-012,MK-3475-012,NCT01848834,R/M HNSCC HPV+,PMID:29955135,medium,"HPV+ ORR 21.9% (KEYNOTE-012 pooled long-term FU, Mehra 2018, Br J Cancer)",PD-1
-HNSC_HPVneg,16,pembrolizumab,KEYNOTE-012,MK-3475-012,NCT01848834,R/M HNSCC HPV-,PMID:29955135,medium,"HPV- ORR 15.9% (KEYNOTE-012 pooled long-term FU, Mehra 2018)",PD-1
+HNSC_HPVpos,24.0,pembrolizumab,KEYNOTE-012,MK-3475-012,NCT01848834,R/M HNSCC HPV-associated subgroup,PMID:29955135,medium,HPV-associated pooled KEYNOTE-012 ORR 24% (11/45; 95% CI 13-40),PD-1
+HNSC_HPVneg,16,pembrolizumab,KEYNOTE-012,MK-3475-012,NCT01848834,R/M HNSCC non-HPV-associated subgroup,PMID:29955135,medium,Non-HPV-associated pooled KEYNOTE-012 ORR 16% (23/147; 95% CI 10-23),PD-1
 KIRP,28.8,pembrolizumab,KEYNOTE-427 cohort B,MK-3475-427,NCT02853344,papillary RCC 1L,PMID:33529058,medium,papillary nccRCC final-analysis ORR 28.8% (34/118),PD-1
 KICH,9.5,pembrolizumab,KEYNOTE-427,MK-3475-427,NCT02853344,chromophobe RCC 1L,PMID:33529058,low,chromophobe ORR 9.5% (2/21; 95% CI 1.2-30.4),PD-1
 RCC_NCC,26.7,pembrolizumab,KEYNOTE-427 cohort B,MK-3475-427,NCT02853344,overall non-clear-cell RCC 1L,PMID:33529058,medium,"overall nccRCC final-analysis ORR 26.7% (44/165); source-scope mixture of papillary, chromophobe, and unclassified RCC",PD-1

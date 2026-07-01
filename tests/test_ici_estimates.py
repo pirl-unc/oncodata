@@ -71,7 +71,7 @@ def test_estimates_table_shape_and_coverage():
         "value_basis",
     }
     assert expected <= set(est.columns)
-    assert len(est) >= 790
+    assert len(est) >= 780
     # every (cancer, regimen) in the curated anchor table has >=1 estimate row
     anchor = ici.cancer_ici_response_df()
     anchor_cells = set(zip(anchor["cancer_code"], anchor["regimen"]))
@@ -386,6 +386,71 @@ def test_keynote427_renal_histology_estimates_are_source_scoped():
         (compact["cancer_code"] == "KICH") & (compact["trial_name"] == "KEYNOTE-427")
     ].iloc[0]
     assert float(kich_compact["orr_pct"]) == 9.5
+
+
+def test_hnsc_hpv_estimates_are_hpv_stratified_not_all_comer_rows():
+    est = ici.cancer_ici_response_estimates_df()
+    hpv = est[est["cancer_code"].isin(["HNSC_HPVpos", "HNSC_HPVneg"])]
+    bad_setting = hpv["setting"].str.contains(
+        "all-comers|biomarker-unselected|PD-L1-positive|PD-L1-negative",
+        case=False,
+        regex=True,
+    )
+    assert not bad_setting.any(), hpv[bad_setting][
+        ["cancer_code", "trial_name", "metric", "setting"]
+    ].to_dict("records")
+
+    pooled = hpv[
+        (hpv["trial_name"] == "KEYNOTE-012")
+        & (hpv["role"] == "primary")
+        & (hpv["metric"].str.upper() == "ORR")
+    ]
+    by_code = {str(r["cancer_code"]): r for _, r in pooled.iterrows()}
+    assert set(by_code) == {"HNSC_HPVpos", "HNSC_HPVneg"}
+
+    pos = by_code["HNSC_HPVpos"]
+    assert float(pos["value"]) == 24.0
+    assert int(pos["metric_n"]) == 45
+    assert int(pos["responders"]) == 11
+    assert float(pos["ci_low"]) == 13.0
+    assert float(pos["ci_high"]) == 40.0
+
+    neg = by_code["HNSC_HPVneg"]
+    assert float(neg["value"]) == 16.0
+    assert int(neg["metric_n"]) == 147
+    assert int(neg["responders"]) == 23
+    assert float(neg["ci_low"]) == 10.0
+    assert float(neg["ci_high"]) == 23.0
+
+    expansion = hpv[hpv["trial_name"] == "KEYNOTE-012 expansion cohort"]
+    assert set(expansion["metric"].str.upper()) == {"ORR", "PFS_RATE", "OS_RATE"}
+    exp_orr = {
+        str(r["cancer_code"]): r
+        for _, r in expansion[expansion["metric"].str.upper() == "ORR"].iterrows()
+    }
+    assert float(exp_orr["HNSC_HPVpos"]["value"]) == 32.0
+    assert int(exp_orr["HNSC_HPVpos"]["metric_n"]) == 28
+    assert int(exp_orr["HNSC_HPVpos"]["responders"]) == 9
+    assert float(exp_orr["HNSC_HPVneg"]["value"]) == 14.0
+    assert int(exp_orr["HNSC_HPVneg"]["metric_n"]) == 104
+    assert int(exp_orr["HNSC_HPVneg"]["responders"]) == 15
+
+    compact = ici.cancer_ici_response_df()
+    compact_values = {
+        r["cancer_code"]: float(r["orr_pct"])
+        for _, r in compact[compact["cancer_code"].isin(["HNSC_HPVpos", "HNSC_HPVneg"])].iterrows()
+    }
+    assert compact_values == {"HNSC_HPVpos": 24.0, "HNSC_HPVneg": 16.0}
+
+    from oncoref import apd1
+
+    apd1_values = {
+        r["cancer_code"]: float(r["apd1_orr_pct"])
+        for _, r in apd1.cancer_apd1_response_df()[
+            lambda d: d["cancer_code"].isin(["HNSC_HPVpos", "HNSC_HPVneg"])
+        ].iterrows()
+    }
+    assert apd1_values == {"HNSC_HPVpos": 24.0, "HNSC_HPVneg": 16.0}
 
 
 def test_lusc_checkmate017_orr_and_crr_match_table2():
